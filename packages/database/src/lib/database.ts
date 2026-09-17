@@ -22,6 +22,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'canonical_player_identities'
     | 'health'
     | 'historical_auction_market'
+    | 'league_roster_snapshot'
     | 'reconcile_league_team_identity'
     | 'league_team_history'
     | 'replace_historical_auctions'
@@ -169,6 +170,50 @@ export interface LeagueTeamHistory {
   }>;
 }
 
+export interface LeagueRosterPlayer {
+  readonly auctionCostCents: number;
+  readonly nominationOrder: number | null;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly rosterSlot: number | null;
+}
+
+export interface LeagueRosterTeam {
+  readonly baseBudgetBalanceCents: number;
+  readonly division: string | null;
+  readonly owner: {
+    readonly displayName: string;
+    readonly memberId: string;
+  } | null;
+  readonly roster: ReadonlyArray<LeagueRosterPlayer>;
+  readonly rosterCount: number;
+  readonly sourceTeamId: string;
+  readonly spendCents: number;
+  readonly teamName: string;
+  readonly teamSeasonId: string;
+}
+
+export interface LeagueRosterSeason {
+  readonly baseBudgetCents: number;
+  readonly draftedPlayerCount: number;
+  readonly name: string;
+  readonly rosterSize: number;
+  readonly rosterStatus: 'complete' | 'empty' | 'partial';
+  readonly seasonKey: string;
+  readonly teamCount: number;
+  readonly teams: ReadonlyArray<LeagueRosterTeam>;
+  readonly totalSpendCents: number;
+}
+
+export interface LeagueRosterSnapshot {
+  readonly seasons: ReadonlyArray<LeagueRosterSeason>;
+  readonly summary: {
+    readonly latestPopulatedSeason: string | null;
+    readonly latestSeason: string | null;
+    readonly seasonCount: number;
+  };
+}
+
 export type LeagueTeamReconciliationTarget =
   | {
       readonly displayName?: string;
@@ -272,6 +317,7 @@ export interface DatabaseService {
   >;
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
+  readonly leagueRosterSnapshot: Effect.Effect<LeagueRosterSnapshot, DatabaseUnavailable>;
   readonly leagueTeamHistory: Effect.Effect<LeagueTeamHistory, DatabaseUnavailable>;
   readonly reconcileLeagueTeamIdentity: (
     input: LeagueTeamReconciliationInput,
@@ -794,6 +840,173 @@ const databaseServiceLayer = Layer.effect(
       ),
     );
 
+    const leagueRosterSnapshot = Effect.gen(function* () {
+      const rows = yield* sql<{
+        amount_cents: number | null;
+        base_budget_cents: number;
+        division: string | null;
+        league_season_id: string;
+        league_team_season_id: string;
+        member_id: string | null;
+        member_name: string | null;
+        nomination_order: number | null;
+        player_id: string | null;
+        player_name: string | null;
+        roster_size: number;
+        roster_slot: number | null;
+        season_key: string;
+        season_name: string;
+        source_team_id: string;
+        team_count: number;
+        team_name: string;
+      }>`
+        select
+          ls.id as league_season_id,
+          ls.season_key,
+          ls.name as season_name,
+          ls.team_count,
+          ls.roster_size,
+          ls.base_budget_cents,
+          lts.id as league_team_season_id,
+          lts.source_team_id,
+          lts.team_name,
+          lts.division,
+          lm.id as member_id,
+          lm.display_name as member_name,
+          ar.player_id,
+          p.canonical_name as player_name,
+          ar.amount_cents,
+          ar.nomination_order,
+          ar.roster_slot
+        from fantasy.league_seasons ls
+        join fantasy.league_team_seasons lts on lts.league_season_id = ls.id
+        left join fantasy.league_members lm on lm.id = lts.league_member_id
+        left join fantasy.auction_results ar on ar.league_team_season_id = lts.id
+        left join fantasy.players p on p.id = ar.player_id
+        where
+          ls.source = 'fantrax'
+          and ls.source_league_history_id is not null
+        order by
+          ls.season_key desc,
+          lts.team_name,
+          ar.roster_slot nulls last,
+          ar.nomination_order nulls last,
+          p.canonical_name
+      `;
+
+      type TeamAccumulator = Omit<
+        LeagueRosterTeam,
+        'baseBudgetBalanceCents' | 'roster' | 'rosterCount' | 'spendCents'
+      > & {
+        readonly roster: LeagueRosterPlayer[];
+      };
+      type SeasonAccumulator = Omit<
+        LeagueRosterSeason,
+        'draftedPlayerCount' | 'rosterStatus' | 'teams' | 'totalSpendCents'
+      > & {
+        readonly teamsById: Map<string, TeamAccumulator>;
+      };
+
+      const seasonsById = new Map<string, SeasonAccumulator>();
+      for (const row of rows) {
+        let season = seasonsById.get(row.league_season_id);
+        if (season === undefined) {
+          season = {
+            baseBudgetCents: row.base_budget_cents,
+            name: row.season_name,
+            rosterSize: row.roster_size,
+            seasonKey: row.season_key,
+            teamCount: row.team_count,
+            teamsById: new Map(),
+          };
+          seasonsById.set(row.league_season_id, season);
+        }
+
+        let team = season.teamsById.get(row.league_team_season_id);
+        if (team === undefined) {
+          team = {
+            division: row.division,
+            owner:
+              row.member_id === null || row.member_name === null
+                ? null
+                : { displayName: row.member_name, memberId: row.member_id },
+            roster: [],
+            sourceTeamId: row.source_team_id,
+            teamName: row.team_name,
+            teamSeasonId: row.league_team_season_id,
+          };
+          season.teamsById.set(row.league_team_season_id, team);
+        }
+
+        if (row.player_id !== null) {
+          if (row.player_name === null || row.amount_cents === null) {
+            throw new Error('A rostered player is missing its canonical name or auction cost');
+          }
+          team.roster.push({
+            auctionCostCents: row.amount_cents,
+            nominationOrder: row.nomination_order,
+            playerId: row.player_id,
+            playerName: row.player_name,
+            rosterSlot: row.roster_slot,
+          });
+        }
+      }
+
+      const seasons = [...seasonsById.values()]
+        .map((season): LeagueRosterSeason => {
+          const teams = [...season.teamsById.values()]
+            .map((team): LeagueRosterTeam => {
+              const spendCents = team.roster.reduce(
+                (total, player) => total + player.auctionCostCents,
+                0,
+              );
+              return {
+                ...team,
+                baseBudgetBalanceCents: season.baseBudgetCents - spendCents,
+                rosterCount: team.roster.length,
+                spendCents,
+              };
+            })
+            .sort((left, right) => left.teamName.localeCompare(right.teamName));
+          const draftedPlayerCount = teams.reduce((total, team) => total + team.rosterCount, 0);
+          const expectedPlayerCount = season.teamCount * season.rosterSize;
+          return {
+            baseBudgetCents: season.baseBudgetCents,
+            draftedPlayerCount,
+            name: season.name,
+            rosterSize: season.rosterSize,
+            rosterStatus:
+              draftedPlayerCount === 0
+                ? 'empty'
+                : draftedPlayerCount >= expectedPlayerCount
+                  ? 'complete'
+                  : 'partial',
+            seasonKey: season.seasonKey,
+            teamCount: season.teamCount,
+            teams,
+            totalSpendCents: teams.reduce((total, team) => total + team.spendCents, 0),
+          };
+        })
+        .sort((left, right) => right.seasonKey.localeCompare(left.seasonKey));
+
+      return {
+        seasons,
+        summary: {
+          latestPopulatedSeason:
+            seasons.find((season) => season.draftedPlayerCount > 0)?.seasonKey ?? null,
+          latestSeason: seasons[0]?.seasonKey ?? null,
+          seasonCount: seasons.length,
+        },
+      } satisfies LeagueRosterSnapshot;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'league_roster_snapshot',
+          'The league roster snapshot could not be loaded',
+        ),
+      ),
+    );
+
     const reconcileLeagueTeamIdentity = (
       input: LeagueTeamReconciliationInput,
     ): Effect.Effect<LeagueTeamReconciliationResult, DatabaseUnavailable> => {
@@ -922,14 +1135,16 @@ const databaseServiceLayer = Layer.effect(
         } satisfies LeagueTeamReconciliationResult;
       });
 
-      return sql.withTransaction(operation).pipe(
-        Effect.mapError(() =>
-          databaseUnavailable(
-            'reconcile_league_team_identity',
-            'The league team identity could not be reconciled',
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'reconcile_league_team_identity',
+              'The league team identity could not be reconciled',
+            ),
           ),
-        ),
-      );
+        );
     };
 
     const replaceHistoricalAuctions = (
@@ -1634,6 +1849,7 @@ const databaseServiceLayer = Layer.effect(
         Effect.mapError(() => databaseUnavailable('health', 'The database health check failed')),
       ),
       historicalAuctionMarket,
+      leagueRosterSnapshot,
       leagueTeamHistory,
       playerProductionHistory,
       reconcileLeagueTeamIdentity,

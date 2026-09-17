@@ -27,6 +27,10 @@ and rewards.
 - Use `league_team_history` for manager tendencies, repeat draft targets, and
   team-name history. Treat unresolved team-seasons as missing attribution, not
   evidence that a manager was absent or inactive.
+- Use `league_rosters` for canonical owners, season draft rosters, auction
+  spend, roster construction, and team-to-team comparisons. Treat it as a
+  post-draft snapshot: it does not yet include later trades, waiver moves, or
+  non-base auction dollars.
 - Treat a playoff championship as the primary winning outcome. Keep regular-
   season rank, total points, and playoff finish as distinct secondary tiers;
   never collapse them into one generic win metric.

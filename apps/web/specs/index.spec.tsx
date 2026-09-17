@@ -44,6 +44,70 @@ const market = vi.hoisted(() => ({
   },
 }));
 
+const rosterSnapshot = vi.hoisted(() => ({
+  seasons: [
+    {
+      baseBudgetCents: 20_000,
+      draftedPlayerCount: 0,
+      name: 'Fantasy Basketball 2026-27',
+      rosterSize: 13,
+      rosterStatus: 'empty' as const,
+      seasonKey: '2026-27',
+      teamCount: 12,
+      teams: [
+        {
+          baseBudgetBalanceCents: 20_000,
+          division: null,
+          owner: { displayName: 'Manager One', memberId: 'member-1' },
+          roster: [],
+          rosterCount: 0,
+          sourceTeamId: 'team-2',
+          spendCents: 0,
+          teamName: 'Moon Shots',
+          teamSeasonId: 'team-season-2',
+        },
+      ],
+      totalSpendCents: 0,
+    },
+    {
+      baseBudgetCents: 20_000,
+      draftedPlayerCount: 1,
+      name: 'Fantasy Basketball 2025-26',
+      rosterSize: 13,
+      rosterStatus: 'partial' as const,
+      seasonKey: '2025-26',
+      teamCount: 12,
+      teams: [
+        {
+          baseBudgetBalanceCents: 11_500,
+          division: null,
+          owner: { displayName: 'Manager One', memberId: 'member-1' },
+          roster: [
+            {
+              auctionCostCents: 8_500,
+              nominationOrder: 1,
+              playerId: 'player-1',
+              playerName: 'Nikola Jokic',
+              rosterSlot: 1,
+            },
+          ],
+          rosterCount: 1,
+          sourceTeamId: 'team-1',
+          spendCents: 8_500,
+          teamName: 'Moon Shots',
+          teamSeasonId: 'team-season-1',
+        },
+      ],
+      totalSpendCents: 8_500,
+    },
+  ],
+  summary: {
+    latestPopulatedSeason: '2025-26',
+    latestSeason: '2026-27',
+    seasonCount: 2,
+  },
+}));
+
 const teamHistory = vi.hoisted(() => ({
   members: [
     {
@@ -122,6 +186,10 @@ vi.mock('../src/lib/league-team-history', () => ({
   loadLeagueTeamHistory: () => Promise.resolve(teamHistory),
 }));
 
+vi.mock('../src/lib/league-rosters', () => ({
+  loadLeagueRosters: () => Promise.resolve(rosterSnapshot),
+}));
+
 vi.mock('../src/lib/viewer', () => ({
   loadViewer,
 }));
@@ -142,18 +210,24 @@ vi.mock('eve/react', () => ({
 }));
 
 describe('Page', () => {
-  it('renders the historical player market beside chat', async () => {
+  it('renders league rosters beside chat and keeps the historical market available', async () => {
     const { baseElement } = render(await Page());
 
     expect(baseElement).toBeTruthy();
-    expect(baseElement.textContent).toContain('Historical player market');
+    expect(baseElement.textContent).toContain('League rosters');
     expect(baseElement.textContent).toContain('Draft chat');
     expect(baseElement.textContent).toContain('Nikola Jokic');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Player market' }));
+
+    expect(baseElement.textContent).toContain('Historical player market');
     expect(baseElement.textContent).toContain('$10,803');
   });
 
   it('filters the historical market by player name', async () => {
     render(await Page());
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Player market' }));
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Find player' }), {
       target: { value: 'Shai' },
@@ -161,6 +235,26 @@ describe('Page', () => {
 
     expect(screen.getByText('Shai Gilgeous-Alexander')).toBeTruthy();
     expect(screen.queryByText('Nikola Jokic')).toBeNull();
+  });
+
+  it('shows canonical owners, season rosters, and pending future rosters', async () => {
+    render(await Page());
+
+    expect(
+      (screen.getByRole('combobox', { name: 'Roster season' }) as HTMLSelectElement).value,
+    ).toBe('2025-26');
+    expect(screen.getByText('Moon Shots')).toBeTruthy();
+    expect(screen.getByText('Manager One')).toBeTruthy();
+    expect(screen.getByText('Nikola Jokic')).toBeTruthy();
+    expect(screen.getAllByText('$85')).toHaveLength(3);
+    expect(screen.getByText('1/13')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Roster season' }), {
+      target: { value: '2026-27' },
+    });
+
+    expect(screen.getByText('2026-27 teams are ready.')).toBeTruthy();
+    expect(screen.getByText('Roster awaiting import')).toBeTruthy();
   });
 
   it('surfaces canonical member history and unresolved identity work', async () => {
@@ -172,7 +266,9 @@ describe('Page', () => {
     expect(screen.getAllByText('Moon Shots')).toHaveLength(2);
     fireEvent.click(screen.getByText('Reconcile 2 unmatched team-seasons'));
 
-    expect(screen.getByRole('combobox', { name: 'Canonical manager for Unknown Team' })).toBeTruthy();
+    expect(
+      screen.getByRole('combobox', { name: 'Canonical manager for Unknown Team' }),
+    ).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Manager One' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Create new manager…' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Assign 2 seasons' })).toBeTruthy();

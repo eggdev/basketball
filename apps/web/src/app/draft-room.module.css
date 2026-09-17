@@ -12,7 +12,8 @@
 .headerActions,
 .viewer,
 .chatActions,
-.memberHeading {
+.memberHeading,
+.rosterCardHeading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -60,6 +61,7 @@
 .chatActions button,
 .boardTabs button,
 .memberHeading button,
+.rosterCardHeading button,
 .quickPrompts button,
 .reconciliationRow button {
   border: 1px solid #30455f;
@@ -309,6 +311,204 @@
   background: rgba(7, 17, 31, 0.45);
   color: #8fa1b8;
   font-size: 0.72rem;
+}
+
+.rosterToolbar {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) repeat(3, max-content) minmax(180px, 1fr);
+  align-items: end;
+  gap: 22px;
+  padding: 13px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(7, 17, 31, 0.45);
+}
+
+.rosterToolbar label,
+.rosterToolbar div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rosterToolbar label > span,
+.rosterToolbar div > span,
+.rosterToolbar p {
+  color: #8fa1b8;
+  font-size: 0.68rem;
+}
+
+.rosterToolbar select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #30455f;
+  border-radius: 8px;
+  outline: none;
+  background: #091522;
+  color: #e5edf7;
+  font: inherit;
+}
+
+.rosterToolbar select:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.rosterToolbar strong {
+  color: #f8fafc;
+  font-size: 0.92rem;
+}
+
+.rosterToolbar p {
+  justify-self: end;
+  max-width: 235px;
+  margin: 0;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.rosterNotice {
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(251, 191, 36, 0.18);
+  background: rgba(251, 191, 36, 0.06);
+  color: #9aabc0;
+  font-size: 0.72rem;
+}
+
+.rosterNotice strong {
+  color: #fbbf24;
+}
+
+.rosterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.rosterCard {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 13px;
+  background: rgba(7, 17, 31, 0.5);
+}
+
+.rosterCardHeading {
+  align-items: flex-start;
+}
+
+.rosterCardHeading p {
+  margin: 0;
+  color: #f1f5f9;
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.rosterCardHeading span {
+  display: block;
+  margin-top: 3px;
+  color: #7dd3fc;
+  font-size: 0.7rem;
+}
+
+.rosterCardHeading button {
+  flex: none;
+  padding: 6px 8px;
+  font-size: 0.68rem;
+}
+
+.rosterCardHeading button:hover {
+  border-color: #38bdf8;
+  color: #7dd3fc;
+}
+
+.rosterMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.rosterMetrics span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rosterMetrics small {
+  color: #7e90a6;
+  font-size: 0.64rem;
+}
+
+.rosterMetrics strong {
+  color: #dbe7f4;
+  font-size: 0.76rem;
+}
+
+.rosterList {
+  display: grid;
+  gap: 0;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rosterList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.07);
+  font-variant-numeric: tabular-nums;
+}
+
+.rosterList li:last-child {
+  border-bottom: 0;
+}
+
+.rosterList li > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.rosterList small {
+  width: 18px;
+  flex: none;
+  color: #65778e;
+  font-size: 0.62rem;
+  text-align: right;
+}
+
+.rosterList strong {
+  overflow: hidden;
+  color: #b9c8d9;
+  font-size: 0.73rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rosterList b {
+  flex: none;
+  color: #7dd3fc;
+  font-size: 0.71rem;
+}
+
+.rosterPending {
+  margin: 26px 0 12px;
+  color: #74869d;
+  font-size: 0.72rem;
+  text-align: center;
 }
 
 .identitySummary strong {
@@ -804,6 +1004,19 @@
   .identitySummary p {
     margin-left: 0;
   }
+
+  .rosterToolbar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: end;
+    gap: 12px;
+  }
+
+  .rosterToolbar p {
+    grid-column: 1 / -1;
+    justify-self: start;
+    max-width: none;
+    text-align: left;
+  }
 }
 
 @media (max-width: 560px) {
@@ -822,6 +1035,22 @@
 
   .memberGrid {
     grid-template-columns: 1fr;
+  }
+
+  .rosterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .rosterToolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rosterToolbar label {
+    grid-column: 1 / -1;
+  }
+
+  .rosterNotice {
+    flex-direction: column;
   }
 
   .reconciliationRow {

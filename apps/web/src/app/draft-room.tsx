@@ -3,6 +3,7 @@
 import type {
   HistoricalAuctionMarket,
   HistoricalAuctionMarketPlayer,
+  LeagueRosterSnapshot,
   LeagueTeamHistory,
 } from '@fantasy-basketball/database/runtime';
 import { useEveAgent } from 'eve/react';
@@ -27,7 +28,7 @@ const formatTrend = (player: HistoricalAuctionMarketPlayer) => {
   return `${player.trendCents > 0 ? '+' : '−'}${formatPrice(Math.abs(player.trendCents))}`;
 };
 
-type BoardView = 'players' | 'teams';
+type BoardView = 'league' | 'players' | 'teams';
 type LeagueMember = LeagueTeamHistory['members'][number];
 type UnresolvedTeam = LeagueTeamHistory['unresolvedTeams'][number];
 
@@ -55,7 +56,12 @@ function TeamReconciliationForm({
   return (
     <form action={action} className={styles.reconciliationRow}>
       {teams.map((team) => (
-        <input key={team.teamSeasonId} name="teamSeasonId" type="hidden" value={team.teamSeasonId} />
+        <input
+          key={team.teamSeasonId}
+          name="teamSeasonId"
+          type="hidden"
+          value={team.teamSeasonId}
+        />
       ))}
       <div className={styles.reconciliationTeam}>
         <strong>{teamName}</strong>
@@ -90,11 +96,15 @@ function TeamReconciliationForm({
         />
       ) : null}
       <button disabled={isPending || target === ''} type="submit">
-        {isPending ? 'Saving…' : `Assign ${teams.length > 1 ? `${teams.length} seasons` : 'season'}`}
+        {isPending
+          ? 'Saving…'
+          : `Assign ${teams.length > 1 ? `${teams.length} seasons` : 'season'}`}
       </button>
       {state.message ? (
         <output
-          className={state.status === 'error' ? styles.reconciliationError : styles.reconciliationSuccess}
+          className={
+            state.status === 'error' ? styles.reconciliationError : styles.reconciliationSuccess
+          }
         >
           {state.message}
         </output>
@@ -106,6 +116,7 @@ function TeamReconciliationForm({
 export interface DraftRoomProps {
   readonly chatEnabled: boolean;
   readonly market: HistoricalAuctionMarket | null;
+  readonly rosterSnapshot: LeagueRosterSnapshot | null;
   readonly teamHistory: LeagueTeamHistory | null;
   readonly viewer: {
     readonly email: string;
@@ -115,11 +126,20 @@ export interface DraftRoomProps {
   } | null;
 }
 
-export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoomProps) {
+export function DraftRoom({
+  chatEnabled,
+  market,
+  rosterSnapshot,
+  teamHistory,
+  viewer,
+}: DraftRoomProps) {
   const agent = useEveAgent();
-  const [boardView, setBoardView] = useState<BoardView>('players');
+  const [boardView, setBoardView] = useState<BoardView>('league');
   const [message, setMessage] = useState('');
   const [query, setQuery] = useState('');
+  const [selectedSeasonKey, setSelectedSeasonKey] = useState(
+    rosterSnapshot?.summary.latestPopulatedSeason ?? rosterSnapshot?.summary.latestSeason ?? '',
+  );
   const [authError, setAuthError] = useState<string | null>(null);
   const isBusy = agent.status === 'submitted' || agent.status === 'streaming';
   const isResuming = agent.status === 'resuming';
@@ -139,6 +159,23 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
         member.teamNames.some((teamName) => teamName.toLocaleLowerCase().includes(normalizedQuery)),
     );
   }, [query, teamHistory]);
+  const selectedRosterSeason = useMemo(
+    () => rosterSnapshot?.seasons.find((season) => season.seasonKey === selectedSeasonKey) ?? null,
+    [rosterSnapshot, selectedSeasonKey],
+  );
+  const filteredRosterTeams = useMemo(() => {
+    const teams = selectedRosterSeason?.teams ?? [];
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (normalizedQuery.length === 0) return teams;
+    return teams.filter(
+      (team) =>
+        team.teamName.toLocaleLowerCase().includes(normalizedQuery) ||
+        team.owner?.displayName.toLocaleLowerCase().includes(normalizedQuery) === true ||
+        team.roster.some((player) =>
+          player.playerName.toLocaleLowerCase().includes(normalizedQuery),
+        ),
+    );
+  }, [query, selectedRosterSeason]);
   const unresolvedTeamGroups = useMemo(() => {
     const groups = new Map<string, UnresolvedTeam[]>();
     for (const team of teamHistory?.unresolvedTeams ?? []) {
@@ -160,6 +197,24 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
     ['Imported drafts', String(market?.summary.seasonCount ?? 0)],
     ['Canonical members', String(teamHistory?.summary.canonicalMemberCount ?? '—')],
   ] as const;
+  const boardTitle =
+    boardView === 'league'
+      ? 'League rosters'
+      : boardView === 'players'
+        ? 'Historical player market'
+        : 'Manager tendencies';
+  const searchLabel =
+    boardView === 'league'
+      ? 'Find team, owner, or rostered player'
+      : boardView === 'players'
+        ? 'Find player'
+        : 'Find manager or team';
+  const searchPlaceholder =
+    boardView === 'league'
+      ? `Search ${selectedRosterSeason?.teams.length ?? 0} teams`
+      : boardView === 'players'
+        ? `Search ${market?.summary.playerCount ?? 0} players`
+        : `Search ${teamHistory?.summary.canonicalMemberCount ?? 0} members`;
 
   const send = (text: string) => {
     if (!chatEnabled || isResuming || text.trim().length === 0) return;
@@ -167,6 +222,7 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
       clientContext: {
         boardView,
         latestAuctionSeason: market?.summary.latestSeason ?? null,
+        rosterSeason: selectedRosterSeason?.seasonKey ?? null,
         latestTeamSeason: teamHistory?.summary.latestSeason ?? null,
         searchQuery: query.trim() || null,
       },
@@ -244,18 +300,14 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
           <div className={styles.sectionHeading}>
             <div>
               <p className={styles.eyebrow}>League intelligence</p>
-              <h2>{boardView === 'players' ? 'Historical player market' : 'Manager tendencies'}</h2>
+              <h2>{boardTitle}</h2>
             </div>
             <label className={styles.playerSearch}>
-              <span>{boardView === 'players' ? 'Find player' : 'Find manager or team'}</span>
+              <span>{searchLabel}</span>
               <input
-                aria-label={boardView === 'players' ? 'Find player' : 'Find manager or team'}
+                aria-label={searchLabel}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={
-                  boardView === 'players'
-                    ? `Search ${market?.summary.playerCount ?? 0} players`
-                    : `Search ${teamHistory?.summary.canonicalMemberCount ?? 0} members`
-                }
+                placeholder={searchPlaceholder}
                 type="search"
                 value={query}
               />
@@ -263,6 +315,14 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
           </div>
 
           <div className={styles.boardTabs} role="tablist" aria-label="Draft board view">
+            <button
+              aria-selected={boardView === 'league'}
+              onClick={() => switchBoard('league')}
+              role="tab"
+              type="button"
+            >
+              League rosters
+            </button>
             <button
               aria-selected={boardView === 'players'}
               onClick={() => switchBoard('players')}
@@ -281,7 +341,129 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
             </button>
           </div>
 
-          {boardView === 'players' ? (
+          {boardView === 'league' ? (
+            rosterSnapshot === null || selectedRosterSeason === null ? (
+              <div className={styles.emptyState}>
+                <p>
+                  {viewer === null
+                    ? 'Sign in to view private league rosters.'
+                    : 'League rosters could not be loaded.'}
+                </p>
+                <span>
+                  Team ownership, draft rosters, and auction spend stay behind the owner session.
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className={styles.rosterToolbar}>
+                  <label>
+                    <span>Season</span>
+                    <select
+                      aria-label="Roster season"
+                      onChange={(event) => {
+                        setSelectedSeasonKey(event.target.value);
+                        setQuery('');
+                      }}
+                      value={selectedRosterSeason.seasonKey}
+                    >
+                      {rosterSnapshot.seasons.map((season) => (
+                        <option key={season.seasonKey} value={season.seasonKey}>
+                          {season.seasonKey}
+                          {season.rosterStatus === 'empty' ? ' · roster pending' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div>
+                    <strong>{selectedRosterSeason.teamCount}</strong>
+                    <span>teams</span>
+                  </div>
+                  <div>
+                    <strong>{selectedRosterSeason.draftedPlayerCount}</strong>
+                    <span>drafted players</span>
+                  </div>
+                  <div>
+                    <strong>{formatPrice(selectedRosterSeason.totalSpendCents)}</strong>
+                    <span>auction spend</span>
+                  </div>
+                  <p>
+                    Draft snapshot · {selectedRosterSeason.rosterSize} roster spots ·{' '}
+                    {formatPrice(selectedRosterSeason.baseBudgetCents)} base budget
+                  </p>
+                </div>
+                {selectedRosterSeason.rosterStatus === 'empty' ? (
+                  <div className={styles.rosterNotice}>
+                    <strong>{selectedRosterSeason.seasonKey} teams are ready.</strong>
+                    <span>
+                      No draft roster has been imported yet. Choose{' '}
+                      {rosterSnapshot.summary.latestPopulatedSeason ?? 'an earlier season'} to
+                      inspect complete rosters.
+                    </span>
+                  </div>
+                ) : null}
+                <div className={styles.rosterGrid}>
+                  {filteredRosterTeams.map((team) => (
+                    <article className={styles.rosterCard} key={team.teamSeasonId}>
+                      <div className={styles.rosterCardHeading}>
+                        <div>
+                          <p>{team.teamName}</p>
+                          <span>{team.owner?.displayName ?? 'Owner unresolved'}</span>
+                        </div>
+                        <button
+                          onClick={() =>
+                            send(
+                              `Analyze ${team.owner?.displayName ?? team.teamName}'s ${selectedRosterSeason.seasonKey} roster for ${team.teamName}. Identify strengths, risks, value picks, and useful trade targets using the league roster data.`,
+                            )
+                          }
+                          type="button"
+                        >
+                          Ask Eve
+                        </button>
+                      </div>
+                      <div className={styles.rosterMetrics}>
+                        <span>
+                          <small>Roster</small>
+                          <strong>
+                            {team.rosterCount}/{selectedRosterSeason.rosterSize}
+                          </strong>
+                        </span>
+                        <span>
+                          <small>Spent</small>
+                          <strong>{formatPrice(team.spendCents)}</strong>
+                        </span>
+                        <span>
+                          <small>Vs. base</small>
+                          <strong>{formatPrice(team.baseBudgetBalanceCents)}</strong>
+                        </span>
+                      </div>
+                      {team.roster.length === 0 ? (
+                        <p className={styles.rosterPending}>Roster awaiting import</p>
+                      ) : (
+                        <ol className={styles.rosterList}>
+                          {team.roster.map((player) => (
+                            <li key={player.playerId}>
+                              <span>
+                                <small>
+                                  {player.rosterSlot === null ? '—' : player.rosterSlot}
+                                </small>
+                                <strong>{player.playerName}</strong>
+                              </span>
+                              <b>{formatPrice(player.auctionCostCents)}</b>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </article>
+                  ))}
+                  {filteredRosterTeams.length === 0 ? (
+                    <p className={styles.noResults}>
+                      No team, owner, or rostered player matches “{query}”.
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            )
+          ) : boardView === 'players' ? (
             market === null ? (
               <div className={styles.emptyState}>
                 <p>The historical market could not be loaded.</p>
@@ -489,6 +671,7 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
           <fieldset className={styles.quickPrompts}>
             <legend className={styles.srOnly}>Suggested questions</legend>
             {[
+              'Compare the latest complete league rosters and flag trade opportunities.',
               'Who does this league historically overpay for?',
               'Which repeat draft targets reveal manager preferences?',
               'How should daily lineups change replacement value?',
