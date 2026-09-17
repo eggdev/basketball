@@ -6,9 +6,11 @@ import type {
   LeagueTeamHistory,
 } from '@fantasy-basketball/database/runtime';
 import { useEveAgent } from 'eve/react';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useActionState, useMemo, useState } from 'react';
 
 import { authClient } from '../lib/auth-client';
+import type { TeamReconciliationActionState } from '../lib/team-reconciliation';
+import { reconcileTeamIdentityAction } from './actions';
 import styles from './draft-room.module.css';
 
 const dollars = new Intl.NumberFormat('en-US', {
@@ -26,6 +28,80 @@ const formatTrend = (player: HistoricalAuctionMarketPlayer) => {
 };
 
 type BoardView = 'players' | 'teams';
+type LeagueMember = LeagueTeamHistory['members'][number];
+type UnresolvedTeam = LeagueTeamHistory['unresolvedTeams'][number];
+
+const initialReconciliationState: TeamReconciliationActionState = {
+  message: null,
+  status: 'idle',
+};
+
+function TeamReconciliationForm({
+  members,
+  teamName,
+  teams,
+}: {
+  readonly members: ReadonlyArray<LeagueMember>;
+  readonly teamName: string;
+  readonly teams: ReadonlyArray<UnresolvedTeam>;
+}) {
+  const [target, setTarget] = useState('');
+  const [state, action, isPending] = useActionState(
+    reconcileTeamIdentityAction,
+    initialReconciliationState,
+  );
+  const fieldId = `identity-${teams[0]?.teamSeasonId ?? 'unknown'}`;
+
+  return (
+    <form action={action} className={styles.reconciliationRow}>
+      {teams.map((team) => (
+        <input key={team.teamSeasonId} name="teamSeasonId" type="hidden" value={team.teamSeasonId} />
+      ))}
+      <div className={styles.reconciliationTeam}>
+        <strong>{teamName}</strong>
+        <span>{teams.map((team) => team.seasonKey).join(' · ')}</span>
+      </div>
+      <label htmlFor={fieldId} className={styles.srOnly}>
+        Canonical manager for {teamName}
+      </label>
+      <select
+        id={fieldId}
+        name="target"
+        onChange={(event) => setTarget(event.target.value)}
+        required
+        value={target}
+      >
+        <option value="">Choose manager…</option>
+        {members.map((member) => (
+          <option key={member.memberId} value={member.memberId}>
+            {member.displayName}
+          </option>
+        ))}
+        <option value="new">Create new manager…</option>
+      </select>
+      {target === 'new' ? (
+        <input
+          aria-label={`New canonical manager for ${teamName}`}
+          maxLength={80}
+          minLength={2}
+          name="displayName"
+          placeholder="Manager name"
+          required
+        />
+      ) : null}
+      <button disabled={isPending || target === ''} type="submit">
+        {isPending ? 'Saving…' : `Assign ${teams.length > 1 ? `${teams.length} seasons` : 'season'}`}
+      </button>
+      {state.message ? (
+        <output
+          className={state.status === 'error' ? styles.reconciliationError : styles.reconciliationSuccess}
+        >
+          {state.message}
+        </output>
+      ) : null}
+    </form>
+  );
+}
 
 export interface DraftRoomProps {
   readonly chatEnabled: boolean;
@@ -63,6 +139,20 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
         member.teamNames.some((teamName) => teamName.toLocaleLowerCase().includes(normalizedQuery)),
     );
   }, [query, teamHistory]);
+  const unresolvedTeamGroups = useMemo(() => {
+    const groups = new Map<string, UnresolvedTeam[]>();
+    for (const team of teamHistory?.unresolvedTeams ?? []) {
+      const values = groups.get(team.teamName) ?? [];
+      values.push(team);
+      groups.set(team.teamName, values);
+    }
+    return [...groups.entries()]
+      .map(([teamName, teams]) => ({
+        teamName,
+        teams: teams.sort((left, right) => left.seasonKey.localeCompare(right.seasonKey)),
+      }))
+      .sort((left, right) => left.teamName.localeCompare(right.teamName));
+  }, [teamHistory]);
   const leagueFacts = [
     ['Teams', '12'],
     ['Active / roster', '10 / 13'],
@@ -303,13 +393,20 @@ export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoo
               {teamHistory.unresolvedTeams.length > 0 ? (
                 <details className={styles.reconciliationPanel}>
                   <summary>
-                    Review {teamHistory.unresolvedTeams.length} unmatched team-seasons
+                    Reconcile {teamHistory.unresolvedTeams.length} unmatched team-seasons
                   </summary>
-                  <div>
-                    {teamHistory.unresolvedTeams.map((team) => (
-                      <span key={`${team.seasonKey}:${team.sourceTeamId}`}>
-                        <strong>{team.seasonKey}</strong> {team.teamName}
-                      </span>
+                  <p>
+                    Exact team names are grouped across seasons. Choose the manager who owned each
+                    team; renamed teams stay separate.
+                  </p>
+                  <div className={styles.reconciliationList}>
+                    {unresolvedTeamGroups.map((group) => (
+                      <TeamReconciliationForm
+                        key={group.teamName}
+                        members={teamHistory.members}
+                        teamName={group.teamName}
+                        teams={group.teams}
+                      />
                     ))}
                   </div>
                 </details>

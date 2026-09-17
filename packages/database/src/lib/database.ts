@@ -22,6 +22,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'canonical_player_identities'
     | 'health'
     | 'historical_auction_market'
+    | 'reconcile_league_team_identity'
     | 'league_team_history'
     | 'replace_historical_auctions'
     | 'player_production_history'
@@ -163,8 +164,32 @@ export interface LeagueTeamHistory {
   readonly unresolvedTeams: ReadonlyArray<{
     readonly seasonKey: string;
     readonly sourceTeamId: string;
+    readonly teamSeasonId: string;
     readonly teamName: string;
   }>;
+}
+
+export type LeagueTeamReconciliationTarget =
+  | {
+      readonly displayName?: string;
+      readonly kind: 'existing';
+      readonly memberId: string;
+    }
+  | {
+      readonly displayName: string;
+      readonly kind: 'new';
+    };
+
+export interface LeagueTeamReconciliationInput {
+  readonly resolvedByUserId: string;
+  readonly target: LeagueTeamReconciliationTarget;
+  readonly teamSeasonIds: ReadonlyArray<string>;
+}
+
+export interface LeagueTeamReconciliationResult {
+  readonly displayName: string;
+  readonly memberId: string;
+  readonly resolvedTeamSeasonCount: number;
 }
 
 export interface CanonicalPlayerIdentity {
@@ -248,6 +273,9 @@ export interface DatabaseService {
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
   readonly leagueTeamHistory: Effect.Effect<LeagueTeamHistory, DatabaseUnavailable>;
+  readonly reconcileLeagueTeamIdentity: (
+    input: LeagueTeamReconciliationInput,
+  ) => Effect.Effect<LeagueTeamReconciliationResult, DatabaseUnavailable>;
   readonly playerProductionHistory: Effect.Effect<
     ReadonlyArray<PlayerProductionHistoryRecord>,
     DatabaseUnavailable
@@ -355,6 +383,17 @@ const makePool = (config: DatabaseConfig) =>
 
 const databaseUnavailable = (operation: DatabaseUnavailable['operation'], message: string) =>
   new DatabaseUnavailable({ message, operation });
+
+const normalizeLeagueMemberKey = (value: string): string =>
+  value
+    .normalize('NFKD')
+    .replaceAll(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '-')
+    .replaceAll(/^-|-$/g, '');
+
+const leagueTeamIdentityKey = (historyId: string, seasonKey: string, sourceTeamId: string) =>
+  `${historyId}:${seasonKey}:${sourceTeamId}`;
 
 const databaseServiceLayer = Layer.effect(
   Database,
@@ -587,6 +626,7 @@ const databaseServiceLayer = Layer.effect(
         purchase_count: number;
         season_key: string;
         source_team_id: string;
+        team_season_id: string;
         team_name: string;
         total_spend_cents: number;
       }>`
@@ -594,6 +634,7 @@ const databaseServiceLayer = Layer.effect(
           lm.id as member_id,
           lm.canonical_key,
           lm.display_name,
+          lts.id as team_season_id,
           ls.season_key,
           lts.source_team_id,
           lts.team_name,
@@ -606,11 +647,14 @@ const databaseServiceLayer = Layer.effect(
         join fantasy.league_seasons ls on ls.id = lts.league_season_id
         left join fantasy.league_members lm on lm.id = lts.league_member_id
         left join fantasy.auction_results ar on ar.league_team_season_id = lts.id
-        where ls.source = 'fantrax'
+        where
+          ls.source = 'fantrax'
+          and ls.source_league_history_id is not null
         group by
           lm.id,
           lm.canonical_key,
           lm.display_name,
+          lts.id,
           ls.season_key,
           lts.source_team_id,
           lts.team_name,
@@ -720,6 +764,7 @@ const databaseServiceLayer = Layer.effect(
         .map((row) => ({
           seasonKey: row.season_key,
           sourceTeamId: row.source_team_id,
+          teamSeasonId: row.team_season_id,
           teamName: row.team_name,
         }));
       const members = [...membersById.values()].sort(
@@ -749,10 +794,194 @@ const databaseServiceLayer = Layer.effect(
       ),
     );
 
+    const reconcileLeagueTeamIdentity = (
+      input: LeagueTeamReconciliationInput,
+    ): Effect.Effect<LeagueTeamReconciliationResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const teamSeasonIds = [...new Set(input.teamSeasonIds)];
+        if (teamSeasonIds.length === 0 || input.resolvedByUserId.trim() === '') {
+          throw new Error('A reconciliation requires teams and an authenticated user');
+        }
+
+        const teamRows = yield* sql<{
+          season_key: string;
+          source_league_history_id: string;
+          source_team_id: string;
+          team_season_id: string;
+        }>`
+          select
+            lts.id as team_season_id,
+            ls.source_league_history_id,
+            ls.season_key,
+            lts.source_team_id
+          from fantasy.league_team_seasons lts
+          join fantasy.league_seasons ls on ls.id = lts.league_season_id
+          where
+            lts.id in ${sql.in(teamSeasonIds)}
+            and ls.source = 'fantrax'
+            and ls.source_league_history_id is not null
+          for update of lts
+        `;
+        if (teamRows.length !== teamSeasonIds.length) {
+          throw new Error('One or more league team-seasons could not be found');
+        }
+
+        const leagueHistoryIds = new Set(teamRows.map((team) => team.source_league_history_id));
+        if (leagueHistoryIds.size !== 1) {
+          throw new Error('A reconciliation cannot cross league histories');
+        }
+        const sourceLeagueHistoryId = teamRows[0]!.source_league_history_id;
+
+        let member: { display_name: string; id: string } | undefined;
+        if (input.target.kind === 'existing') {
+          const displayName = input.target.displayName?.trim();
+          if (displayName !== undefined && (displayName.length < 2 || displayName.length > 80)) {
+            throw new Error('Canonical manager names must contain 2 to 80 characters');
+          }
+          if (displayName === undefined) {
+            [member] = yield* sql<{ display_name: string; id: string }>`
+              select id, display_name
+              from fantasy.league_members
+              where
+                id = ${input.target.memberId}
+                and source_league_history_id = ${sourceLeagueHistoryId}
+            `;
+          } else {
+            [member] = yield* sql<{ display_name: string; id: string }>`
+              update fantasy.league_members
+              set
+                display_name = ${displayName},
+                display_name_resolution = 'manual',
+                updated_at = now()
+              where
+                id = ${input.target.memberId}
+                and source_league_history_id = ${sourceLeagueHistoryId}
+              returning id, display_name
+            `;
+          }
+        } else {
+          const displayName = input.target.displayName.trim();
+          const canonicalKey = normalizeLeagueMemberKey(displayName);
+          if (displayName === '' || canonicalKey === '') {
+            throw new Error('A new canonical member requires a display name');
+          }
+          [member] = yield* sql<{ display_name: string; id: string }>`
+            insert into fantasy.league_members
+              (source_league_history_id, canonical_key, display_name, display_name_resolution)
+            values
+              (${sourceLeagueHistoryId}, ${canonicalKey}, ${displayName}, 'manual')
+            on conflict (source_league_history_id, canonical_key) do update set
+              display_name = excluded.display_name,
+              display_name_resolution = 'manual',
+              updated_at = now()
+            returning id, display_name
+          `;
+        }
+        if (member === undefined) {
+          throw new Error('The canonical league member could not be found or created');
+        }
+
+        for (const team of teamRows) {
+          yield* sql`
+            insert into fantasy.league_team_identity_overrides
+              (
+                source_league_history_id,
+                season_key,
+                source_team_id,
+                league_member_id,
+                resolved_by_user_id
+              )
+            values
+              (
+                ${team.source_league_history_id},
+                ${team.season_key},
+                ${team.source_team_id},
+                ${member.id},
+                ${input.resolvedByUserId}
+              )
+            on conflict (source_league_history_id, season_key, source_team_id) do update set
+              league_member_id = excluded.league_member_id,
+              resolved_by_user_id = excluded.resolved_by_user_id,
+              updated_at = now()
+          `;
+          yield* sql`
+            update fantasy.league_team_seasons
+            set
+              league_member_id = ${member.id},
+              identity_resolution = 'manual_override',
+              identity_confidence = 100,
+              updated_at = now()
+            where id = ${team.team_season_id}
+          `;
+        }
+
+        return {
+          displayName: member.display_name,
+          memberId: member.id,
+          resolvedTeamSeasonCount: teamRows.length,
+        } satisfies LeagueTeamReconciliationResult;
+      });
+
+      return sql.withTransaction(operation).pipe(
+        Effect.mapError(() =>
+          databaseUnavailable(
+            'reconcile_league_team_identity',
+            'The league team identity could not be reconciled',
+          ),
+        ),
+      );
+    };
+
     const replaceHistoricalAuctions = (
       batch: HistoricalAuctionBatch,
     ): Effect.Effect<HistoricalAuctionImportResult, DatabaseUnavailable> => {
       const operation = Effect.gen(function* () {
+        const importedTeamKeys = new Set(
+          batch.leagueTeams.map((team) =>
+            leagueTeamIdentityKey(team.leagueHistoryId, team.seasonKey, team.sourceTeamId),
+          ),
+        );
+        const overrideRows = yield* sql<{
+          league_member_id: string;
+          season_key: string;
+          source_league_history_id: string;
+          source_team_id: string;
+        }>`
+          select
+            source_league_history_id,
+            season_key,
+            source_team_id,
+            league_member_id
+          from fantasy.league_team_identity_overrides
+        `;
+        const manualOverrides = new Map(
+          overrideRows
+            .filter((row) =>
+              importedTeamKeys.has(
+                leagueTeamIdentityKey(
+                  row.source_league_history_id,
+                  row.season_key,
+                  row.source_team_id,
+                ),
+              ),
+            )
+            .map((row) => [
+              leagueTeamIdentityKey(
+                row.source_league_history_id,
+                row.season_key,
+                row.source_team_id,
+              ),
+              row.league_member_id,
+            ]),
+        );
+        const unresolvedTeamSeasonCount = batch.leagueTeams.filter(
+          (team) =>
+            team.memberKey === null &&
+            !manualOverrides.has(
+              leagueTeamIdentityKey(team.leagueHistoryId, team.seasonKey, team.sourceTeamId),
+            ),
+        ).length;
+
         const [ingestionRun] = yield* sql<{ id: string }>`
           insert into fantasy.ingestion_runs
             (source, resource, status, record_count, details)
@@ -767,9 +996,8 @@ const databaseServiceLayer = Layer.effect(
                 canonicalMemberCount: batch.leagueMembers.length,
                 leagueTeamSeasonCount: batch.leagueTeams.length,
                 seasonCount: batch.seasons.length,
-                unresolvedTeamSeasonCount: batch.leagueTeams.filter(
-                  (team) => team.memberKey === null,
-                ).length,
+                manualOverrideCount: manualOverrides.size,
+                unresolvedTeamSeasonCount,
                 warningCount: batch.warningCount,
               })}
             )
@@ -897,7 +1125,11 @@ const databaseServiceLayer = Layer.effect(
             values
               (${member.leagueHistoryId}, ${member.canonicalKey}, ${member.displayName})
             on conflict (source_league_history_id, canonical_key) do update set
-              display_name = excluded.display_name,
+              display_name = case
+                when league_members.display_name_resolution = 'manual'
+                  then league_members.display_name
+                else excluded.display_name
+              end,
               updated_at = now()
             returning id
           `;
@@ -907,15 +1139,23 @@ const databaseServiceLayer = Layer.effect(
           memberIds.set(`${member.leagueHistoryId}:${member.canonicalKey}`, record.id);
         }
 
+        const effectiveMemberIds = new Set<string>();
         const leagueTeamSeasonIds = new Map<string, string>();
         for (const team of batch.leagueTeams) {
           const leagueSeasonId = seasonIds.get(team.seasonKey);
+          const manualMemberId = manualOverrides.get(
+            leagueTeamIdentityKey(team.leagueHistoryId, team.seasonKey, team.sourceTeamId),
+          );
           const leagueMemberId =
-            team.memberKey === null
+            manualMemberId ??
+            (team.memberKey === null
               ? null
-              : memberIds.get(`${team.leagueHistoryId}:${team.memberKey}`);
+              : memberIds.get(`${team.leagueHistoryId}:${team.memberKey}`));
           if (leagueSeasonId === undefined || (team.memberKey !== null && !leagueMemberId)) {
             throw new Error(`Canonical team references are incomplete for ${team.seasonKey}`);
+          }
+          if (leagueMemberId !== null && leagueMemberId !== undefined) {
+            effectiveMemberIds.add(leagueMemberId);
           }
           const [record] = yield* sql<{ id: string }>`
             insert into fantasy.league_team_seasons
@@ -937,8 +1177,8 @@ const databaseServiceLayer = Layer.effect(
                 ${team.sourceTeamId},
                 ${team.teamName},
                 ${team.division},
-                ${team.identityResolution},
-                ${team.identityConfidence}
+                ${manualMemberId === undefined ? team.identityResolution : 'manual_override'},
+                ${manualMemberId === undefined ? team.identityConfidence : 100}
               )
             returning id
           `;
@@ -1004,13 +1244,12 @@ const databaseServiceLayer = Layer.effect(
 
         return {
           auctionCount: batch.auctions.length,
-          canonicalMemberCount: batch.leagueMembers.length,
+          canonicalMemberCount: effectiveMemberIds.size,
           ingestionRunId: ingestionRun.id,
           leagueTeamSeasonCount: batch.leagueTeams.length,
           playerCount: batch.players.length,
           seasonCount: batch.seasons.length,
-          unresolvedTeamSeasonCount: batch.leagueTeams.filter((team) => team.memberKey === null)
-            .length,
+          unresolvedTeamSeasonCount,
         };
       });
 
@@ -1397,6 +1636,7 @@ const databaseServiceLayer = Layer.effect(
       historicalAuctionMarket,
       leagueTeamHistory,
       playerProductionHistory,
+      reconcileLeagueTeamIdentity,
       replaceHistoricalAuctions,
       replaceHistoricalScoring,
       replacePlayerProduction,

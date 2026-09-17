@@ -1,0 +1,1 @@
+ALTER TABLE "fantasy"."league_members" ADD COLUMN "display_name_resolution" text DEFAULT 'imported' NOT NULL;

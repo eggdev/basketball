@@ -143,11 +143,12 @@ seasons are upserted, while every run retains its own immutable source records
 and fingerprint for auditing. Real league files remain ignored by Git.
 
 Fantrax team IDs change each season, so manager history is resolved separately
-from team names. The importer uses explicit entries from the ignored
-`config/league-members.json`, then observed CSV manager labels, then exact prior
-team-name continuity. It never uses fuzzy name guesses. The signed-in League
-History view lists unresolved team-seasons so renamed teams can be assigned in
-the private config and re-imported.
+from team names. The importer uses durable owner-confirmed overrides first,
+then explicit entries from the ignored `config/league-members.json`, observed
+CSV manager labels, and exact prior team-name continuity. It never uses fuzzy
+name guesses. The signed-in League History view groups unresolved exact team
+names across seasons and can assign them to an existing or new canonical
+manager. Those Neon-backed overrides survive future imports.
 
 The draft room reads that history through one Postgres market snapshot. Its
 expected cost is a linear recency-weighted estimate from observed prices; newer

@@ -80,6 +80,7 @@ export const leagueMembers = fantasySchema.table(
     sourceLeagueHistoryId: text('source_league_history_id').notNull(),
     canonicalKey: text('canonical_key').notNull(),
     displayName: text('display_name').notNull(),
+    displayNameResolution: text('display_name_resolution').notNull().default('imported'),
     ...timestamps,
   },
   (table) => [
@@ -114,6 +115,29 @@ export const leagueTeamSeasons = fantasySchema.table(
       table.sourceTeamId,
     ),
     index('league_team_seasons_member_idx').on(table.leagueMemberId),
+  ],
+);
+
+export const leagueTeamIdentityOverrides = fantasySchema.table(
+  'league_team_identity_overrides',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    sourceLeagueHistoryId: text('source_league_history_id').notNull(),
+    seasonKey: text('season_key').notNull(),
+    sourceTeamId: text('source_team_id').notNull(),
+    leagueMemberId: uuid('league_member_id')
+      .notNull()
+      .references(() => leagueMembers.id, { onDelete: 'restrict' }),
+    resolvedByUserId: text('resolved_by_user_id').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('league_team_identity_overrides_team_unique').on(
+      table.sourceLeagueHistoryId,
+      table.seasonKey,
+      table.sourceTeamId,
+    ),
+    index('league_team_identity_overrides_member_idx').on(table.leagueMemberId),
   ],
 );
 

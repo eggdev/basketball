@@ -60,7 +60,8 @@
 .chatActions button,
 .boardTabs button,
 .memberHeading button,
-.quickPrompts button {
+.quickPrompts button,
+.reconciliationRow button {
   border: 1px solid #30455f;
   border-radius: 9px;
   background: #0b1a2a;
@@ -336,22 +337,99 @@
   color: #fbbf24;
 }
 
-.reconciliationPanel div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 14px;
-  padding: 10px 0 4px;
+.reconciliationPanel > p {
+  margin: 9px 0 0;
+  color: #7e90a6;
+  line-height: 1.45;
 }
 
-.reconciliationPanel span {
+.reconciliationList {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+
+.reconciliationRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 10px;
+  background: rgba(7, 17, 31, 0.45);
+}
+
+.reconciliationTeam {
+  display: flex;
+  flex: 1 1 150px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.reconciliationTeam strong {
   overflow: hidden;
+  color: #dbe7f4;
+  font-size: 0.76rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.reconciliationPanel strong {
-  margin-right: 5px;
+.reconciliationTeam span {
   color: #7e90a6;
+  font-size: 0.66rem;
+}
+
+.reconciliationRow select,
+.reconciliationRow input {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #30455f;
+  border-radius: 8px;
+  outline: none;
+  background: #091522;
+  color: #dbe7f4;
+  font: inherit;
+}
+
+.reconciliationRow select {
+  flex: 0 1 180px;
+}
+
+.reconciliationRow input {
+  flex: 0 1 150px;
+}
+
+.reconciliationRow select:focus,
+.reconciliationRow input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.reconciliationRow button {
+  flex: none;
+  padding: 8px 10px;
+  font-size: 0.68rem;
+}
+
+.reconciliationRow button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.reconciliationError,
+.reconciliationSuccess {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.68rem;
+}
+
+.reconciliationError {
+  color: #fca5a5;
+}
+
+.reconciliationSuccess {
+  color: #6ee7b7;
 }
 
 .memberGrid {
@@ -742,9 +820,20 @@
     grid-column: 1 / -1;
   }
 
-  .memberGrid,
-  .reconciliationPanel div {
+  .memberGrid {
     grid-template-columns: 1fr;
+  }
+
+  .reconciliationRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reconciliationTeam,
+  .reconciliationRow select,
+  .reconciliationRow input {
+    flex-basis: auto;
+    width: 100%;
   }
 
   .playerSearch {

@@ -59,7 +59,7 @@ const teamHistory = vi.hoisted(() => ({
           totalSpendCents: 9_000,
         },
       ],
-      memberId: 'member-1',
+      memberId: '1eaed817-a6b1-4e07-8860-849950efa9dc',
       purchaseCount: 26,
       seasons: [
         {
@@ -80,12 +80,25 @@ const teamHistory = vi.hoisted(() => ({
   summary: {
     canonicalMemberCount: 1,
     latestSeason: '2025-26',
-    resolvedTeamSeasonCount: 5,
+    resolvedTeamSeasonCount: 4,
     seasonCount: 5,
     teamSeasonCount: 6,
-    unresolvedTeamSeasonCount: 1,
+    unresolvedTeamSeasonCount: 2,
   },
-  unresolvedTeams: [{ seasonKey: '2025-26', sourceTeamId: 'team-2', teamName: 'Unknown Team' }],
+  unresolvedTeams: [
+    {
+      seasonKey: '2024-25',
+      sourceTeamId: 'team-1-old',
+      teamName: 'Unknown Team',
+      teamSeasonId: 'a1f0613a-0bc2-42f0-8795-1373e771d116',
+    },
+    {
+      seasonKey: '2025-26',
+      sourceTeamId: 'team-2',
+      teamName: 'Unknown Team',
+      teamSeasonId: '8f942adb-4f54-45a3-a6fe-fdf7f7c743e0',
+    },
+  ],
 }));
 
 const loadViewer = vi.hoisted(() =>
@@ -111,6 +124,10 @@ vi.mock('../src/lib/league-team-history', () => ({
 
 vi.mock('../src/lib/viewer', () => ({
   loadViewer,
+}));
+
+vi.mock('../src/app/actions', () => ({
+  reconcileTeamIdentityAction: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock('eve/react', () => ({
@@ -151,9 +168,14 @@ describe('Page', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'League history' }));
 
-    expect(screen.getByText('Manager One')).toBeTruthy();
+    expect(screen.getAllByText('Manager One')).toHaveLength(2);
     expect(screen.getAllByText('Moon Shots')).toHaveLength(2);
-    expect(screen.getByText('Review 1 unmatched team-seasons')).toBeTruthy();
+    fireEvent.click(screen.getByText('Reconcile 2 unmatched team-seasons'));
+
+    expect(screen.getByRole('combobox', { name: 'Canonical manager for Unknown Team' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Manager One' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Create new manager…' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Assign 2 seasons' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Ask Eve' })).toBeTruthy();
   });
 
