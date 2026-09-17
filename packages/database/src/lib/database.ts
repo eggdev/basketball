@@ -23,6 +23,8 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'health'
     | 'historical_auction_market'
     | 'replace_historical_auctions'
+    | 'player_production_history'
+    | 'replace_historical_scoring'
     | 'replace_player_production';
 }> {}
 
@@ -130,6 +132,44 @@ export interface PlayerProductionImportResult {
   readonly seasonCount: number;
 }
 
+export interface PlayerProductionHistoryRecord {
+  readonly gamesPlayed: number;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly seasonKey: string;
+  readonly stats: Readonly<Record<string, number | null>>;
+}
+
+export interface HistoricalScoringBatch {
+  readonly fingerprint: string;
+  readonly name: string;
+  readonly rankings: ReadonlyArray<{
+    readonly components: Readonly<Record<string, number>>;
+    readonly fantasyPoints: number;
+    readonly fantasyPointsPerGame: number;
+    readonly gamesPlayed: number;
+    readonly playerId: string;
+    readonly playerName: string;
+    readonly rank: number;
+    readonly seasonKey: string;
+  }>;
+  readonly rules: ReadonlyArray<{
+    readonly label: string;
+    readonly points: number;
+    readonly statKey: string;
+  }>;
+  readonly seasons: ReadonlyArray<string>;
+  readonly stackTripleDoubleBonuses: boolean;
+  readonly version: number;
+}
+
+export interface HistoricalScoringImportResult {
+  readonly ingestionRunId: string;
+  readonly rankingCount: number;
+  readonly ruleSetCount: number;
+  readonly seasonCount: number;
+}
+
 export interface DatabaseService {
   readonly canonicalPlayerIdentities: Effect.Effect<
     ReadonlyArray<CanonicalPlayerIdentity>,
@@ -137,9 +177,16 @@ export interface DatabaseService {
   >;
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
+  readonly playerProductionHistory: Effect.Effect<
+    ReadonlyArray<PlayerProductionHistoryRecord>,
+    DatabaseUnavailable
+  >;
   readonly replaceHistoricalAuctions: (
     batch: HistoricalAuctionBatch,
   ) => Effect.Effect<HistoricalAuctionImportResult, DatabaseUnavailable>;
+  readonly replaceHistoricalScoring: (
+    batch: HistoricalScoringBatch,
+  ) => Effect.Effect<HistoricalScoringImportResult, DatabaseUnavailable>;
   readonly replacePlayerProduction: (
     batch: PlayerProductionBatch,
   ) => Effect.Effect<PlayerProductionImportResult, DatabaseUnavailable>;
@@ -272,6 +319,44 @@ const databaseServiceLayer = Layer.effect(
         databaseUnavailable(
           'canonical_player_identities',
           'The canonical player identities could not be loaded',
+        ),
+      ),
+    );
+
+    const playerProductionHistory = sql<{
+      games_played: number;
+      player_id: string;
+      player_name: string;
+      season_key: string;
+      stats: Record<string, number | null>;
+    }>`
+      select
+        pss.games_played,
+        pss.player_id,
+        p.canonical_name as player_name,
+        pss.season_key,
+        pss.stats
+      from fantasy.player_season_stats pss
+      join fantasy.players p on p.id = pss.player_id
+      where
+        pss.source = 'balldontlie'
+        and pss.period = 'regular-season'
+        and pss.games_played > 0
+      order by pss.season_key, p.canonical_name, pss.player_id
+    `.pipe(
+      Effect.map((rows) =>
+        rows.map((row) => ({
+          gamesPlayed: row.games_played,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          seasonKey: row.season_key,
+          stats: row.stats,
+        })),
+      ),
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'player_production_history',
+          'The player production history could not be loaded',
         ),
       ),
     );
@@ -778,6 +863,198 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const replaceHistoricalScoring = (
+      batch: HistoricalScoringBatch,
+    ): Effect.Effect<HistoricalScoringImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, status, record_count, details)
+          values
+            (
+              'league-config',
+              'historical-rankings',
+              'running',
+              ${batch.rankings.length},
+              ${sql.json({
+                fingerprint: batch.fingerprint,
+                name: batch.name,
+                seasonCount: batch.seasons.length,
+                stackTripleDoubleBonuses: batch.stackTripleDoubleBonuses,
+                version: batch.version,
+              })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) {
+          return yield* Effect.fail(new Error('Scoring ingestion run was not created'));
+        }
+
+        const rankingRunIds = new Map<string, string>();
+        for (const seasonKey of batch.seasons) {
+          const seasonRecords = yield* sql<{ id: string }>`
+            select id
+            from fantasy.league_seasons
+            where source = 'fantrax' and season_key = ${seasonKey}
+          `;
+          if (seasonRecords.length !== 1) {
+            return yield* Effect.fail(
+              new Error(`${seasonKey} must resolve to exactly one Fantrax league season`),
+            );
+          }
+          const leagueSeasonId = seasonRecords[0]!.id;
+          const [existingRuleSet] = yield* sql<{ id: string; name: string }>`
+            select id, name
+            from fantasy.scoring_rule_sets
+            where league_season_id = ${leagueSeasonId} and version = ${batch.version}
+          `;
+          let ruleSetId = existingRuleSet?.id;
+          if (existingRuleSet !== undefined) {
+            const existingRules = yield* sql<{
+              label: string;
+              points: string;
+              stat_key: string;
+            }>`
+              select label, points::text, stat_key
+              from fantasy.scoring_rules
+              where rule_set_id = ${existingRuleSet.id}
+            `;
+            const existingRulesByStat = new Map(existingRules.map((rule) => [rule.stat_key, rule]));
+            const rulesMatch =
+              existingRuleSet.name === batch.name &&
+              existingRules.length === batch.rules.length &&
+              batch.rules.every((rule) => {
+                const existing = existingRulesByStat.get(rule.statKey);
+                return (
+                  existing !== undefined &&
+                  existing.label === rule.label &&
+                  Number(existing.points) === rule.points
+                );
+              });
+            if (!rulesMatch) {
+              return yield* Effect.fail(
+                new Error(
+                  `${seasonKey} scoring version ${batch.version} already exists with different rules; increment the version`,
+                ),
+              );
+            }
+          } else {
+            const [createdRuleSet] = yield* sql<{ id: string }>`
+              insert into fantasy.scoring_rule_sets
+                (league_season_id, name, version)
+              values
+                (${leagueSeasonId}, ${batch.name}, ${batch.version})
+              returning id
+            `;
+            if (createdRuleSet === undefined) {
+              return yield* Effect.fail(
+                new Error(`Scoring rules were not created for ${seasonKey}`),
+              );
+            }
+            ruleSetId = createdRuleSet.id;
+
+            const ruleRecords = batch.rules.map((rule) => ({
+              label: rule.label,
+              points: rule.points,
+              rule_set_id: createdRuleSet.id,
+              stat_key: rule.statKey,
+            }));
+            if (ruleRecords.length > 0) {
+              yield* sql`
+                insert into fantasy.scoring_rules ${sql.insert(ruleRecords)}
+              `;
+            }
+          }
+          if (ruleSetId === undefined) {
+            return yield* Effect.fail(new Error(`Scoring rules are unavailable for ${seasonKey}`));
+          }
+
+          yield* sql`
+            delete from fantasy.ranking_runs
+            where scoring_rule_set_id = ${ruleSetId} and model = 'historical-actual'
+          `;
+
+          const [rankingRun] = yield* sql<{ id: string }>`
+            insert into fantasy.ranking_runs
+              (
+                scoring_rule_set_id,
+                season_key,
+                model,
+                model_version,
+                parameters
+              )
+            values
+              (
+                ${ruleSetId},
+                ${seasonKey},
+                'historical-actual',
+                '1',
+                ${sql.json({
+                  fingerprint: batch.fingerprint,
+                  source: 'balldontlie',
+                  stackTripleDoubleBonuses: batch.stackTripleDoubleBonuses,
+                })}
+              )
+            returning id
+          `;
+          if (rankingRun === undefined) {
+            return yield* Effect.fail(new Error(`Ranking run was not created for ${seasonKey}`));
+          }
+          rankingRunIds.set(seasonKey, rankingRun.id);
+        }
+
+        const rankingRecords = batch.rankings.map((ranking) => {
+          const rankingRunId = rankingRunIds.get(ranking.seasonKey);
+          if (rankingRunId === undefined) {
+            throw new Error(`Ranking references unknown season ${ranking.seasonKey}`);
+          }
+          return {
+            auction_value_cents: null,
+            explanation: {
+              components: ranking.components,
+              gamesPlayed: ranking.gamesPlayed,
+              kind: 'historical-actual',
+            },
+            player_id: ranking.playerId,
+            projected_points: ranking.fantasyPoints,
+            projected_points_per_game: ranking.fantasyPointsPerGame,
+            rank: ranking.rank,
+            ranking_run_id: rankingRunId,
+            replacement_value: null,
+          };
+        });
+        if (rankingRecords.length > 0) {
+          yield* sql`
+            insert into fantasy.player_rankings ${sql.insert(rankingRecords)}
+          `;
+        }
+
+        yield* sql`
+          update fantasy.ingestion_runs
+          set status = 'completed', finished_at = now()
+          where id = ${ingestionRun.id}
+        `;
+
+        return {
+          ingestionRunId: ingestionRun.id,
+          rankingCount: batch.rankings.length,
+          ruleSetCount: batch.seasons.length,
+          seasonCount: batch.seasons.length,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'replace_historical_scoring',
+              'The historical scoring import could not be completed',
+            ),
+          ),
+        );
+    };
+
     return Database.of({
       canonicalPlayerIdentities,
       health: sql<{ database_time: string }>`select now()::text as database_time`.pipe(
@@ -794,7 +1071,9 @@ const databaseServiceLayer = Layer.effect(
         Effect.mapError(() => databaseUnavailable('health', 'The database health check failed')),
       ),
       historicalAuctionMarket,
+      playerProductionHistory,
       replaceHistoricalAuctions,
+      replaceHistoricalScoring,
       replacePlayerProduction,
     });
   }),

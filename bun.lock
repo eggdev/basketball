@@ -106,6 +106,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@fantasy-basketball/database": "workspace:*",
+        "@fantasy-basketball/fantasy": "workspace:*",
         "csv-parse": "7.0.2",
         "effect": "3.22.2",
         "tslib": "^2.3.0",

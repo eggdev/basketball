@@ -1,0 +1,19 @@
+{
+  "name": "League Points",
+  "version": 1,
+  "applies_to_seasons": ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"],
+  "stack_triple_double_bonuses": true,
+  "rules": [
+    { "stat_key": "ast", "label": "Assists (AST)", "points": 0.8 },
+    { "stat_key": "blk", "label": "Blocks (BLK)", "points": 1 },
+    { "stat_key": "fg_missed", "label": "Field Goals Missed (FG-)", "points": -0.2 },
+    { "stat_key": "ft_missed", "label": "Free Throws Missed (FT-)", "points": -0.1 },
+    { "stat_key": "pts", "label": "Points (PTS)", "points": 0.5 },
+    { "stat_key": "reb", "label": "Rebounds (REB)", "points": 0.7 },
+    { "stat_key": "stl", "label": "Steals (ST)", "points": 1 },
+    { "stat_key": "fg3m", "label": "Three Pointers Made (3PTM)", "points": 0.3 },
+    { "stat_key": "triple_double", "label": "Triple Doubles (3D)", "points": 5 },
+    { "stat_key": "turnover", "label": "Turnovers (TO)", "points": -0.7 },
+    { "stat_key": "double_double", "label": "Double Doubles (2D)", "points": 2 }
+  ]
+}

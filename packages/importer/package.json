@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@fantasy-basketball/database": "workspace:*",
+    "@fantasy-basketball/fantasy": "workspace:*",
     "csv-parse": "7.0.2",
     "effect": "3.22.2",
     "tslib": "^2.3.0"
@@ -54,6 +55,15 @@
         "cache": false,
         "options": {
           "command": "bun --env-file=.env.local packages/importer/scripts/import-production.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
+      },
+      "scoring-import": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/import-scoring.ts",
           "cwd": ".",
           "forwardAllArgs": true
         }

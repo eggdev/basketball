@@ -36,6 +36,23 @@ export const ScoringRules = Schema.Struct({
 
 export type ScoringRules = Schema.Schema.Type<typeof ScoringRules>;
 
+export const SeasonStatLine = Schema.Struct({
+  gamesPlayed: CountingStat,
+  points: CountingStat,
+  rebounds: CountingStat,
+  assists: CountingStat,
+  steals: CountingStat,
+  blocks: CountingStat,
+  threePointersMade: CountingStat,
+  turnovers: CountingStat,
+  fieldGoalsMissed: CountingStat,
+  freeThrowsMissed: CountingStat,
+  doubleDoubles: CountingStat,
+  tripleDoubles: CountingStat,
+});
+
+export type SeasonStatLine = Schema.Schema.Type<typeof SeasonStatLine>;
+
 export const currentLeagueScoring = {
   points: 0.5,
   rebounds: 0.7,
@@ -59,6 +76,12 @@ export interface FantasyPointBreakdown {
     readonly tripleDouble: boolean;
     readonly points: number;
   };
+}
+
+export interface FantasySeasonPointBreakdown {
+  readonly components: Readonly<Record<string, number>>;
+  readonly pointsPerGame: number;
+  readonly total: number;
 }
 
 export function scoreGame(
@@ -102,5 +125,35 @@ export function scoreGame(
       tripleDouble,
       points: bonusPoints,
     },
+  };
+}
+
+export function scoreSeason(
+  stats: SeasonStatLine,
+  rules: ScoringRules = currentLeagueScoring,
+): FantasySeasonPointBreakdown {
+  const components = {
+    points: stats.points * rules.points,
+    rebounds: stats.rebounds * rules.rebounds,
+    assists: stats.assists * rules.assists,
+    steals: stats.steals * rules.steals,
+    blocks: stats.blocks * rules.blocks,
+    threePointersMade: stats.threePointersMade * rules.threePointersMade,
+    turnovers: stats.turnovers * rules.turnovers,
+    fieldGoalsMissed: stats.fieldGoalsMissed * rules.fieldGoalsMissed,
+    freeThrowsMissed: stats.freeThrowsMissed * rules.freeThrowsMissed,
+    doubleDoubles:
+      Math.max(
+        0,
+        stats.doubleDoubles - (rules.stackTripleDoubleBonuses ? 0 : stats.tripleDoubles),
+      ) * rules.doubleDoubleBonus,
+    tripleDoubles: stats.tripleDoubles * rules.tripleDoubleBonus,
+  } satisfies Readonly<Record<string, number>>;
+  const total = Object.values(components).reduce((sum, value) => sum + value, 0);
+
+  return {
+    components,
+    pointsPerGame: stats.gamesPlayed === 0 ? 0 : total / stats.gamesPlayed,
+    total,
   };
 }

@@ -18,6 +18,8 @@
     "lint": "nx run-many -t lint",
     "production:import": "nx run importer:production-import -- --commit",
     "production:validate": "nx run importer:production-import",
+    "scoring:import": "nx run importer:scoring-import -- --commit",
+    "scoring:validate": "nx run importer:scoring-import",
     "test": "nx run-many -t test -- --run",
     "test:python": "PYTHONPATH=src python3 -m unittest discover -s tests -v",
     "typecheck": "nx run-many -t typecheck"

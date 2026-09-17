@@ -146,6 +146,27 @@ later undrafted season contributes $0; seasons before a player's debut do not.
 This is an explainable historical estimate, not a production projection or
 recommended maximum bid.
 
+## Player production and historical scoring
+
+Historical regular-season production is imported from BALLDONTLIE and kept
+separate from the league-specific scoring model. The scoring weights live in
+the versioned, public `config/scoring.json`, so a rules change can be reviewed
+and evaluated without downloading the source box scores again.
+
+```bash
+bun run production:validate
+bun run production:import
+bun run scoring:validate
+bun run scoring:import
+```
+
+The scoring validation is read-only and reports a deterministic fingerprint
+plus each season's leaders. The explicit import writes one scoring rule set and
+one historical ranking run per season in a single transaction. Historical
+rankings are actual season totals under the configured rules; projections,
+replacement value, and recommended auction prices are intentionally separate
+future model runs.
+
 ## Current implementation status
 
 The initial vertical slice can score a stat line with the league's custom rules
@@ -156,9 +177,10 @@ searchable historical market with expected, latest, trend, and observed-range
 prices. Eve can query the same snapshot through its
 `historical_auction_market` tool, so chat and UI share one calculation.
 
-Player production is the next major data seam. Historical auction cost should
-not be treated as a ranking until NBA statistics, league scoring, availability,
-and replacement value are joined to it.
+Five seasons of player production can now be scored against the league rules
+and stored as historical actual rankings. Historical auction cost remains an
+observed market signal rather than a ranking; availability, projections, and
+replacement value still need to be joined before the app recommends bids.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be

@@ -41,3 +41,20 @@ bypass the ignored local response cache. Identity mismatches make the plan
 invalid and block a partial database commit. Provider naming differences are
 kept explicit in `config/balldontlie_player_overrides.json`; its keys are stable
 Fantrax player IDs and its values are BALLDONTLIE player IDs.
+
+## Historical scoring
+
+The checked-in `config/scoring.json` is the versioned league scoring source. It
+is joined to imported regular-season production and converted into auditable
+historical rankings without mutating the source statistics:
+
+```bash
+bun run scoring:validate
+bun run scoring:import
+```
+
+Validation prints the deterministic fingerprint and top five players for each
+season. Import atomically replaces only the `historical-actual` ranking for the
+same rule-set version. Rule-set versions are immutable: change the version when
+weights change. Double-double and triple-double bonuses currently stack,
+matching the independent Fantrax categories supplied by the league.
