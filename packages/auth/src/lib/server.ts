@@ -4,8 +4,7 @@ import { PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 
 import { isAllowedOwnerEmail } from './auth';
-
-type AuthEnvironment = Readonly<Record<string, string | undefined>>;
+import { resolveAuthBaseUrl, type AuthEnvironment } from './auth-environment';
 
 const required = (environment: AuthEnvironment, variable: string): string => {
   const value = environment[variable];
@@ -41,17 +40,6 @@ const trustedOrigins = (environment: AuthEnvironment): string[] => {
   return [...origins];
 };
 
-const baseUrl = (environment: AuthEnvironment): BetterAuthOptions['baseURL'] => {
-  const configured = environment['BETTER_AUTH_URL']?.trim();
-  if (configured) return configured;
-
-  return {
-    allowedHosts: ['localhost:3000', '*.vercel.app'],
-    fallback: 'http://localhost:3000',
-    protocol: 'auto',
-  };
-};
-
 const securePostgresConnectionString = (value: string): string => {
   const url = new URL(value);
   if (url.hostname.endsWith('.neon.tech') && url.searchParams.get('sslmode') === 'require') {
@@ -73,7 +61,7 @@ export const createAuthOptions = (
 
   return {
     appName: 'Fantasy Basketball',
-    baseURL: baseUrl(environment),
+    baseURL: resolveAuthBaseUrl(environment) satisfies BetterAuthOptions['baseURL'],
     database: {
       casing: 'snake',
       dialect: new PostgresDialect({ pool }),

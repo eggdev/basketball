@@ -92,7 +92,9 @@ bun nx run auth:auth-db-migrate
 
 GitHub is the intended sign-in provider. Configure its OAuth callback as
 `https://<deployment-domain>/api/auth/callback/github`; account creation fails
-closed unless the returned email is listed in `AUTH_ALLOWED_EMAIL`.
+closed unless the returned email is listed in `AUTH_ALLOWED_EMAIL`. Production
+deployments also require `BETTER_AUTH_URL` to be the canonical HTTPS origin;
+the app refuses to fall back to localhost in production.
 
 Create the private league configuration from the checked-in example:
 
