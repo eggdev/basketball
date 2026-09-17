@@ -167,6 +167,12 @@ rankings are actual season totals under the configured rules; projections,
 replacement value, and recommended auction prices are intentionally separate
 future model runs.
 
+The versioned `config/league-format.json` captures the lineup shape separately
+from player eligibility. The current format has ten active slots and three
+reserve slots within the 13-player roster limit, plus one IR slot that does not
+count toward that limit. That produces 120 active slots, 156 standard roster
+spots, and 168 maximum player holdings across the league.
+
 ## Current implementation status
 
 The initial vertical slice can score a stat line with the league's custom rules

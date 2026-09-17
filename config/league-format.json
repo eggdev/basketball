@@ -1,0 +1,80 @@
+{
+  "name": "League Format",
+  "version": 1,
+  "applies_to_seasons": ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"],
+  "team_count": 12,
+  "roster_restrictions": {
+    "minimum_total_players": 0,
+    "maximum_total_players": 13,
+    "minimum_active_players": 0,
+    "maximum_active_players": 10,
+    "maximum_reserve_players": 3,
+    "maximum_minor_league_players": 0,
+    "transaction_roster_enforcement": "always",
+    "injury_reserve": {
+      "maximum_players": 1,
+      "counts_toward_roster_limit": false,
+      "enforcement_type": "none",
+      "allow_suspended_players": true,
+      "allow_bye_week_players": false
+    }
+  },
+  "lineup_slots": [
+    {
+      "code": "PG",
+      "label": "Point Guard",
+      "min_active": 0,
+      "max_active": 1,
+      "eligible_positions": ["PG"]
+    },
+    {
+      "code": "SG",
+      "label": "Shooting Guard",
+      "min_active": 0,
+      "max_active": 1,
+      "eligible_positions": ["SG"]
+    },
+    {
+      "code": "G",
+      "label": "Guard",
+      "min_active": 0,
+      "max_active": 1,
+      "eligible_positions": ["PG", "SG"]
+    },
+    {
+      "code": "SF",
+      "label": "Small Forward",
+      "min_active": 0,
+      "max_active": 1,
+      "eligible_positions": ["SF"]
+    },
+    {
+      "code": "PF",
+      "label": "Power Forward",
+      "min_active": 0,
+      "max_active": 1,
+      "eligible_positions": ["PF"]
+    },
+    {
+      "code": "F",
+      "label": "Forward",
+      "min_active": 0,
+      "max_active": 1,
+      "eligible_positions": ["SF", "PF"]
+    },
+    {
+      "code": "C",
+      "label": "Center",
+      "min_active": 0,
+      "max_active": 1,
+      "eligible_positions": ["C"]
+    },
+    {
+      "code": "FLX",
+      "label": "Flex",
+      "min_active": 0,
+      "max_active": 3,
+      "eligible_positions": ["PG", "SG", "SF", "PF", "C"]
+    }
+  ]
+}
