@@ -2,7 +2,12 @@
   "name": "web",
   "version": "0.0.1",
   "private": true,
+  "scripts": {
+    "vercel-build": "next build"
+  },
   "dependencies": {
+    "@fantasy-basketball/auth": "workspace:*",
+    "better-auth": "1.7.5",
     "eve": "0.58.1",
     "next": "~16.1.6",
     "react": "^19.0.0",

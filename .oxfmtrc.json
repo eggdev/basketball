@@ -1,3 +1,4 @@
 {
+  "ignorePatterns": [".agents/skills/**"],
   "singleQuote": true
 }

@@ -23,6 +23,7 @@ coverage/
 *.tsbuildinfo
 .next/
 out/
+.vercel/
 .eve/
 .output/
 .nx/

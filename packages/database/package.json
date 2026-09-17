@@ -1,0 +1,67 @@
+{
+  "name": "@fantasy-basketball/database",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/lib/schema.ts"
+  },
+  "dependencies": {
+    "@effect/experimental": "0.61.1",
+    "@effect/platform": "0.97.2",
+    "@effect/sql": "0.52.1",
+    "@effect/sql-pg": "0.53.0",
+    "@vercel/functions": "3.9.8",
+    "drizzle-orm": "0.45.2",
+    "effect": "3.22.2",
+    "pg": "8.23.0",
+    "tslib": "^2.3.0"
+  },
+  "nx": {
+    "name": "database",
+    "sourceRoot": "packages/database/src",
+    "projectType": "library",
+    "targets": {
+      "build": {
+        "executor": "@nx/js:tsc",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "dist/packages/database",
+          "main": "packages/database/src/index.ts",
+          "tsConfig": "packages/database/tsconfig.lib.json",
+          "assets": [
+            "packages/database/*.md"
+          ]
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "bunx tsc -p packages/database/tsconfig.lib.json --noEmit",
+          "cwd": "."
+        }
+      },
+      "db-generate": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bunx drizzle-kit generate --config packages/database/drizzle.config.ts",
+          "cwd": "."
+        }
+      },
+      "db-migrate": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bunx drizzle-kit migrate --config packages/database/drizzle.config.ts",
+          "cwd": "."
+        }
+      }
+    }
+  }
+}

@@ -20,7 +20,9 @@
     "target": "ES2022",
     "paths": {
       "@/*": ["./*"],
-      "@fantasy-basketball/fantasy": ["./packages/fantasy/src/index.ts"]
+      "@fantasy-basketball/fantasy": ["./packages/fantasy/src/index.ts"],
+      "@fantasy-basketball/database": ["./packages/database/src/index.ts"],
+      "@fantasy-basketball/auth": ["./packages/auth/src/index.ts"]
     }
   },
   "include": [
