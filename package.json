@@ -9,6 +9,8 @@
   "scripts": {
     "build": "nx run web:build",
     "check": "bun run typecheck && bun run test && bun run lint && bun run test:python",
+    "data:import": "nx run importer:data-import -- --commit",
+    "data:validate": "nx run importer:data-import",
     "dev": "nx run web:dev",
     "dev:agent": "nx run agent:dev",
     "dev:agent:ui": "bunx eve dev",

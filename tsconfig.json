@@ -22,7 +22,8 @@
       "@/*": ["./*"],
       "@fantasy-basketball/fantasy": ["./packages/fantasy/src/index.ts"],
       "@fantasy-basketball/database": ["./packages/database/src/index.ts"],
-      "@fantasy-basketball/auth": ["./packages/auth/src/index.ts"]
+      "@fantasy-basketball/auth": ["./packages/auth/src/index.ts"],
+      "@fantasy-basketball/importer": ["./packages/importer/src/index.ts"]
     }
   },
   "include": [

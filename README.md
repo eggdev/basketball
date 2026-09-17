@@ -12,6 +12,8 @@ an Nx monorepo managed by Bun.
   auth-schema migrations.
 - `packages/database/` — Effect/Postgres service, Drizzle schema, and committed
   fantasy-data migrations.
+- `packages/importer/` — the Effect validation and commit boundary that moves
+  reviewed historical auction snapshots into Postgres.
 - `packages/fantasy/` — the deep domain module for scoring, valuation, rankings,
   and recommendations. External provider details stay behind this interface.
 - `config/` and `data/` — league configuration, raw auction exports, normalized
@@ -101,11 +103,12 @@ cp config/seasons.example.json config/seasons.json
 Real league IDs, manager names, auction exports, normalized output, and provider
 responses remain local and are ignored by Git.
 
-## Historical importer
+## Historical auction data
 
 The raw spreadsheet exports under `data/raw/auctions/` remain unchanged. The
 Python importer joins them to Fantrax player and team IDs and writes canonical
-records under `data/normalized/`:
+records under `data/normalized/`. It remains the source-normalization and
+reconciliation step:
 
 ```bash
 PYTHONPATH=src python3 -m fantasy_basketball --refresh --strict
@@ -116,14 +119,33 @@ Omit `--refresh` to use cached Fantrax responses.
 Do not rewrite historical source names just to make an import pass. Add scoped
 aliases to `config/player_aliases.csv`.
 
+Review the normalized snapshot without touching Postgres:
+
+```bash
+bun run data:validate
+```
+
+After reviewing its row counts, spend totals, warnings, and fingerprint, commit
+that exact snapshot to Neon:
+
+```bash
+bun run data:import
+```
+
+The TypeScript importer refuses a failed Python validation report, stores money
+as integer cents, and reconciles each season's row count and spend before any
+database work. The commit runs atomically and replaces auction results only for
+the included seasons. Canonical players and seasons are upserted, while every
+run retains its own immutable source records and fingerprint for auditing. Real
+league files remain ignored by Git.
+
 ## Current implementation status
 
 The initial vertical slice can score a stat line with the league's custom rules
-through both the Effect module and Eve's `score_stat_line` tool. Neon now stores
-versioned league/scoring configuration, canonical player identities, source
-snapshots, historical auction results, season stats, and reproducible ranking
-runs. The draft board remains an empty state until its first production-data
-adapter is connected.
+through both the Effect module and Eve's `score_stat_line` tool. Neon now holds
+five validated historical auction seasons (2021–22 through 2025–26), with 695
+purchases mapped onto 235 canonical Fantrax players. The draft board remains an
+empty state until its read model is connected to those records.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be

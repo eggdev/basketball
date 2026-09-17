@@ -167,8 +167,12 @@ export const auctionResults = fantasySchema.table(
       .notNull()
       .references(() => players.id, { onDelete: 'restrict' }),
     managerName: text('manager_name').notNull(),
+    teamExternalId: text('team_external_id').notNull(),
+    teamName: text('team_name').notNull(),
     amountCents: integer('amount_cents').notNull(),
     nominationOrder: integer('nomination_order'),
+    rosterSlot: integer('roster_slot'),
+    draftedAt: timestamp('drafted_at', { withTimezone: true }),
     sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
       onDelete: 'set null',
     }),

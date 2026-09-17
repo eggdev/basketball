@@ -1,0 +1,54 @@
+{
+  "name": "@fantasy-basketball/importer",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fantasy-basketball/database": "workspace:*",
+    "csv-parse": "7.0.2",
+    "effect": "3.22.2",
+    "tslib": "^2.3.0"
+  },
+  "nx": {
+    "name": "importer",
+    "sourceRoot": "packages/importer/src",
+    "projectType": "library",
+    "targets": {
+      "build": {
+        "executor": "@nx/js:tsc",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "dist/packages/importer",
+          "main": "packages/importer/src/index.ts",
+          "tsConfig": "packages/importer/tsconfig.lib.json",
+          "assets": [
+            "packages/importer/*.md"
+          ]
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "bunx tsc -p packages/importer/tsconfig.lib.json --noEmit && bunx tsc -p packages/importer/tsconfig.scripts.json --noEmit",
+          "cwd": "."
+        }
+      },
+      "data-import": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/import.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
+      }
+    }
+  }
+}
