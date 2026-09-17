@@ -24,5 +24,11 @@ and rewards.
 - Use `historical_auction_market` for observed league prices and price trends.
   Describe its expected cost as a recency-weighted historical estimate, never as
   a production projection or a recommended maximum bid by itself.
+- Use `league_team_history` for manager tendencies, repeat draft targets, and
+  team-name history. Treat unresolved team-seasons as missing attribution, not
+  evidence that a manager was absent or inactive.
+- Treat a playoff championship as the primary winning outcome. Keep regular-
+  season rank, total points, and playoff finish as distinct secondary tiers;
+  never collapse them into one generic win metric.
 - Treat tool failures and stale data as uncertainty to disclose, not permission
   to guess.

@@ -1,0 +1,15 @@
+{
+  "members": [
+    {
+      "key": "manager-one",
+      "display_name": "Manager One",
+      "manager_aliases": ["Manager One", "M. One"],
+      "teams": [
+        {
+          "season": "2025-26",
+          "source_team_id": "replace-with-fantrax-team-id"
+        }
+      ]
+    }
+  ]
+}

@@ -59,6 +59,7 @@ export const leagueSeasons = fantasySchema.table(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     source: text('source').notNull().default('fantrax'),
+    sourceLeagueHistoryId: text('source_league_history_id'),
     sourceLeagueId: text('source_league_id').notNull(),
     seasonKey: text('season_key').notNull(),
     name: text('name').notNull(),
@@ -69,6 +70,50 @@ export const leagueSeasons = fantasySchema.table(
   },
   (table) => [
     uniqueIndex('league_seasons_source_id_unique').on(table.source, table.sourceLeagueId),
+  ],
+);
+
+export const leagueMembers = fantasySchema.table(
+  'league_members',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    sourceLeagueHistoryId: text('source_league_history_id').notNull(),
+    canonicalKey: text('canonical_key').notNull(),
+    displayName: text('display_name').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('league_members_history_key_unique').on(
+      table.sourceLeagueHistoryId,
+      table.canonicalKey,
+    ),
+  ],
+);
+
+export const leagueTeamSeasons = fantasySchema.table(
+  'league_team_seasons',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    leagueSeasonId: uuid('league_season_id')
+      .notNull()
+      .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
+    leagueMemberId: uuid('league_member_id').references(() => leagueMembers.id, {
+      onDelete: 'set null',
+    }),
+    source: text('source').notNull().default('fantrax'),
+    sourceTeamId: text('source_team_id').notNull(),
+    teamName: text('team_name').notNull(),
+    division: text('division'),
+    identityResolution: text('identity_resolution').notNull(),
+    identityConfidence: integer('identity_confidence').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('league_team_seasons_season_team_unique').on(
+      table.leagueSeasonId,
+      table.sourceTeamId,
+    ),
+    index('league_team_seasons_member_idx').on(table.leagueMemberId),
   ],
 );
 
@@ -163,6 +208,9 @@ export const auctionResults = fantasySchema.table(
     leagueSeasonId: uuid('league_season_id')
       .notNull()
       .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
+    leagueTeamSeasonId: uuid('league_team_season_id').references(() => leagueTeamSeasons.id, {
+      onDelete: 'restrict',
+    }),
     playerId: uuid('player_id')
       .notNull()
       .references(() => players.id, { onDelete: 'restrict' }),

@@ -12,6 +12,11 @@ The public module deliberately exposes two operations:
 - `commitHistoricalAuctionImport` sends a validated plan through a small
   structural persistence interface.
 
+The same plan resolves season-specific Fantrax teams through one canonical
+league-member interface. A private `config/league-members.json` can declare
+manager aliases and exact season/team assignments. Missing entries are allowed:
+the plan reports unresolved team-seasons instead of guessing at renamed teams.
+
 From the repository root:
 
 ```bash

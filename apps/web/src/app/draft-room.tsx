@@ -3,10 +3,12 @@
 import type {
   HistoricalAuctionMarket,
   HistoricalAuctionMarketPlayer,
+  LeagueTeamHistory,
 } from '@fantasy-basketball/database/runtime';
 import { useEveAgent } from 'eve/react';
 import { type FormEvent, useMemo, useState } from 'react';
 
+import { authClient } from '../lib/auth-client';
 import styles from './draft-room.module.css';
 
 const dollars = new Intl.NumberFormat('en-US', {
@@ -23,51 +25,120 @@ const formatTrend = (player: HistoricalAuctionMarketPlayer) => {
   return `${player.trendCents > 0 ? '+' : '−'}${formatPrice(Math.abs(player.trendCents))}`;
 };
 
+type BoardView = 'players' | 'teams';
+
 export interface DraftRoomProps {
+  readonly chatEnabled: boolean;
   readonly market: HistoricalAuctionMarket | null;
+  readonly teamHistory: LeagueTeamHistory | null;
+  readonly viewer: {
+    readonly email: string;
+    readonly id: string;
+    readonly image?: string | null;
+    readonly name: string;
+  } | null;
 }
 
-export function DraftRoom({ market }: DraftRoomProps) {
+export function DraftRoom({ chatEnabled, market, teamHistory, viewer }: DraftRoomProps) {
   const agent = useEveAgent();
+  const [boardView, setBoardView] = useState<BoardView>('players');
   const [message, setMessage] = useState('');
-  const [playerQuery, setPlayerQuery] = useState('');
+  const [query, setQuery] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
   const isBusy = agent.status === 'submitted' || agent.status === 'streaming';
   const isResuming = agent.status === 'resuming';
   const filteredPlayers = useMemo(() => {
-    const query = playerQuery.trim().toLocaleLowerCase();
-    if (query.length === 0) return market?.players ?? [];
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (normalizedQuery.length === 0) return market?.players ?? [];
     return (market?.players ?? []).filter((player) =>
-      player.name.toLocaleLowerCase().includes(query),
+      player.name.toLocaleLowerCase().includes(normalizedQuery),
     );
-  }, [market, playerQuery]);
+  }, [market, query]);
+  const filteredMembers = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (normalizedQuery.length === 0) return teamHistory?.members ?? [];
+    return (teamHistory?.members ?? []).filter(
+      (member) =>
+        member.displayName.toLocaleLowerCase().includes(normalizedQuery) ||
+        member.teamNames.some((teamName) => teamName.toLocaleLowerCase().includes(normalizedQuery)),
+    );
+  }, [query, teamHistory]);
   const leagueFacts = [
     ['Teams', '12'],
-    ['Roster', '13'],
+    ['Active / roster', '10 / 13'],
     ['Base budget', '$200'],
     ['Imported drafts', String(market?.summary.seasonCount ?? 0)],
+    ['Canonical members', String(teamHistory?.summary.canonicalMemberCount ?? '—')],
   ] as const;
+
+  const send = (text: string) => {
+    if (!chatEnabled || isResuming || text.trim().length === 0) return;
+    void agent.send(text.trim(), {
+      clientContext: {
+        boardView,
+        latestAuctionSeason: market?.summary.latestSeason ?? null,
+        latestTeamSeason: teamHistory?.summary.latestSeason ?? null,
+        searchQuery: query.trim() || null,
+      },
+      ...(isBusy ? { turnPolicy: 'steer' as const } : {}),
+    });
+  };
 
   function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextMessage = message.trim();
-    if (nextMessage.length === 0 || isResuming) return;
-
+    if (nextMessage.length === 0 || !chatEnabled || isResuming) return;
     setMessage('');
-    void agent.send(nextMessage, isBusy ? { turnPolicy: 'steer' } : undefined);
+    send(nextMessage);
   }
+
+  const signIn = async () => {
+    setAuthError(null);
+    const result = await authClient.signIn.social({
+      callbackURL: window.location.href,
+      provider: 'github',
+    });
+    if (result.error) setAuthError(result.error.message ?? 'Sign-in failed');
+  };
+
+  const signOut = async () => {
+    await authClient.signOut();
+    window.location.reload();
+  };
+
+  const switchBoard = (nextView: BoardView) => {
+    setBoardView(nextView);
+    setQuery('');
+  };
 
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Fantrax draft room</p>
+          <p className={styles.eyebrow}>Fantrax decision room</p>
           <h1>Fantasy Basketball</h1>
         </div>
-        <div className={`${styles.status} ${market === null ? styles.statusPending : ''}`}>
-          <span aria-hidden="true" />
-          {market === null ? 'Historical market unavailable' : 'Historical market connected'}
+        <div className={styles.headerActions}>
+          <div className={`${styles.status} ${market === null ? styles.statusPending : ''}`}>
+            <span aria-hidden="true" />
+            {market === null ? 'Historical data unavailable' : 'League data connected'}
+          </div>
+          {viewer === null ? (
+            <button className={styles.secondaryButton} onClick={() => void signIn()} type="button">
+              Sign in with GitHub
+            </button>
+          ) : (
+            <div className={styles.viewer}>
+              <span>{viewer.name}</span>
+              <button onClick={() => void signOut()} type="button">
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </header>
+
+      {authError ? <p className={styles.authError}>{authError}</p> : null}
 
       <section className={styles.facts} aria-label="League settings">
         {leagueFacts.map(([label, value]) => (
@@ -82,94 +153,215 @@ export function DraftRoom({ market }: DraftRoomProps) {
         <section className={styles.board}>
           <div className={styles.sectionHeading}>
             <div>
-              <p className={styles.eyebrow}>Draft board</p>
-              <h2>Historical player market</h2>
+              <p className={styles.eyebrow}>League intelligence</p>
+              <h2>{boardView === 'players' ? 'Historical player market' : 'Manager tendencies'}</h2>
             </div>
             <label className={styles.playerSearch}>
-              <span>Find player</span>
+              <span>{boardView === 'players' ? 'Find player' : 'Find manager or team'}</span>
               <input
-                onChange={(event) => setPlayerQuery(event.target.value)}
-                placeholder={`Search ${market?.summary.playerCount ?? 0} players`}
+                aria-label={boardView === 'players' ? 'Find player' : 'Find manager or team'}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={
+                  boardView === 'players'
+                    ? `Search ${market?.summary.playerCount ?? 0} players`
+                    : `Search ${teamHistory?.summary.canonicalMemberCount ?? 0} members`
+                }
                 type="search"
-                value={playerQuery}
+                value={query}
               />
             </label>
           </div>
 
-          {market === null ? (
+          <div className={styles.boardTabs} role="tablist" aria-label="Draft board view">
+            <button
+              aria-selected={boardView === 'players'}
+              onClick={() => switchBoard('players')}
+              role="tab"
+              type="button"
+            >
+              Player market
+            </button>
+            <button
+              aria-selected={boardView === 'teams'}
+              onClick={() => switchBoard('teams')}
+              role="tab"
+              type="button"
+            >
+              League history
+            </button>
+          </div>
+
+          {boardView === 'players' ? (
+            market === null ? (
+              <div className={styles.emptyState}>
+                <p>The historical market could not be loaded.</p>
+                <span>
+                  The draft room remains available, but auction values need a database connection.
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className={styles.marketSummary}>
+                  <div>
+                    <strong>{market.summary.playerCount}</strong>
+                    <span>players</span>
+                  </div>
+                  <div>
+                    <strong>{market.summary.purchaseCount}</strong>
+                    <span>purchases</span>
+                  </div>
+                  <div>
+                    <strong>{formatPrice(market.summary.totalSpendCents)}</strong>
+                    <span>historical spend</span>
+                  </div>
+                  <p>Newer seasons weigh more; later undrafted seasons count as $0.</p>
+                </div>
+                <section
+                  aria-label="Historical player market results"
+                  className={styles.tableViewport}
+                >
+                  <a className={styles.srOnly} href="#market-results-end">
+                    Skip player results
+                  </a>
+                  <table className={styles.marketTable}>
+                    <thead>
+                      <tr>
+                        <th scope="col">Player</th>
+                        <th scope="col">Expected</th>
+                        <th scope="col">Latest</th>
+                        <th scope="col">Trend</th>
+                        <th scope="col">Range</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPlayers.map((player) => (
+                        <tr key={player.playerId}>
+                          <th scope="row">
+                            <strong>{player.name}</strong>
+                            <span>
+                              {player.seasonsDrafted} draft
+                              {player.seasonsDrafted === 1 ? '' : 's'} · {player.latestSeason}
+                            </span>
+                          </th>
+                          <td className={styles.expectedPrice}>
+                            {formatPrice(player.expectedPriceCents)}
+                          </td>
+                          <td>{formatPrice(player.latestPriceCents)}</td>
+                          <td>
+                            <span
+                              className={
+                                player.trendCents === null || player.trendCents === 0
+                                  ? styles.trendNeutral
+                                  : player.trendCents > 0
+                                    ? styles.trendUp
+                                    : styles.trendDown
+                              }
+                            >
+                              {formatTrend(player)}
+                            </span>
+                          </td>
+                          <td>
+                            {formatPrice(player.minimumPriceCents)}–
+                            {formatPrice(player.maximumPriceCents)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filteredPlayers.length === 0 ? (
+                    <p className={styles.noResults}>No historical player matches “{query}”.</p>
+                  ) : null}
+                  <span id="market-results-end" />
+                </section>
+              </>
+            )
+          ) : teamHistory === null ? (
             <div className={styles.emptyState}>
-              <p>The historical market could not be loaded.</p>
-              <span>
-                The draft room remains available, but auction values need a working database
-                connection.
-              </span>
+              <p>
+                {viewer === null
+                  ? 'Sign in to view private league history.'
+                  : 'League history could not be loaded.'}
+              </p>
+              <span>Manager identities and team-name history stay behind the owner session.</span>
             </div>
           ) : (
             <>
-              <div className={styles.marketSummary}>
-                <div>
-                  <strong>{market.summary.playerCount}</strong>
-                  <span>players</span>
-                </div>
-                <div>
-                  <strong>{market.summary.purchaseCount}</strong>
-                  <span>purchases</span>
-                </div>
-                <div>
-                  <strong>{formatPrice(market.summary.totalSpendCents)}</strong>
-                  <span>historical spend</span>
-                </div>
-                <p>Newer seasons weigh more; later undrafted seasons count as $0.</p>
+              <div className={styles.identitySummary}>
+                <span>
+                  <strong>{teamHistory.summary.resolvedTeamSeasonCount}</strong> resolved
+                  team-seasons
+                </span>
+                <span
+                  className={
+                    teamHistory.summary.unresolvedTeamSeasonCount > 0 ? styles.warningText : ''
+                  }
+                >
+                  <strong>{teamHistory.summary.unresolvedTeamSeasonCount}</strong> awaiting aliases
+                </span>
+                <p>Exact matches only; renamed teams are never guessed.</p>
               </div>
-
-              <div className={styles.tableViewport}>
-                <table className={styles.marketTable}>
-                  <thead>
-                    <tr>
-                      <th scope="col">Player</th>
-                      <th scope="col">Expected</th>
-                      <th scope="col">Latest</th>
-                      <th scope="col">Trend</th>
-                      <th scope="col">Range</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPlayers.map((player) => (
-                      <tr key={player.playerId}>
-                        <th scope="row">
-                          <strong>{player.name}</strong>
-                          <span>
-                            {player.seasonsDrafted} draft{player.seasonsDrafted === 1 ? '' : 's'} ·{' '}
-                            {player.latestSeason}
-                          </span>
-                        </th>
-                        <td className={styles.expectedPrice}>
-                          {formatPrice(player.expectedPriceCents)}
-                        </td>
-                        <td>{formatPrice(player.latestPriceCents)}</td>
-                        <td>
-                          <span
-                            className={
-                              player.trendCents === null || player.trendCents === 0
-                                ? styles.trendNeutral
-                                : player.trendCents > 0
-                                  ? styles.trendUp
-                                  : styles.trendDown
-                            }
-                          >
-                            {formatTrend(player)}
-                          </span>
-                        </td>
-                        <td>
-                          {formatPrice(player.minimumPriceCents)}–
-                          {formatPrice(player.maximumPriceCents)}
-                        </td>
-                      </tr>
+              {teamHistory.unresolvedTeams.length > 0 ? (
+                <details className={styles.reconciliationPanel}>
+                  <summary>
+                    Review {teamHistory.unresolvedTeams.length} unmatched team-seasons
+                  </summary>
+                  <div>
+                    {teamHistory.unresolvedTeams.map((team) => (
+                      <span key={`${team.seasonKey}:${team.sourceTeamId}`}>
+                        <strong>{team.seasonKey}</strong> {team.teamName}
+                      </span>
                     ))}
-                  </tbody>
-                </table>
-                {filteredPlayers.length === 0 ? (
-                  <p className={styles.noResults}>No historical player matches “{playerQuery}”.</p>
+                  </div>
+                </details>
+              ) : null}
+              <div className={styles.memberGrid}>
+                {filteredMembers.map((member) => {
+                  const latest = member.seasons.at(-1);
+                  return (
+                    <article className={styles.memberCard} key={member.memberId}>
+                      <div className={styles.memberHeading}>
+                        <div>
+                          <p>{member.displayName}</p>
+                          <span>
+                            {member.seasons.length} seasons · {member.purchaseCount} picks
+                          </span>
+                        </div>
+                        <button
+                          onClick={() =>
+                            send(
+                              `Profile ${member.displayName}'s draft tendencies. What repeat targets and spending patterns stand out?`,
+                            )
+                          }
+                          type="button"
+                        >
+                          Ask Eve
+                        </button>
+                      </div>
+                      <p className={styles.teamAliases}>{member.teamNames.join(' · ')}</p>
+                      <div className={styles.memberMetrics}>
+                        <span>
+                          <small>Latest team</small>
+                          <strong>{latest?.teamName ?? '—'}</strong>
+                        </span>
+                        <span>
+                          <small>Total spend</small>
+                          <strong>{formatPrice(member.totalSpendCents)}</strong>
+                        </span>
+                      </div>
+                      <div className={styles.favoritePlayers}>
+                        <small>Repeat targets</small>
+                        {member.favoritePlayers.slice(0, 3).map((player) => (
+                          <span key={player.playerId}>
+                            {player.playerName}
+                            {player.draftCount > 1 ? ` ×${player.draftCount}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </article>
+                  );
+                })}
+                {filteredMembers.length === 0 ? (
+                  <p className={styles.noResults}>No manager or team matches “{query}”.</p>
                 ) : null}
               </div>
             </>
@@ -182,14 +374,51 @@ export function DraftRoom({ market }: DraftRoomProps) {
               <p className={styles.eyebrow}>Eve analyst</p>
               <h2>Draft chat</h2>
             </div>
-            <span className={styles.agentStatus}>{agent.status}</span>
+            <div className={styles.chatActions}>
+              <span className={styles.agentStatus}>{agent.status}</span>
+              {isBusy ? (
+                <button onClick={() => void agent.cancel()} type="button">
+                  Stop
+                </button>
+              ) : null}
+              {agent.data.messages.length > 0 && !isBusy ? (
+                <button onClick={() => agent.reset()} type="button">
+                  New chat
+                </button>
+              ) : null}
+            </div>
           </div>
 
+          <fieldset className={styles.quickPrompts}>
+            <legend className={styles.srOnly}>Suggested questions</legend>
+            {[
+              'Who does this league historically overpay for?',
+              'Which repeat draft targets reveal manager preferences?',
+              'How should daily lineups change replacement value?',
+            ].map((prompt) => (
+              <button
+                disabled={!chatEnabled || isResuming}
+                key={prompt}
+                onClick={() => send(prompt)}
+                type="button"
+              >
+                {prompt}
+              </button>
+            ))}
+          </fieldset>
+
           <div className={styles.messages} aria-live="polite">
-            {agent.data.messages.length === 0 ? (
+            {!chatEnabled ? (
               <div className={styles.chatEmpty}>
-                Ask about the scoring system or historical auction market. Production-based rankings
-                and trade targets will appear as their data modules come online.
+                <strong>Sign in to talk to Eve.</strong>
+                <span>
+                  The agent shares the same owner-only Better Auth session as this dashboard.
+                </span>
+              </div>
+            ) : agent.data.messages.length === 0 ? (
+              <div className={styles.chatEmpty}>
+                Ask about league prices, manager behavior, or the custom scoring system. Eve can
+                query the same data shown here.
               </div>
             ) : (
               agent.data.messages.map((item) => (
@@ -213,13 +442,15 @@ export function DraftRoom({ market }: DraftRoomProps) {
             <div>
               <input
                 autoComplete="off"
-                disabled={isResuming}
+                disabled={!chatEnabled || isResuming}
                 id="draft-message"
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="How would this stat line score?"
+                placeholder={
+                  chatEnabled ? 'Ask about a player, price, or manager…' : 'Sign in to use Eve'
+                }
                 value={message}
               />
-              <button disabled={isResuming || message.trim().length === 0}>
+              <button disabled={!chatEnabled || isResuming || message.trim().length === 0}>
                 {isBusy ? 'Update' : 'Send'}
               </button>
             </div>

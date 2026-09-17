@@ -98,6 +98,7 @@ Create the private league configuration from the checked-in example:
 
 ```bash
 cp config/seasons.example.json config/seasons.json
+cp config/league-members.example.json config/league-members.json
 ```
 
 Real league IDs, manager names, auction exports, normalized output, and provider
@@ -135,9 +136,16 @@ bun run data:import
 The TypeScript importer refuses a failed Python validation report, stores money
 as integer cents, and reconciles each season's row count and spend before any
 database work. The commit runs atomically and replaces auction results only for
-the included seasons. Canonical players and seasons are upserted, while every
-run retains its own immutable source records and fingerprint for auditing. Real
-league files remain ignored by Git.
+the included seasons. Canonical players, members, season-specific teams, and
+seasons are upserted, while every run retains its own immutable source records
+and fingerprint for auditing. Real league files remain ignored by Git.
+
+Fantrax team IDs change each season, so manager history is resolved separately
+from team names. The importer uses explicit entries from the ignored
+`config/league-members.json`, then observed CSV manager labels, then exact prior
+team-name continuity. It never uses fuzzy name guesses. The signed-in League
+History view lists unresolved team-seasons so renamed teams can be assigned in
+the private config and re-imported.
 
 The draft room reads that history through one Postgres market snapshot. Its
 expected cost is a linear recency-weighted estimate from observed prices; newer
@@ -181,10 +189,17 @@ lineup.
 The initial vertical slice can score a stat line with the league's custom rules
 through both the Effect module and Eve's `score_stat_line` tool. Neon now holds
 five validated historical auction seasons (2021–22 through 2025–26), with 695
-purchases mapped onto 235 canonical Fantrax players. The draft board exposes a
-searchable historical market with expected, latest, trend, and observed-range
-prices. Eve can query the same snapshot through its
-`historical_auction_market` tool, so chat and UI share one calculation.
+purchases mapped onto 235 canonical Fantrax players. Six seasons of team
+metadata (including the live 2026–27 league) produce 12 canonical members and
+66 team-season records. The draft board exposes both a searchable player market
+and signed-in manager tendency profiles. Eve queries the same snapshots through
+the `historical_auction_market` and `league_team_history` tools, so chat and UI
+share the calculations.
+
+Competitive outcomes will remain separate signals: playoff champion is the
+primary winning tier, while playoff finish, regular-season rank, total points,
+and matchup wins will be retained as secondary measures rather than collapsed
+into one generic result.
 
 Five seasons of player production can now be scored against the league rules
 and stored as historical actual rankings. Historical auction cost remains an

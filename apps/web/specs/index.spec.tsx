@@ -44,14 +44,81 @@ const market = vi.hoisted(() => ({
   },
 }));
 
+const teamHistory = vi.hoisted(() => ({
+  members: [
+    {
+      canonicalKey: 'manager-one',
+      displayName: 'Manager One',
+      favoritePlayers: [
+        {
+          averagePriceCents: 4_500,
+          draftCount: 2,
+          latestSeason: '2025-26',
+          playerId: 'player-1',
+          playerName: 'Nikola Jokic',
+          totalSpendCents: 9_000,
+        },
+      ],
+      memberId: 'member-1',
+      purchaseCount: 26,
+      seasons: [
+        {
+          averagePriceCents: 1_500,
+          identityConfidence: 100,
+          identityResolution: 'manager_alias',
+          purchaseCount: 13,
+          seasonKey: '2024-25',
+          sourceTeamId: 'team-1',
+          teamName: 'Moon Shots',
+          totalSpendCents: 19_500,
+        },
+      ],
+      teamNames: ['Moon Shots'],
+      totalSpendCents: 39_000,
+    },
+  ],
+  summary: {
+    canonicalMemberCount: 1,
+    latestSeason: '2025-26',
+    resolvedTeamSeasonCount: 5,
+    seasonCount: 5,
+    teamSeasonCount: 6,
+    unresolvedTeamSeasonCount: 1,
+  },
+  unresolvedTeams: [{ seasonKey: '2025-26', sourceTeamId: 'team-2', teamName: 'Unknown Team' }],
+}));
+
+const loadViewer = vi.hoisted(() =>
+  vi.fn<
+    () => Promise<{
+      email: string;
+      id: string;
+      image: null;
+      name: string;
+    } | null>
+  >(() =>
+    Promise.resolve({ email: 'owner@example.com', id: 'user-1', image: null, name: 'Owner' }),
+  ),
+);
+
 vi.mock('../src/lib/historical-auction-market', () => ({
   loadHistoricalAuctionMarket: () => Promise.resolve(market),
+}));
+
+vi.mock('../src/lib/league-team-history', () => ({
+  loadLeagueTeamHistory: () => Promise.resolve(teamHistory),
+}));
+
+vi.mock('../src/lib/viewer', () => ({
+  loadViewer,
 }));
 
 vi.mock('eve/react', () => ({
   useEveAgent: () => ({
     data: { messages: [] },
+    cancel: vi.fn<() => Promise<void>>(),
     error: undefined,
+    reset: vi.fn<() => void>(),
     send: vi.fn<() => Promise<void>>(),
     status: 'ready',
   }),
@@ -77,5 +144,27 @@ describe('Page', () => {
 
     expect(screen.getByText('Shai Gilgeous-Alexander')).toBeTruthy();
     expect(screen.queryByText('Nikola Jokic')).toBeNull();
+  });
+
+  it('surfaces canonical member history and unresolved identity work', async () => {
+    render(await Page());
+
+    fireEvent.click(screen.getByRole('tab', { name: 'League history' }));
+
+    expect(screen.getByText('Manager One')).toBeTruthy();
+    expect(screen.getAllByText('Moon Shots')).toHaveLength(2);
+    expect(screen.getByText('Review 1 unmatched team-seasons')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ask Eve' })).toBeTruthy();
+  });
+
+  it('keeps manager history behind the owner session', async () => {
+    loadViewer.mockResolvedValueOnce(null);
+    render(await Page());
+
+    fireEvent.click(screen.getByRole('tab', { name: 'League history' }));
+
+    expect(screen.getByText('Sign in to view private league history.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign in with GitHub' })).toBeTruthy();
+    expect(screen.queryByText('Manager One')).toBeNull();
   });
 });

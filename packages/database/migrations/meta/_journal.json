@@ -15,6 +15,13 @@
       "when": 1789668026998,
       "tag": "0001_flippant_mongu",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789680777404,
+      "tag": "0002_same_jack_flag",
+      "breakpoints": true
     }
   ]
 }

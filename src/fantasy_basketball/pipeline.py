@@ -45,6 +45,23 @@ def _team_names(league_info: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _teams(league_info: dict[str, Any]) -> list[dict[str, str | None]]:
+    team_info = league_info.get("teamInfo", {})
+    values = team_info if isinstance(team_info, list) else team_info.values()
+    return sorted(
+        [
+            {
+                "id": str(team["id"]),
+                "name": str(team["name"]),
+                "division": str(team["division"]) if team.get("division") else None,
+            }
+            for team in values
+            if isinstance(team, dict) and team.get("id") and team.get("name")
+        ],
+        key=lambda team: str(team["id"]),
+    )
+
+
 def _scoring_rules(league_info: dict[str, Any]) -> list[dict[str, Any]]:
     groups = league_info.get("scoringSystem", {}).get("scoringCategorySettings", [])
     rules = []
@@ -233,6 +250,7 @@ def run_import(
                 "season_year": league_info.get("seasonYear"),
                 "status": season_config.get("status"),
                 "team_count": len(team_names),
+                "teams": _teams(league_info),
                 "roster": league_info.get("rosterInfo", {}),
                 "draft_type": league_info.get("draftType"),
                 "draft_settings": league_info.get("draftSettings", {}),

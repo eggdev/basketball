@@ -17,12 +17,15 @@ const validBundle: HistoricalAuctionSourceBundle = {
     base_budget: 200,
     expected_roster_size: 13,
   }),
+  leagueMembersJson: JSON.stringify({ members: [] }),
   leagueSeasonsJson: JSON.stringify([
     {
+      league_history_id: 'history-1',
       league_id: 'league-1',
       season: '2024-25',
       status: 'historical',
       team_count: 1,
+      teams: [{ division: 'East', id: 'team-1', name: 'Synthetic Team' }],
     },
   ]),
   validationJson: JSON.stringify({
@@ -49,13 +52,17 @@ describe('planHistoricalAuctionImport', () => {
 
     expect(plan.summary).toEqual({
       auctionCount: 2,
+      canonicalMemberCount: 1,
+      leagueTeamSeasonCount: 1,
       seasonCount: 1,
       totalAmountCents: 1250,
       uniquePlayerCount: 2,
+      unresolvedTeamSeasonCount: 0,
       warningCount: 0,
     });
     expect(plan.seasons[0]).toMatchObject({
       baseBudgetCents: 20_000,
+      leagueHistoryId: 'history-1',
       leagueId: 'league-1',
       rosterSize: 13,
       seasonKey: '2024-25',
@@ -80,6 +87,55 @@ describe('planHistoricalAuctionImport', () => {
     expect(Exit.isFailure(exit)).toBe(true);
     expect(String(exit)).toContain('upstream_validation_failed');
   });
+
+  it('syncs a live season and its teams before the draft has any rows', async () => {
+    const leagueSeasons = JSON.parse(validBundle.leagueSeasonsJson) as Array<unknown>;
+    const validation = JSON.parse(validBundle.validationJson) as {
+      seasons: Array<unknown>;
+    };
+    const plan = await Effect.runPromise(
+      planHistoricalAuctionImport({
+        ...validBundle,
+        leagueSeasonsJson: JSON.stringify([
+          ...leagueSeasons,
+          {
+            league_history_id: 'history-1',
+            league_id: 'league-2',
+            season: '2025-26',
+            status: 'live',
+            team_count: 1,
+            teams: [{ division: 'East', id: 'team-2', name: 'Synthetic Team' }],
+          },
+        ]),
+        validationJson: JSON.stringify({
+          ...validation,
+          valid: true,
+          summary: { errors: 0, normalized_rows: 2, warnings: 0 },
+          seasons: [
+            ...validation.seasons,
+            {
+              errors: 0,
+              league_id: 'league-2',
+              normalized_price_count: 0,
+              normalized_total_spend: '0',
+              season: '2025-26',
+              source: 'fantrax_live',
+              team_count: 1,
+              warnings: 0,
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(plan.seasons.map((season) => season.seasonKey)).toEqual(['2024-25', '2025-26']);
+    expect(plan.leagueTeams).toHaveLength(2);
+    expect(plan.leagueTeams[1]).toMatchObject({
+      identityResolution: 'team_name_history',
+      memberKey: 'manager-one',
+      seasonKey: '2025-26',
+    });
+  });
 });
 
 describe('commitHistoricalAuctionImport', () => {
@@ -92,9 +148,13 @@ describe('commitHistoricalAuctionImport', () => {
           committedFingerprint = batch.fingerprint;
           return {
             auctionCount: batch.auctions.length,
+            canonicalMemberCount: batch.leagueMembers.length,
             ingestionRunId: 'run-1',
+            leagueTeamSeasonCount: batch.leagueTeams.length,
             playerCount: batch.players.length,
             seasonCount: batch.seasons.length,
+            unresolvedTeamSeasonCount: batch.leagueTeams.filter((team) => team.memberKey === null)
+              .length,
           };
         }),
     };
@@ -103,9 +163,12 @@ describe('commitHistoricalAuctionImport', () => {
 
     expect(result).toEqual({
       auctionCount: 2,
+      canonicalMemberCount: 1,
       ingestionRunId: 'run-1',
+      leagueTeamSeasonCount: 1,
       playerCount: 2,
       seasonCount: 1,
+      unresolvedTeamSeasonCount: 0,
     });
     expect(committedFingerprint).toBe(plan.fingerprint);
   });

@@ -2,8 +2,8 @@
 
 This package owns the application's Postgres interface and its Neon adapter.
 Callers use the Effect `Database` tag for health checks, atomic historical
-imports, and the historical auction market snapshot; SQL and connection-pool
-details remain inside the module.
+imports, the historical auction market, and canonical league-member history;
+SQL and connection-pool details remain inside the module.
 
 Runtime callers should import from the narrow runtime export:
 

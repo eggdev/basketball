@@ -5,15 +5,24 @@ import { join } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import { Data, Effect } from 'effect';
 
+import {
+  resolveLeagueIdentity,
+  type CanonicalLeagueMember,
+  type CanonicalLeagueTeamSeason,
+  type LeagueIdentitySourceTeam,
+} from './league-identity';
+
 export interface HistoricalAuctionSourceBundle {
   readonly auctionCsv: string;
   readonly configJson: string;
+  readonly leagueMembersJson: string;
   readonly leagueSeasonsJson: string;
   readonly validationJson: string;
 }
 
 export interface HistoricalAuctionSeason {
   readonly baseBudgetCents: number;
+  readonly leagueHistoryId: string;
   readonly leagueId: string;
   readonly rosterSize: number;
   readonly seasonKey: string;
@@ -44,27 +53,35 @@ export interface HistoricalAuctionRecord {
 export interface HistoricalAuctionImportPlan {
   readonly auctions: ReadonlyArray<HistoricalAuctionRecord>;
   readonly fingerprint: string;
+  readonly leagueMembers: ReadonlyArray<CanonicalLeagueMember>;
+  readonly leagueTeams: ReadonlyArray<CanonicalLeagueTeamSeason>;
   readonly players: ReadonlyArray<HistoricalAuctionPlayer>;
   readonly seasons: ReadonlyArray<HistoricalAuctionSeason>;
   readonly summary: {
     readonly auctionCount: number;
+    readonly canonicalMemberCount: number;
+    readonly leagueTeamSeasonCount: number;
     readonly seasonCount: number;
     readonly totalAmountCents: number;
     readonly uniquePlayerCount: number;
+    readonly unresolvedTeamSeasonCount: number;
     readonly warningCount: number;
   };
 }
 
 export interface HistoricalAuctionCommitResult {
   readonly auctionCount: number;
+  readonly canonicalMemberCount: number;
   readonly ingestionRunId: string;
+  readonly leagueTeamSeasonCount: number;
   readonly playerCount: number;
   readonly seasonCount: number;
+  readonly unresolvedTeamSeasonCount: number;
 }
 
 export type HistoricalAuctionCommitBatch = Pick<
   HistoricalAuctionImportPlan,
-  'auctions' | 'fingerprint' | 'players' | 'seasons'
+  'auctions' | 'fingerprint' | 'leagueMembers' | 'leagueTeams' | 'players' | 'seasons'
 > & {
   readonly warningCount: number;
 };
@@ -155,13 +172,20 @@ export const loadHistoricalAuctionSources = (
 ): Effect.Effect<HistoricalAuctionSourceBundle, HistoricalAuctionSourceError> =>
   Effect.tryPromise({
     try: async () => {
-      const [auctionCsv, configJson, leagueSeasonsJson, validationJson] = await Promise.all([
-        readFile(join(projectRoot, 'data/normalized/auction_results.csv'), 'utf8'),
-        readFile(join(projectRoot, 'config/seasons.json'), 'utf8'),
-        readFile(join(projectRoot, 'data/normalized/league_seasons.json'), 'utf8'),
-        readFile(join(projectRoot, 'data/reports/import_validation.json'), 'utf8'),
-      ]);
-      return { auctionCsv, configJson, leagueSeasonsJson, validationJson };
+      const [auctionCsv, configJson, leagueMembersJson, leagueSeasonsJson, validationJson] =
+        await Promise.all([
+          readFile(join(projectRoot, 'data/normalized/auction_results.csv'), 'utf8'),
+          readFile(join(projectRoot, 'config/seasons.json'), 'utf8'),
+          readFile(join(projectRoot, 'config/league-members.json'), 'utf8').catch(
+            (cause: NodeJS.ErrnoException) => {
+              if (cause.code === 'ENOENT') return '{"members":[]}\n';
+              throw cause;
+            },
+          ),
+          readFile(join(projectRoot, 'data/normalized/league_seasons.json'), 'utf8'),
+          readFile(join(projectRoot, 'data/reports/import_validation.json'), 'utf8'),
+        ]);
+      return { auctionCsv, configJson, leagueMembersJson, leagueSeasonsJson, validationJson };
     },
     catch: () =>
       new HistoricalAuctionSourceError({
@@ -175,6 +199,7 @@ export const planHistoricalAuctionImport = (
 ): Effect.Effect<HistoricalAuctionImportPlan, HistoricalAuctionValidationError> =>
   Effect.gen(function* () {
     const config = yield* parseJson('season config', bundle.configJson);
+    const leagueMembers = yield* parseJson('league member config', bundle.leagueMembersJson);
     const seasonMetadata = yield* parseJson('league seasons', bundle.leagueSeasonsJson);
     const validation = yield* parseJson('validation report', bundle.validationJson);
 
@@ -230,6 +255,7 @@ export const planHistoricalAuctionImport = (
         const seasonPickKeys = new Set<string>();
         const rowCountBySeason = new Map<string, number>();
         const spendBySeason = new Map<string, number>();
+        const managerBySeasonTeam = new Map<string, string>();
 
         for (const row of rows) {
           const seasonKey = requiredString(row, 'season');
@@ -287,24 +313,66 @@ export const planHistoricalAuctionImport = (
             teamId: requiredString(row, 'team_id'),
             teamName: requiredString(row, 'team_name'),
           });
+          const managerLabel = row['manager_label']?.trim();
+          if (managerLabel) {
+            const teamKey = `${seasonKey}:${requiredString(row, 'team_id')}`;
+            const knownManager = managerBySeasonTeam.get(teamKey);
+            if (knownManager !== undefined && knownManager !== managerLabel) {
+              throw new Error(`${teamKey} maps to conflicting manager labels`);
+            }
+            managerBySeasonTeam.set(teamKey, managerLabel);
+          }
           rowCountBySeason.set(seasonKey, (rowCountBySeason.get(seasonKey) ?? 0) + 1);
           spendBySeason.set(seasonKey, (spendBySeason.get(seasonKey) ?? 0) + amountCents);
         }
 
-        const seasons = [...rowCountBySeason.keys()].sort().map((seasonKey) => {
+        const sourceTeams: LeagueIdentitySourceTeam[] = [];
+        const seasons = [...metadataBySeason.keys()].sort().map((seasonKey) => {
           const metadata = metadataBySeason.get(seasonKey)!;
           const report = reportBySeason.get(seasonKey)!;
           const expectedSeasonRows = numberField(report, 'normalized_price_count');
           const expectedSeasonSpend = parseCents(stringField(report, 'normalized_total_spend'));
-          if (rowCountBySeason.get(seasonKey) !== expectedSeasonRows) {
+          if ((rowCountBySeason.get(seasonKey) ?? 0) !== expectedSeasonRows) {
             throw new Error(`${seasonKey} row count does not reconcile`);
           }
-          if (spendBySeason.get(seasonKey) !== expectedSeasonSpend) {
+          if ((spendBySeason.get(seasonKey) ?? 0) !== expectedSeasonSpend) {
             throw new Error(`${seasonKey} spend does not reconcile`);
+          }
+          const leagueHistoryId = stringField(metadata, 'league_history_id');
+          const leagueId = stringField(metadata, 'league_id');
+          const teamMetadata = metadata['teams'];
+          if (!Array.isArray(teamMetadata)) {
+            throw new Error(`${seasonKey} is missing normalized Fantrax teams`);
+          }
+          if (teamMetadata.length !== numberField(report, 'team_count')) {
+            throw new Error(`${seasonKey} team count does not reconcile`);
+          }
+          const sourceTeamIds = new Set<string>();
+          for (const team of teamMetadata) {
+            if (!isObject(team)) throw new Error(`${seasonKey} team metadata must be objects`);
+            const sourceTeamId = stringField(team, 'id');
+            if (sourceTeamIds.has(sourceTeamId)) {
+              throw new Error(`${seasonKey} contains duplicate team ${sourceTeamId}`);
+            }
+            sourceTeamIds.add(sourceTeamId);
+            const division = team['division'];
+            if (division !== null && division !== undefined && typeof division !== 'string') {
+              throw new Error(`${seasonKey}:${sourceTeamId} division must be a string or null`);
+            }
+            sourceTeams.push({
+              division: typeof division === 'string' && division.trim() ? division.trim() : null,
+              leagueHistoryId,
+              leagueId,
+              managerLabel: managerBySeasonTeam.get(`${seasonKey}:${sourceTeamId}`) ?? null,
+              seasonKey,
+              sourceTeamId,
+              teamName: stringField(team, 'name'),
+            });
           }
           return {
             baseBudgetCents,
-            leagueId: stringField(metadata, 'league_id'),
+            leagueHistoryId,
+            leagueId,
             rosterSize,
             seasonKey,
             status: stringField(metadata, 'status'),
@@ -312,10 +380,27 @@ export const planHistoricalAuctionImport = (
           };
         });
 
+        for (const auction of auctions) {
+          if (
+            !sourceTeams.some(
+              (team) =>
+                team.seasonKey === auction.seasonKey && team.sourceTeamId === auction.teamId,
+            )
+          ) {
+            throw new Error(
+              `${auction.seasonKey} auction references unknown team ${auction.teamId}`,
+            );
+          }
+        }
+
+        const identity = resolveLeagueIdentity(leagueMembers, sourceTeams);
+
         const fingerprint = createHash('sha256')
           .update(bundle.configJson)
           .update('\0')
           .update(bundle.leagueSeasonsJson)
+          .update('\0')
+          .update(bundle.leagueMembersJson)
           .update('\0')
           .update(bundle.validationJson)
           .update('\0')
@@ -325,15 +410,21 @@ export const planHistoricalAuctionImport = (
         return {
           auctions,
           fingerprint,
+          leagueMembers: identity.members,
+          leagueTeams: identity.teams,
           players: [...players.values()].sort((left, right) =>
             left.fantraxId.localeCompare(right.fantraxId),
           ),
           seasons,
           summary: {
             auctionCount: auctions.length,
+            canonicalMemberCount: identity.members.length,
+            leagueTeamSeasonCount: identity.teams.length,
             seasonCount: seasons.length,
             totalAmountCents: auctions.reduce((total, auction) => total + auction.amountCents, 0),
             uniquePlayerCount: players.size,
+            unresolvedTeamSeasonCount: identity.teams.filter((team) => team.memberKey === null)
+              .length,
             warningCount,
           },
         };
@@ -352,6 +443,8 @@ export const commitHistoricalAuctionImport = <Error>(
   committer.replaceHistoricalAuctions({
     auctions: plan.auctions,
     fingerprint: plan.fingerprint,
+    leagueMembers: plan.leagueMembers,
+    leagueTeams: plan.leagueTeams,
     players: plan.players,
     seasons: plan.seasons,
     warningCount: plan.summary.warningCount,

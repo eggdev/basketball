@@ -22,6 +22,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'canonical_player_identities'
     | 'health'
     | 'historical_auction_market'
+    | 'league_team_history'
     | 'replace_historical_auctions'
     | 'player_production_history'
     | 'replace_historical_scoring'
@@ -48,6 +49,23 @@ export interface HistoricalAuctionBatch {
     readonly teamName: string;
   }>;
   readonly fingerprint: string;
+  readonly leagueMembers: ReadonlyArray<{
+    readonly canonicalKey: string;
+    readonly displayName: string;
+    readonly leagueHistoryId: string;
+  }>;
+  readonly leagueTeams: ReadonlyArray<{
+    readonly division: string | null;
+    readonly identityConfidence: number;
+    readonly identityResolution: string;
+    readonly leagueHistoryId: string;
+    readonly leagueId: string;
+    readonly managerLabel: string | null;
+    readonly memberKey: string | null;
+    readonly seasonKey: string;
+    readonly sourceTeamId: string;
+    readonly teamName: string;
+  }>;
   readonly players: ReadonlyArray<{
     readonly canonicalName: string;
     readonly fantraxId: string;
@@ -55,6 +73,7 @@ export interface HistoricalAuctionBatch {
   }>;
   readonly seasons: ReadonlyArray<{
     readonly baseBudgetCents: number;
+    readonly leagueHistoryId: string;
     readonly leagueId: string;
     readonly rosterSize: number;
     readonly seasonKey: string;
@@ -66,9 +85,12 @@ export interface HistoricalAuctionBatch {
 
 export interface HistoricalAuctionImportResult {
   readonly auctionCount: number;
+  readonly canonicalMemberCount: number;
   readonly ingestionRunId: string;
+  readonly leagueTeamSeasonCount: number;
   readonly playerCount: number;
   readonly seasonCount: number;
+  readonly unresolvedTeamSeasonCount: number;
 }
 
 export interface HistoricalAuctionMarketPlayer {
@@ -95,6 +117,54 @@ export interface HistoricalAuctionMarket {
     readonly seasonCount: number;
     readonly totalSpendCents: number;
   };
+}
+
+export interface LeagueTeamHistoryFavoritePlayer {
+  readonly averagePriceCents: number;
+  readonly draftCount: number;
+  readonly latestSeason: string;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly totalSpendCents: number;
+}
+
+export interface LeagueTeamHistorySeason {
+  readonly averagePriceCents: number;
+  readonly identityConfidence: number;
+  readonly identityResolution: string;
+  readonly purchaseCount: number;
+  readonly seasonKey: string;
+  readonly sourceTeamId: string;
+  readonly teamName: string;
+  readonly totalSpendCents: number;
+}
+
+export interface LeagueTeamHistoryMember {
+  readonly canonicalKey: string;
+  readonly displayName: string;
+  readonly favoritePlayers: ReadonlyArray<LeagueTeamHistoryFavoritePlayer>;
+  readonly memberId: string;
+  readonly purchaseCount: number;
+  readonly seasons: ReadonlyArray<LeagueTeamHistorySeason>;
+  readonly teamNames: ReadonlyArray<string>;
+  readonly totalSpendCents: number;
+}
+
+export interface LeagueTeamHistory {
+  readonly members: ReadonlyArray<LeagueTeamHistoryMember>;
+  readonly summary: {
+    readonly canonicalMemberCount: number;
+    readonly latestSeason: string | null;
+    readonly resolvedTeamSeasonCount: number;
+    readonly seasonCount: number;
+    readonly teamSeasonCount: number;
+    readonly unresolvedTeamSeasonCount: number;
+  };
+  readonly unresolvedTeams: ReadonlyArray<{
+    readonly seasonKey: string;
+    readonly sourceTeamId: string;
+    readonly teamName: string;
+  }>;
 }
 
 export interface CanonicalPlayerIdentity {
@@ -177,6 +247,7 @@ export interface DatabaseService {
   >;
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
+  readonly leagueTeamHistory: Effect.Effect<LeagueTeamHistory, DatabaseUnavailable>;
   readonly playerProductionHistory: Effect.Effect<
     ReadonlyArray<PlayerProductionHistoryRecord>,
     DatabaseUnavailable
@@ -505,6 +576,179 @@ const databaseServiceLayer = Layer.effect(
       ),
     );
 
+    const leagueTeamHistory = Effect.gen(function* () {
+      const teamRows = yield* sql<{
+        average_price_cents: number;
+        canonical_key: string | null;
+        display_name: string | null;
+        identity_confidence: number;
+        identity_resolution: string;
+        member_id: string | null;
+        purchase_count: number;
+        season_key: string;
+        source_team_id: string;
+        team_name: string;
+        total_spend_cents: number;
+      }>`
+        select
+          lm.id as member_id,
+          lm.canonical_key,
+          lm.display_name,
+          ls.season_key,
+          lts.source_team_id,
+          lts.team_name,
+          lts.identity_resolution,
+          lts.identity_confidence,
+          count(ar.id)::integer as purchase_count,
+          coalesce(sum(ar.amount_cents), 0)::integer as total_spend_cents,
+          coalesce(round(avg(ar.amount_cents)), 0)::integer as average_price_cents
+        from fantasy.league_team_seasons lts
+        join fantasy.league_seasons ls on ls.id = lts.league_season_id
+        left join fantasy.league_members lm on lm.id = lts.league_member_id
+        left join fantasy.auction_results ar on ar.league_team_season_id = lts.id
+        where ls.source = 'fantrax'
+        group by
+          lm.id,
+          lm.canonical_key,
+          lm.display_name,
+          ls.season_key,
+          lts.source_team_id,
+          lts.team_name,
+          lts.identity_resolution,
+          lts.identity_confidence
+        order by ls.season_key, lts.team_name, lts.source_team_id
+      `;
+
+      const favoriteRows = yield* sql<{
+        average_price_cents: number;
+        draft_count: number;
+        latest_season: string;
+        member_id: string;
+        player_id: string;
+        player_name: string;
+        preference_rank: number;
+        total_spend_cents: number;
+      }>`
+        with preferences as (
+          select
+            lm.id as member_id,
+            p.id as player_id,
+            p.canonical_name as player_name,
+            count(*)::integer as draft_count,
+            coalesce(sum(ar.amount_cents), 0)::integer as total_spend_cents,
+            coalesce(round(avg(ar.amount_cents)), 0)::integer as average_price_cents,
+            max(ls.season_key) as latest_season
+          from fantasy.auction_results ar
+          join fantasy.league_team_seasons lts on lts.id = ar.league_team_season_id
+          join fantasy.league_members lm on lm.id = lts.league_member_id
+          join fantasy.league_seasons ls on ls.id = ar.league_season_id
+          join fantasy.players p on p.id = ar.player_id
+          group by lm.id, p.id, p.canonical_name
+        ),
+        ranked as (
+          select
+            *,
+            row_number() over (
+              partition by member_id
+              order by draft_count desc, total_spend_cents desc, player_name
+            )::integer as preference_rank
+          from preferences
+        )
+        select *
+        from ranked
+        where preference_rank <= 5
+        order by member_id, preference_rank
+      `;
+
+      const favoritesByMember = new Map<string, LeagueTeamHistoryFavoritePlayer[]>();
+      for (const row of favoriteRows) {
+        const favorites = favoritesByMember.get(row.member_id) ?? [];
+        favorites.push({
+          averagePriceCents: row.average_price_cents,
+          draftCount: row.draft_count,
+          latestSeason: row.latest_season,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          totalSpendCents: row.total_spend_cents,
+        });
+        favoritesByMember.set(row.member_id, favorites);
+      }
+
+      const membersById = new Map<string, LeagueTeamHistoryMember>();
+      for (const row of teamRows) {
+        if (row.member_id === null || row.canonical_key === null || row.display_name === null) {
+          continue;
+        }
+        const existing = membersById.get(row.member_id);
+        const season: LeagueTeamHistorySeason = {
+          averagePriceCents: row.average_price_cents,
+          identityConfidence: row.identity_confidence,
+          identityResolution: row.identity_resolution,
+          purchaseCount: row.purchase_count,
+          seasonKey: row.season_key,
+          sourceTeamId: row.source_team_id,
+          teamName: row.team_name,
+          totalSpendCents: row.total_spend_cents,
+        };
+        if (existing === undefined) {
+          membersById.set(row.member_id, {
+            canonicalKey: row.canonical_key,
+            displayName: row.display_name,
+            favoritePlayers: favoritesByMember.get(row.member_id) ?? [],
+            memberId: row.member_id,
+            purchaseCount: row.purchase_count,
+            seasons: [season],
+            teamNames: [row.team_name],
+            totalSpendCents: row.total_spend_cents,
+          });
+        } else {
+          membersById.set(row.member_id, {
+            ...existing,
+            purchaseCount: existing.purchaseCount + row.purchase_count,
+            seasons: [...existing.seasons, season],
+            teamNames: existing.teamNames.includes(row.team_name)
+              ? existing.teamNames
+              : [...existing.teamNames, row.team_name],
+            totalSpendCents: existing.totalSpendCents + row.total_spend_cents,
+          });
+        }
+      }
+
+      const seasonKeys = new Set(teamRows.map((row) => row.season_key));
+      const unresolvedTeams = teamRows
+        .filter((row) => row.member_id === null)
+        .map((row) => ({
+          seasonKey: row.season_key,
+          sourceTeamId: row.source_team_id,
+          teamName: row.team_name,
+        }));
+      const members = [...membersById.values()].sort(
+        (left, right) =>
+          right.seasons.length - left.seasons.length ||
+          left.displayName.localeCompare(right.displayName),
+      );
+
+      return {
+        members,
+        summary: {
+          canonicalMemberCount: members.length,
+          latestSeason: [...seasonKeys].sort().at(-1) ?? null,
+          resolvedTeamSeasonCount: teamRows.length - unresolvedTeams.length,
+          seasonCount: seasonKeys.size,
+          teamSeasonCount: teamRows.length,
+          unresolvedTeamSeasonCount: unresolvedTeams.length,
+        },
+        unresolvedTeams,
+      } satisfies LeagueTeamHistory;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'league_team_history',
+          'The canonical league team history could not be loaded',
+        ),
+      ),
+    );
+
     const replaceHistoricalAuctions = (
       batch: HistoricalAuctionBatch,
     ): Effect.Effect<HistoricalAuctionImportResult, DatabaseUnavailable> => {
@@ -520,7 +764,12 @@ const databaseServiceLayer = Layer.effect(
               ${batch.auctions.length},
               ${sql.json({
                 fingerprint: batch.fingerprint,
+                canonicalMemberCount: batch.leagueMembers.length,
+                leagueTeamSeasonCount: batch.leagueTeams.length,
                 seasonCount: batch.seasons.length,
+                unresolvedTeamSeasonCount: batch.leagueTeams.filter(
+                  (team) => team.memberKey === null,
+                ).length,
                 warningCount: batch.warningCount,
               })}
             )
@@ -541,6 +790,7 @@ const databaseServiceLayer = Layer.effect(
             insert into fantasy.league_seasons
               (
                 source,
+                source_league_history_id,
                 source_league_id,
                 season_key,
                 name,
@@ -551,6 +801,7 @@ const databaseServiceLayer = Layer.effect(
             values
               (
                 'fantrax',
+                ${season.leagueHistoryId},
                 ${season.leagueId},
                 ${season.seasonKey},
                 ${`Fantasy Basketball ${season.seasonKey}`},
@@ -560,6 +811,7 @@ const databaseServiceLayer = Layer.effect(
               )
             on conflict (source, source_league_id) do update set
               season_key = excluded.season_key,
+              source_league_history_id = excluded.source_league_history_id,
               name = excluded.name,
               team_count = excluded.team_count,
               roster_size = excluded.roster_size,
@@ -631,6 +883,69 @@ const databaseServiceLayer = Layer.effect(
             delete from fantasy.auction_results
             where league_season_id in ${sql.in(importedSeasonIds)}
           `;
+          yield* sql`
+            delete from fantasy.league_team_seasons
+            where league_season_id in ${sql.in(importedSeasonIds)}
+          `;
+        }
+
+        const memberIds = new Map<string, string>();
+        for (const member of batch.leagueMembers) {
+          const [record] = yield* sql<{ id: string }>`
+            insert into fantasy.league_members
+              (source_league_history_id, canonical_key, display_name)
+            values
+              (${member.leagueHistoryId}, ${member.canonicalKey}, ${member.displayName})
+            on conflict (source_league_history_id, canonical_key) do update set
+              display_name = excluded.display_name,
+              updated_at = now()
+            returning id
+          `;
+          if (record === undefined) {
+            throw new Error(`Canonical member ${member.canonicalKey} was not created`);
+          }
+          memberIds.set(`${member.leagueHistoryId}:${member.canonicalKey}`, record.id);
+        }
+
+        const leagueTeamSeasonIds = new Map<string, string>();
+        for (const team of batch.leagueTeams) {
+          const leagueSeasonId = seasonIds.get(team.seasonKey);
+          const leagueMemberId =
+            team.memberKey === null
+              ? null
+              : memberIds.get(`${team.leagueHistoryId}:${team.memberKey}`);
+          if (leagueSeasonId === undefined || (team.memberKey !== null && !leagueMemberId)) {
+            throw new Error(`Canonical team references are incomplete for ${team.seasonKey}`);
+          }
+          const [record] = yield* sql<{ id: string }>`
+            insert into fantasy.league_team_seasons
+              (
+                league_season_id,
+                league_member_id,
+                source,
+                source_team_id,
+                team_name,
+                division,
+                identity_resolution,
+                identity_confidence
+              )
+            values
+              (
+                ${leagueSeasonId},
+                ${leagueMemberId ?? null},
+                'fantrax',
+                ${team.sourceTeamId},
+                ${team.teamName},
+                ${team.division},
+                ${team.identityResolution},
+                ${team.identityConfidence}
+              )
+            returning id
+          `;
+          if (record === undefined) {
+            throw new Error(`League team ${team.sourceTeamId} was not created`);
+          }
+          leagueTeamSeasonIds.set(`${team.seasonKey}:${team.sourceTeamId}`, record.id);
         }
 
         const sourceRecords = batch.auctions.map((auction) => ({
@@ -648,10 +963,14 @@ const databaseServiceLayer = Layer.effect(
 
         const auctionRecords = batch.auctions.map((auction, index) => {
           const leagueSeasonId = seasonIds.get(auction.seasonKey);
+          const leagueTeamSeasonId = leagueTeamSeasonIds.get(
+            `${auction.seasonKey}:${auction.teamId}`,
+          );
           const playerId = playerIds.get(auction.fantraxPlayerId);
           const sourceRecord = sourceRecords[index];
           if (
             leagueSeasonId === undefined ||
+            leagueTeamSeasonId === undefined ||
             playerId === undefined ||
             sourceRecord === undefined
           ) {
@@ -661,6 +980,7 @@ const databaseServiceLayer = Layer.effect(
             amount_cents: auction.amountCents,
             drafted_at: new Date(auction.draftedAtMs),
             league_season_id: leagueSeasonId,
+            league_team_season_id: leagueTeamSeasonId,
             manager_name: auction.managerLabel ?? auction.teamName,
             nomination_order: auction.fantraxPick,
             player_id: playerId,
@@ -684,9 +1004,13 @@ const databaseServiceLayer = Layer.effect(
 
         return {
           auctionCount: batch.auctions.length,
+          canonicalMemberCount: batch.leagueMembers.length,
           ingestionRunId: ingestionRun.id,
+          leagueTeamSeasonCount: batch.leagueTeams.length,
           playerCount: batch.players.length,
           seasonCount: batch.seasons.length,
+          unresolvedTeamSeasonCount: batch.leagueTeams.filter((team) => team.memberKey === null)
+            .length,
         };
       });
 
@@ -1071,6 +1395,7 @@ const databaseServiceLayer = Layer.effect(
         Effect.mapError(() => databaseUnavailable('health', 'The database health check failed')),
       ),
       historicalAuctionMarket,
+      leagueTeamHistory,
       playerProductionHistory,
       replaceHistoricalAuctions,
       replaceHistoricalScoring,
