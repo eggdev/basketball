@@ -48,6 +48,15 @@
           "cwd": ".",
           "forwardAllArgs": true
         }
+      },
+      "production-import": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/import-production.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
       }
     }
   }

@@ -16,6 +16,8 @@
     "dev:agent:ui": "bunx eve dev",
     "dev:web": "nx run web:dev",
     "lint": "nx run-many -t lint",
+    "production:import": "nx run importer:production-import -- --commit",
+    "production:validate": "nx run importer:production-import",
     "test": "nx run-many -t test -- --run",
     "test:python": "PYTHONPATH=src python3 -m unittest discover -s tests -v",
     "typecheck": "nx run-many -t typecheck"

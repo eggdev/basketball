@@ -18,7 +18,12 @@ export class DatabaseConfigurationError extends Data.TaggedError('DatabaseConfig
 
 export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')<{
   readonly message: string;
-  readonly operation: 'health' | 'historical_auction_market' | 'replace_historical_auctions';
+  readonly operation:
+    | 'canonical_player_identities'
+    | 'health'
+    | 'historical_auction_market'
+    | 'replace_historical_auctions'
+    | 'replace_player_production';
 }> {}
 
 export interface DatabaseHealth {
@@ -90,12 +95,54 @@ export interface HistoricalAuctionMarket {
   };
 }
 
+export interface CanonicalPlayerIdentity {
+  readonly canonicalName: string;
+  readonly fantraxId: string;
+  readonly normalizedName: string;
+  readonly playerId: string;
+}
+
+export interface PlayerProductionBatch {
+  readonly fingerprint: string;
+  readonly gameStatCount: number;
+  readonly identities: ReadonlyArray<{
+    readonly fantraxId: string;
+    readonly providerPlayerId: string;
+    readonly providerPlayerName: string;
+  }>;
+  readonly records: ReadonlyArray<{
+    readonly fantraxId: string;
+    readonly gamesPlayed: number;
+    readonly period: 'regular-season';
+    readonly providerPlayerId: string;
+    readonly providerPlayerName: string;
+    readonly seasonKey: string;
+    readonly sourcePayload: Readonly<Record<string, unknown>>;
+    readonly stats: Readonly<Record<string, number | null>>;
+  }>;
+  readonly seasons: ReadonlyArray<string>;
+}
+
+export interface PlayerProductionImportResult {
+  readonly ingestionRunId: string;
+  readonly playerCount: number;
+  readonly playerSeasonCount: number;
+  readonly seasonCount: number;
+}
+
 export interface DatabaseService {
+  readonly canonicalPlayerIdentities: Effect.Effect<
+    ReadonlyArray<CanonicalPlayerIdentity>,
+    DatabaseUnavailable
+  >;
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
   readonly replaceHistoricalAuctions: (
     batch: HistoricalAuctionBatch,
   ) => Effect.Effect<HistoricalAuctionImportResult, DatabaseUnavailable>;
+  readonly replacePlayerProduction: (
+    batch: PlayerProductionBatch,
+  ) => Effect.Effect<PlayerProductionImportResult, DatabaseUnavailable>;
 }
 
 export class Database extends Context.Tag('@fantasy-basketball/database/Database')<
@@ -195,6 +242,39 @@ const databaseServiceLayer = Layer.effect(
   Database,
   Effect.gen(function* () {
     const sql = yield* PgClient.PgClient;
+
+    const canonicalPlayerIdentities = sql<{
+      canonical_name: string;
+      fantrax_id: string;
+      normalized_name: string;
+      player_id: string;
+    }>`
+      select
+        p.id as player_id,
+        p.canonical_name,
+        p.normalized_name,
+        pi.external_id as fantrax_id
+      from fantasy.players p
+      join fantasy.player_identities pi
+        on pi.player_id = p.id
+        and pi.source = 'fantrax'
+      order by p.canonical_name, pi.external_id
+    `.pipe(
+      Effect.map((rows) =>
+        rows.map((row) => ({
+          canonicalName: row.canonical_name,
+          fantraxId: row.fantrax_id,
+          normalizedName: row.normalized_name,
+          playerId: row.player_id,
+        })),
+      ),
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'canonical_player_identities',
+          'The canonical player identities could not be loaded',
+        ),
+      ),
+    );
 
     const historicalAuctionMarket = Effect.gen(function* () {
       const [summary] = yield* sql<{
@@ -537,7 +617,169 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const replacePlayerProduction = (
+      batch: PlayerProductionBatch,
+    ): Effect.Effect<PlayerProductionImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, status, record_count, details)
+          values
+            (
+              'balldontlie',
+              'game-player-stats',
+              'running',
+              ${batch.records.length},
+              ${sql.json({
+                fingerprint: batch.fingerprint,
+                gameStatCount: batch.gameStatCount,
+                seasonCount: batch.seasons.length,
+              })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) {
+          return yield* Effect.fail(
+            databaseUnavailable(
+              'replace_player_production',
+              'The player production import could not be completed',
+            ),
+          );
+        }
+
+        const playerReferences = new Map<
+          string,
+          { providerPlayerId: string; providerPlayerName: string }
+        >();
+        for (const identity of batch.identities) {
+          const existing = playerReferences.get(identity.fantraxId);
+          if (
+            existing !== undefined &&
+            (existing.providerPlayerId !== identity.providerPlayerId ||
+              existing.providerPlayerName !== identity.providerPlayerName)
+          ) {
+            throw new Error(`Conflicting provider identities for ${identity.fantraxId}`);
+          }
+          playerReferences.set(identity.fantraxId, {
+            providerPlayerId: identity.providerPlayerId,
+            providerPlayerName: identity.providerPlayerName,
+          });
+        }
+
+        const playerIds = new Map<string, string>();
+        for (const [fantraxId, provider] of playerReferences) {
+          const [fantraxIdentity] = yield* sql<{ player_id: string }>`
+            select player_id
+            from fantasy.player_identities
+            where source = 'fantrax' and external_id = ${fantraxId}
+          `;
+          if (fantraxIdentity === undefined) {
+            throw new Error(`Unknown Fantrax player ${fantraxId}`);
+          }
+
+          const [providerIdentity] = yield* sql<{ player_id: string }>`
+            select player_id
+            from fantasy.player_identities
+            where source = 'balldontlie' and external_id = ${provider.providerPlayerId}
+          `;
+          if (
+            providerIdentity !== undefined &&
+            providerIdentity.player_id !== fantraxIdentity.player_id
+          ) {
+            throw new Error(`BALLDONTLIE player ${provider.providerPlayerId} is already claimed`);
+          }
+
+          yield* sql`
+            insert into fantasy.player_identities
+              (player_id, source, external_id, source_name)
+            values
+              (
+                ${fantraxIdentity.player_id},
+                'balldontlie',
+                ${provider.providerPlayerId},
+                ${provider.providerPlayerName}
+              )
+            on conflict (source, external_id) do update set
+              source_name = excluded.source_name,
+              updated_at = now()
+          `;
+          playerIds.set(fantraxId, fantraxIdentity.player_id);
+        }
+
+        if (batch.seasons.length > 0) {
+          yield* sql`
+            delete from fantasy.player_season_stats
+            where
+              source = 'balldontlie'
+              and period = 'regular-season'
+              and season_key in ${sql.in(batch.seasons)}
+          `;
+        }
+
+        const sourceRecords = batch.records.map((record) => ({
+          captured_at: new Date(),
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: record.sourcePayload,
+          source_record_id: `${record.seasonKey}:${record.providerPlayerId}:${record.period}`,
+        }));
+        if (sourceRecords.length > 0) {
+          yield* sql`
+            insert into fantasy.source_records ${sql.insert(sourceRecords)}
+          `;
+        }
+
+        const statRecords = batch.records.map((record, index) => {
+          const playerId = playerIds.get(record.fantraxId);
+          const sourceRecord = sourceRecords[index];
+          if (playerId === undefined || sourceRecord === undefined) {
+            throw new Error('Validated player production references are incomplete');
+          }
+          return {
+            games_played: record.gamesPlayed,
+            period: record.period,
+            player_id: playerId,
+            season_key: record.seasonKey,
+            source: 'balldontlie',
+            source_record_id: sourceRecord.id,
+            stats: record.stats,
+            updated_at: new Date(),
+          };
+        });
+        if (statRecords.length > 0) {
+          yield* sql`
+            insert into fantasy.player_season_stats ${sql.insert(statRecords)}
+          `;
+        }
+
+        yield* sql`
+          update fantasy.ingestion_runs
+          set status = 'completed', finished_at = now()
+          where id = ${ingestionRun.id}
+        `;
+
+        return {
+          ingestionRunId: ingestionRun.id,
+          playerCount: playerReferences.size,
+          playerSeasonCount: batch.records.length,
+          seasonCount: batch.seasons.length,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'replace_player_production',
+              'The player production import could not be completed',
+            ),
+          ),
+        );
+    };
+
     return Database.of({
+      canonicalPlayerIdentities,
       health: sql<{ database_time: string }>`select now()::text as database_time`.pipe(
         Effect.flatMap(([row]) =>
           row === undefined
@@ -553,6 +795,7 @@ const databaseServiceLayer = Layer.effect(
       ),
       historicalAuctionMarket,
       replaceHistoricalAuctions,
+      replacePlayerProduction,
     });
   }),
 );
