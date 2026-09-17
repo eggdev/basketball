@@ -1,11 +1,19 @@
-# database
+# Database
 
-This library was generated with [Nx](https://nx.dev).
+This package owns the application's Postgres interface and its Neon adapter.
+Callers use the Effect `Database` tag for health checks, atomic historical
+imports, and the historical auction market snapshot; SQL and connection-pool
+details remain inside the module.
 
-## Building
+Runtime callers should import from the narrow runtime export:
 
-Run `nx build database` to build the library.
+```ts
+import { Database, databaseLayer } from '@fantasy-basketball/database/runtime';
+```
 
-## Running unit tests
+Drizzle schema and migration code can import from
+`@fantasy-basketball/database/schema`. The package root remains available for
+existing internal callers that need both surfaces.
 
-Run `nx test database` to execute the unit tests via [Vitest](https://vitest.dev/).
+Application traffic uses the pooled `DATABASE_URL`; migrations use the direct
+`DATABASE_URL_UNPOOLED` connection.

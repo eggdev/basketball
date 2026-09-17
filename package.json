@@ -21,6 +21,7 @@
     "typecheck": "nx run-many -t typecheck"
   },
   "dependencies": {
+    "@effect/sql-pg": "0.53.0",
     "@fantasy-basketball/auth": "workspace:*",
     "@fantasy-basketball/database": "workspace:*",
     "@fantasy-basketball/fantasy": "workspace:*",

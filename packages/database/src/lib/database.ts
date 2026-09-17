@@ -18,7 +18,7 @@ export class DatabaseConfigurationError extends Data.TaggedError('DatabaseConfig
 
 export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')<{
   readonly message: string;
-  readonly operation: 'health' | 'replace_historical_auctions';
+  readonly operation: 'health' | 'historical_auction_market' | 'replace_historical_auctions';
 }> {}
 
 export interface DatabaseHealth {
@@ -64,8 +64,35 @@ export interface HistoricalAuctionImportResult {
   readonly seasonCount: number;
 }
 
+export interface HistoricalAuctionMarketPlayer {
+  readonly averagePriceCents: number;
+  readonly expectedPriceCents: number;
+  readonly fantraxId: string;
+  readonly latestPriceCents: number;
+  readonly latestSeason: string;
+  readonly maximumPriceCents: number;
+  readonly minimumPriceCents: number;
+  readonly name: string;
+  readonly playerId: string;
+  readonly previousPriceCents: number | null;
+  readonly seasonsDrafted: number;
+  readonly trendCents: number | null;
+}
+
+export interface HistoricalAuctionMarket {
+  readonly players: ReadonlyArray<HistoricalAuctionMarketPlayer>;
+  readonly summary: {
+    readonly latestSeason: string | null;
+    readonly playerCount: number;
+    readonly purchaseCount: number;
+    readonly seasonCount: number;
+    readonly totalSpendCents: number;
+  };
+}
+
 export interface DatabaseService {
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
+  readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
   readonly replaceHistoricalAuctions: (
     batch: HistoricalAuctionBatch,
   ) => Effect.Effect<HistoricalAuctionImportResult, DatabaseUnavailable>;
@@ -161,10 +188,157 @@ const makePool = (config: DatabaseConfig) =>
     (pool) => Effect.promise(() => pool.end()).pipe(Effect.orDie),
   );
 
+const databaseUnavailable = (operation: DatabaseUnavailable['operation'], message: string) =>
+  new DatabaseUnavailable({ message, operation });
+
 const databaseServiceLayer = Layer.effect(
   Database,
   Effect.gen(function* () {
     const sql = yield* PgClient.PgClient;
+
+    const historicalAuctionMarket = Effect.gen(function* () {
+      const [summary] = yield* sql<{
+        latest_season: string | null;
+        player_count: number;
+        purchase_count: number;
+        season_count: number;
+        total_spend_cents: number;
+      }>`
+        select
+          max(ls.season_key) as latest_season,
+          count(distinct ar.player_id)::integer as player_count,
+          count(ar.id)::integer as purchase_count,
+          count(distinct ar.league_season_id)::integer as season_count,
+          coalesce(sum(ar.amount_cents), 0)::integer as total_spend_cents
+        from fantasy.auction_results ar
+        join fantasy.league_seasons ls on ls.id = ar.league_season_id
+        where ls.source = 'fantrax'
+      `;
+
+      if (summary === undefined) {
+        return yield* Effect.fail(
+          databaseUnavailable(
+            'historical_auction_market',
+            'The historical auction market summary could not be loaded',
+          ),
+        );
+      }
+
+      const rows = yield* sql<{
+        average_price_cents: number;
+        expected_price_cents: number;
+        fantrax_id: string;
+        latest_price_cents: number;
+        latest_season: string;
+        maximum_price_cents: number;
+        minimum_price_cents: number;
+        name: string;
+        player_id: string;
+        previous_price_cents: number | null;
+        seasons_drafted: number;
+      }>`
+        with ordered_seasons as (
+          select
+            ls.id,
+            dense_rank() over (order by ls.season_key)::integer as season_weight
+          from fantasy.league_seasons ls
+          where
+            ls.source = 'fantrax'
+            and exists (
+              select 1
+              from fantasy.auction_results ar
+              where ar.league_season_id = ls.id
+            )
+        ),
+        season_weights as (
+          select
+            id,
+            season_weight,
+            max(season_weight) over ()::integer as maximum_season_weight
+          from ordered_seasons
+        ),
+        history as (
+          select
+            ar.amount_cents,
+            ar.player_id,
+            ls.season_key,
+            p.canonical_name as name,
+            pi.external_id as fantrax_id,
+            sw.season_weight,
+            sw.maximum_season_weight,
+            row_number() over (
+              partition by ar.player_id
+              order by ls.season_key desc
+            )::integer as recency_order
+          from fantasy.auction_results ar
+          join fantasy.league_seasons ls on ls.id = ar.league_season_id
+          join season_weights sw on sw.id = ls.id
+          join fantasy.players p on p.id = ar.player_id
+          join fantasy.player_identities pi
+            on pi.player_id = p.id
+            and pi.source = 'fantrax'
+          where ls.source = 'fantrax'
+        )
+        select
+          player_id,
+          max(fantrax_id) as fantrax_id,
+          max(name) as name,
+          count(*)::integer as seasons_drafted,
+          max(season_key) as latest_season,
+          max(amount_cents) filter (where recency_order = 1)::integer as latest_price_cents,
+          max(amount_cents) filter (where recency_order = 2)::integer as previous_price_cents,
+          round(avg(amount_cents))::integer as average_price_cents,
+          round(
+            sum(amount_cents::numeric * season_weight)
+            / nullif(
+              (
+                max(maximum_season_weight)::numeric * (max(maximum_season_weight) + 1)
+                - (min(season_weight) - 1)::numeric * min(season_weight)
+              ) / 2,
+              0
+            )
+          )::integer as expected_price_cents,
+          min(amount_cents)::integer as minimum_price_cents,
+          max(amount_cents)::integer as maximum_price_cents
+        from history
+        group by player_id
+        order by expected_price_cents desc, latest_price_cents desc, name
+      `;
+
+      return {
+        players: rows.map((row) => ({
+          averagePriceCents: row.average_price_cents,
+          expectedPriceCents: row.expected_price_cents,
+          fantraxId: row.fantrax_id,
+          latestPriceCents: row.latest_price_cents,
+          latestSeason: row.latest_season,
+          maximumPriceCents: row.maximum_price_cents,
+          minimumPriceCents: row.minimum_price_cents,
+          name: row.name,
+          playerId: row.player_id,
+          previousPriceCents: row.previous_price_cents,
+          seasonsDrafted: row.seasons_drafted,
+          trendCents:
+            row.previous_price_cents === null
+              ? null
+              : row.latest_price_cents - row.previous_price_cents,
+        })),
+        summary: {
+          latestSeason: summary.latest_season,
+          playerCount: summary.player_count,
+          purchaseCount: summary.purchase_count,
+          seasonCount: summary.season_count,
+          totalSpendCents: summary.total_spend_cents,
+        },
+      } satisfies HistoricalAuctionMarket;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'historical_auction_market',
+          'The historical auction market could not be loaded',
+        ),
+      ),
+    );
 
     const replaceHistoricalAuctions = (
       batch: HistoricalAuctionBatch,
@@ -189,10 +363,10 @@ const databaseServiceLayer = Layer.effect(
         `;
         if (ingestionRun === undefined) {
           return yield* Effect.fail(
-            new DatabaseUnavailable({
-              message: 'The historical auction import could not be completed',
-              operation: 'replace_historical_auctions',
-            }),
+            databaseUnavailable(
+              'replace_historical_auctions',
+              'The historical auction import could not be completed',
+            ),
           );
         }
 
@@ -230,10 +404,10 @@ const databaseServiceLayer = Layer.effect(
           `;
           if (record === undefined) {
             return yield* Effect.fail(
-              new DatabaseUnavailable({
-                message: 'The historical auction import could not be completed',
-                operation: 'replace_historical_auctions',
-              }),
+              databaseUnavailable(
+                'replace_historical_auctions',
+                'The historical auction import could not be completed',
+              ),
             );
           }
           seasonIds.set(season.seasonKey, record.id);
@@ -255,10 +429,10 @@ const databaseServiceLayer = Layer.effect(
             `;
             if (created === undefined) {
               return yield* Effect.fail(
-                new DatabaseUnavailable({
-                  message: 'The historical auction import could not be completed',
-                  operation: 'replace_historical_auctions',
-                }),
+                databaseUnavailable(
+                  'replace_historical_auctions',
+                  'The historical auction import could not be completed',
+                ),
               );
             }
             playerId = created.id;
@@ -351,15 +525,16 @@ const databaseServiceLayer = Layer.effect(
         };
       });
 
-      return sql.withTransaction(operation).pipe(
-        Effect.mapError(
-          () =>
-            new DatabaseUnavailable({
-              message: 'The historical auction import could not be completed',
-              operation: 'replace_historical_auctions',
-            }),
-        ),
-      );
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'replace_historical_auctions',
+              'The historical auction import could not be completed',
+            ),
+          ),
+        );
     };
 
     return Database.of({
@@ -367,24 +542,16 @@ const databaseServiceLayer = Layer.effect(
         Effect.flatMap(([row]) =>
           row === undefined
             ? Effect.fail(
-                new DatabaseUnavailable({
-                  message: 'The database health check did not return a result',
-                  operation: 'health',
-                }),
+                databaseUnavailable('health', 'The database health check did not return a result'),
               )
             : Effect.succeed({
                 status: 'ready' as const,
                 databaseTime: row.database_time,
               }),
         ),
-        Effect.mapError(
-          () =>
-            new DatabaseUnavailable({
-              message: 'The database health check failed',
-              operation: 'health',
-            }),
-        ),
+        Effect.mapError(() => databaseUnavailable('health', 'The database health check failed')),
       ),
+      historicalAuctionMarket,
       replaceHistoricalAuctions,
     });
   }),

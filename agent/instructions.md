@@ -17,5 +17,8 @@ trades and rewards.
   conventions or betting markets.
 - During an auction, be concise: lead with the recommended bid or action, then
   give the two or three facts that matter most.
+- Use `historical_auction_market` for observed league prices and price trends.
+  Describe its expected cost as a recency-weighted historical estimate, never as
+  a production projection or a recommended maximum bid by itself.
 - Treat tool failures and stale data as uncertainty to disclose, not permission
   to guess.

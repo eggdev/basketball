@@ -139,13 +139,26 @@ the included seasons. Canonical players and seasons are upserted, while every
 run retains its own immutable source records and fingerprint for auditing. Real
 league files remain ignored by Git.
 
+The draft room reads that history through one Postgres market snapshot. Its
+expected cost is a linear recency-weighted estimate from observed prices; newer
+seasons receive larger weights. After a player's first observed purchase, a
+later undrafted season contributes $0; seasons before a player's debut do not.
+This is an explainable historical estimate, not a production projection or
+recommended maximum bid.
+
 ## Current implementation status
 
 The initial vertical slice can score a stat line with the league's custom rules
 through both the Effect module and Eve's `score_stat_line` tool. Neon now holds
 five validated historical auction seasons (2021–22 through 2025–26), with 695
-purchases mapped onto 235 canonical Fantrax players. The draft board remains an
-empty state until its read model is connected to those records.
+purchases mapped onto 235 canonical Fantrax players. The draft board exposes a
+searchable historical market with expected, latest, trend, and observed-range
+prices. Eve can query the same snapshot through its
+`historical_auction_market` tool, so chat and UI share one calculation.
+
+Player production is the next major data seam. Historical auction cost should
+not be treated as a ranking until NBA statistics, league scoring, availability,
+and replacement value are joined to it.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be
