@@ -1,0 +1,26 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "eve": "0.58.1",
+    "next": "~16.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "nx": {
+    "implicitDependencies": [
+      "agent"
+    ],
+    "sourceRoot": "apps/web/src",
+    "targets": {
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "bunx tsc -p apps/web/tsconfig.json --noEmit",
+          "cwd": "."
+        }
+      }
+    }
+  }
+}

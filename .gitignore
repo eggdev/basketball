@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Local data and secrets
+data/cache/
+data/raw/
+data/normalized/
+data/reports/
+config/seasons.json
+tmp/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# JavaScript and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.next/
+out/
+.eve/
+.output/
+.nx/
+vitest.config.*.timestamp*
+
+# Local agent tooling
+.claude/worktrees/
+.claude/settings.local.json

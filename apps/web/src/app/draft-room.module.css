@@ -1,0 +1,255 @@
+.shell {
+  min-height: 100vh;
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 34%), #07111f;
+  color: #e5edf7;
+}
+
+.header,
+.sectionHeading,
+.composer > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header h1,
+.sectionHeading h2 {
+  margin: 0;
+  letter-spacing: -0.035em;
+}
+
+.header h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #7dd3fc;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.status,
+.agentStatus {
+  color: #a7b5c8;
+  font-size: 0.8rem;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #fbbf24;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.7);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 28px 0 18px;
+}
+
+.facts article,
+.board,
+.chat {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 28, 46, 0.82);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.2);
+}
+
+.facts article {
+  padding: 16px;
+  border-radius: 14px;
+}
+
+.facts p {
+  margin: 0;
+  color: #8fa1b8;
+  font-size: 0.75rem;
+}
+
+.facts strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 1.35rem;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(340px, 0.8fr);
+  gap: 18px;
+  min-height: 620px;
+}
+
+.board,
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.sectionHeading {
+  min-height: 82px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.sectionHeading h2 {
+  font-size: 1.15rem;
+}
+
+.sectionHeading button,
+.composer button {
+  border-radius: 9px;
+  padding: 10px 14px;
+  background: #38bdf8;
+  color: #07111f;
+  font-weight: 750;
+}
+
+.sectionHeading button:disabled {
+  background: #24364d;
+  color: #7e8da1;
+}
+
+.emptyState {
+  display: grid;
+  place-content: center;
+  flex: 1;
+  padding: 48px;
+  text-align: center;
+}
+
+.emptyState p {
+  margin: 0 0 9px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.emptyState span {
+  max-width: 500px;
+  color: #8fa1b8;
+  line-height: 1.6;
+}
+
+.messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 380px;
+  max-height: 530px;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.chatEmpty {
+  margin: auto;
+  max-width: 340px;
+  color: #8fa1b8;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.userMessage,
+.agentMessage {
+  max-width: 88%;
+  padding: 11px 13px;
+  border-radius: 13px;
+}
+
+.userMessage {
+  align-self: flex-end;
+  background: #075985;
+}
+
+.agentMessage {
+  align-self: flex-start;
+  background: #1b2c42;
+}
+
+.userMessage small,
+.agentMessage small {
+  color: #a9c4da;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.userMessage p,
+.agentMessage p {
+  margin: 5px 0 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.error {
+  margin: 0 18px;
+  color: #fca5a5;
+  font-size: 0.8rem;
+}
+
+.composer {
+  padding: 16px 18px 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.composer label {
+  display: block;
+  margin-bottom: 7px;
+  color: #8fa1b8;
+  font-size: 0.72rem;
+}
+
+.composer input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #30455f;
+  border-radius: 9px;
+  outline: none;
+  background: #091522;
+  color: #e5edf7;
+}
+
+.composer input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.composer button:disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    padding: 18px;
+  }
+
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}

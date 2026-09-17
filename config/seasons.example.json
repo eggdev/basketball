@@ -1,0 +1,18 @@
+{
+  "sport": "NBA",
+  "base_budget": 200,
+  "expected_roster_size": 13,
+  "seasons": [
+    {
+      "season": "2024-25",
+      "league_id": "replace-with-historical-fantrax-league-id",
+      "auction_csv": "data/raw/auctions/2024-25.csv",
+      "status": "historical"
+    },
+    {
+      "season": "2025-26",
+      "league_id": "replace-with-current-fantrax-league-id",
+      "status": "live"
+    }
+  ]
+}

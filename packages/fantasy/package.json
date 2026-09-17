@@ -1,0 +1,43 @@
+{
+  "name": "@fantasy-basketball/fantasy",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "effect": "^3.0.0",
+    "tslib": "^2.3.0"
+  },
+  "nx": {
+    "name": "fantasy",
+    "sourceRoot": "packages/fantasy/src",
+    "projectType": "library",
+    "targets": {
+      "build": {
+        "executor": "@nx/js:tsc",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "dist/packages/fantasy",
+          "main": "packages/fantasy/src/index.ts",
+          "tsConfig": "packages/fantasy/tsconfig.lib.json",
+          "assets": [
+            "packages/fantasy/*.md"
+          ]
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "bunx tsc -p packages/fantasy/tsconfig.lib.json --noEmit",
+          "cwd": "."
+        }
+      }
+    }
+  }
+}
