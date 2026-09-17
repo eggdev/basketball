@@ -171,7 +171,10 @@ The versioned `config/league-format.json` captures the lineup shape separately
 from player eligibility. The current format has ten active slots and three
 reserve slots within the 13-player roster limit, plus one IR slot that does not
 count toward that limit. That produces 120 active slots, 156 standard roster
-spots, and 168 maximum player holdings across the league.
+spots, and 168 maximum player holdings across the league. Lineups can be
+changed daily, so later valuation runs must account for schedule density and
+usable bench games rather than treating the ten active slots as a fixed weekly
+lineup.
 
 ## Current implementation status
 

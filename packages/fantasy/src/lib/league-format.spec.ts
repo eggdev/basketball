@@ -8,6 +8,7 @@ const format = {
   version: 1,
   applies_to_seasons: ['2025-26'],
   team_count: 12,
+  lineup_change_frequency: 'daily',
   roster_restrictions: {
     minimum_total_players: 0,
     maximum_total_players: 13,
@@ -83,6 +84,7 @@ describe('evaluateLeagueFormat', () => {
       leagueInjuryReserveSlots: 12,
       leagueMaxPlayerHoldings: 168,
       leagueRosterSpots: 156,
+      lineupChangeFrequency: 'daily',
       maxTeamPlayerHoldings: 14,
       rosterRestrictions: {
         maximumMinorLeaguePlayers: 0,

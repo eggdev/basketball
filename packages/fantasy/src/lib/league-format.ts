@@ -37,6 +37,7 @@ export interface RosterRestrictions {
 
 export interface LeagueFormat {
   readonly appliesToSeasons: ReadonlyArray<string>;
+  readonly lineupChangeFrequency: 'daily';
   readonly lineupSlots: ReadonlyArray<LeagueLineupSlot>;
   readonly name: string;
   readonly rosterRestrictions: RosterRestrictions;
@@ -117,6 +118,11 @@ export const evaluateLeagueFormat = (
       const name = requiredString(config['name'], 'name');
       const version = positiveInteger(config['version'], 'version');
       const teamCount = positiveInteger(config['team_count'], 'team_count');
+      const lineupChangeFrequency = oneOf(
+        config['lineup_change_frequency'],
+        ['daily'] as const,
+        'lineup_change_frequency',
+      );
 
       const roster = requiredObject(config['roster_restrictions'], 'roster_restrictions');
       const injuryReserve = requiredObject(
@@ -266,6 +272,7 @@ export const evaluateLeagueFormat = (
 
       const format = {
         appliesToSeasons,
+        lineupChangeFrequency,
         lineupSlots,
         name,
         rosterRestrictions,
