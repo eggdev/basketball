@@ -15,6 +15,7 @@ import {
 
 import { authClient } from '../lib/auth-client';
 import styles from './app-shell.module.css';
+import { ChatMarkdown } from './chat-markdown';
 
 export interface AppViewer {
   readonly email: string;
@@ -489,7 +490,11 @@ export function AppShell({
                 >
                   <small>{item.role === 'user' ? 'You' : 'Eve'}</small>
                   {item.parts.map((part, index) =>
-                    part.type === 'text' ? <p key={index}>{part.text}</p> : null,
+                    part.type !== 'text' ? null : item.role === 'assistant' ? (
+                      <ChatMarkdown key={index}>{part.text}</ChatMarkdown>
+                    ) : (
+                      <p key={index}>{part.text}</p>
+                    ),
                   )}
                 </article>
               ))

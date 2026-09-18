@@ -9,6 +9,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import { AppShell, describeEveError, getLatestEveTurnError } from '../src/app/app-shell';
+import { ChatMarkdown } from '../src/app/chat-markdown';
 import { LeagueView } from '../src/app/league/league-view';
 import { ManagersView } from '../src/app/managers/managers-view';
 import { PlayersView } from '../src/app/players/players-view';
@@ -256,6 +257,37 @@ const renderInShell = (child: React.ReactNode) =>
   render(<AppShell viewer={viewer}>{child}</AppShell>);
 
 describe('route workspace', () => {
+  it('renders Eve output as safe GitHub-flavored Markdown', () => {
+    const { container } = render(
+      <ChatMarkdown>{`## Draft plan
+
+Target **Nikola Jokic**.
+
+- Cap: \`$92\`
+- [Market notes](https://example.com/market)
+
+| Player | Cost |
+| --- | ---: |
+| Jokic | $92 |
+
+\`\`\`text
+Bid with $93 remaining
+\`\`\`
+
+<span data-unsafe="true">untrusted HTML</span>`}</ChatMarkdown>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Draft plan' })).toBeTruthy();
+    expect(screen.getByText('Nikola Jokic').tagName).toBe('STRONG');
+    expect(screen.getByRole('table')).toBeTruthy();
+    expect(screen.getByText('Bid with $93 remaining').tagName).toBe('CODE');
+    expect(container.querySelector('span[data-unsafe="true"]')).toBeNull();
+
+    const link = screen.getByRole('link', { name: 'Market notes' });
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noreferrer noopener');
+  });
+
   it('turns model-provider failures into an actionable Eve message', () => {
     expect(
       describeEveError(

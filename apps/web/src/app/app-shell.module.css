@@ -400,6 +400,164 @@
   margin-top: 8px;
 }
 
+.markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child,
+.markdown > :first-child > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child,
+.markdown > :last-child > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdownTable {
+  margin: 0 0 10px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 16px 0 7px;
+  color: #e5edf7;
+  line-height: 1.25;
+}
+
+.markdown h1 {
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  font-size: 1rem;
+}
+
+.markdown h2 {
+  font-size: 0.9rem;
+}
+
+.markdown h3,
+.markdown h4 {
+  font-size: 0.8rem;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 20px;
+}
+
+.markdown li {
+  padding-left: 2px;
+}
+
+.markdown li + li {
+  margin-top: 4px;
+}
+
+.markdown li > p {
+  margin-bottom: 4px;
+}
+
+.markdown blockquote {
+  padding: 7px 10px;
+  border-left: 3px solid rgba(56, 189, 248, 0.55);
+  background: rgba(56, 189, 248, 0.06);
+  color: #a8bad0;
+}
+
+.markdown a {
+  color: #7dd3fc;
+  text-decoration: underline;
+  text-decoration-color: rgba(125, 211, 252, 0.4);
+  text-underline-offset: 2px;
+}
+
+.markdown a:hover {
+  color: #bae6fd;
+  text-decoration-color: currentColor;
+}
+
+.markdown code {
+  padding: 1px 4px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 4px;
+  background: rgba(2, 8, 18, 0.72);
+  color: #bae6fd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.66rem;
+}
+
+.markdown pre {
+  max-width: 100%;
+  padding: 10px;
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: #040b14;
+}
+
+.markdown pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  line-height: 1.55;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.markdownTable {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+}
+
+.markdown table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.66rem;
+}
+
+.markdown th,
+.markdown td {
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.markdown th {
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+  font-size: 0.59rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown hr {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.markdown input[type='checkbox'] {
+  margin: 0 5px 0 0;
+  accent-color: #38bdf8;
+}
+
 .chatError {
   display: flex;
   align-items: flex-start;
