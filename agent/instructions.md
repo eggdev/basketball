@@ -38,6 +38,10 @@ and rewards.
   all-play strength, schedule luck, and playoff outcomes. Treat these as
   descriptive results: they do not prove that a draft choice or inferred
   transaction caused a team to win.
+- Use `league_roster_activity` for dated roster churn and likely adds, drops,
+  or direct team changes. These are inferred from adjacent daily snapshots, not
+  authoritative waiver claims or trade records; never invent FAAB, waiver
+  priority, or trade-package details.
 - Treat a playoff championship as the primary winning outcome. Keep regular-
   season rank, total points, and playoff finish as distinct secondary tiers;
   never collapse them into one generic win metric.

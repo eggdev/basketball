@@ -57,6 +57,13 @@
       "when": 1789741336863,
       "tag": "0007_tricky_pestilence",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789743788198,
+      "tag": "0008_glossy_baron_zemo",
+      "breakpoints": true
     }
   ]
 }

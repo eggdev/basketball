@@ -185,6 +185,15 @@ for evaluating performance but cannot by itself identify or attribute a trade or
 waiver transaction; that requires a separate transaction ledger or dated roster
 snapshots.
 
+Daily Fantrax roster periods form a separate ownership-history layer. Run
+`bun run rosters:validate` to cache and validate all configured historical periods,
+then `bun run rosters:import` to commit them. The importer uses each season's first
+populated roster as its baseline and derives later adds, drops, and immediate
+team-to-team movements without treating lineup-slot changes as transactions. The
+Waiver Research route and Eve expose this activity with an explicit inference label:
+the public API does not reveal waiver priority, FAAB, trade packages, or authoritative
+transaction types.
+
 ## Player production and historical scoring
 
 Historical regular-season production is imported from BALLDONTLIE and kept

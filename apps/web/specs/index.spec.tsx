@@ -4,6 +4,7 @@ import type {
   HistoricalRankingSnapshot,
   LatestProjectionSnapshot,
   LeaguePerformanceHistory,
+  LeagueRosterActivityHistory,
   LeagueRosterSnapshot,
   LeagueTeamHistory,
 } from '@fantasy-basketball/database/runtime';
@@ -316,6 +317,59 @@ const performanceHistory = {
   },
 } satisfies LeaguePerformanceHistory;
 
+const rosterActivityHistory = {
+  seasons: [
+    {
+      baselineRosterPeriod: 2,
+      changeCount: 3,
+      changes: [
+        {
+          changeType: 'add' as const,
+          fromTeam: null,
+          observedAt: '2025-11-02T00:00:00.000Z',
+          playerId: 'player-2',
+          playerName: 'Shai Gilgeous-Alexander',
+          previousRosterPeriod: 10,
+          rosterPeriod: 11,
+          toTeam: {
+            managerName: 'Manager One',
+            teamName: 'Moon Shots',
+            teamSeasonId: 'team-season-1',
+          },
+        },
+      ],
+      entryCount: 2_100,
+      seasonKey: '2025-26',
+      snapshotCount: 167,
+      teams: [
+        {
+          addCount: 2,
+          departureCount: 1,
+          dropCount: 1,
+          leagueMemberId: 'member-1',
+          managerName: 'Manager One',
+          outcome: {
+            madePlayoffs: true,
+            postseasonResult: 'runner-up' as const,
+            rank: 1,
+          },
+          teamName: 'Moon Shots',
+          teamSeasonId: 'team-season-1',
+          totalAcquisitionCount: 2,
+          transferInCount: 0,
+          transferOutCount: 0,
+        },
+      ],
+    },
+  ],
+  summary: {
+    changeCount: 3,
+    latestSeason: '2025-26',
+    seasonCount: 1,
+    snapshotCount: 167,
+  },
+} satisfies LeagueRosterActivityHistory;
+
 const teamHistory = {
   members: [
     {
@@ -561,6 +615,7 @@ Bid with $93 remaining
   it('labels undrafted production as a historical waiver proxy', () => {
     renderInShell(
       <WaiversView
+        activity={rosterActivityHistory}
         authenticated
         market={market}
         rankings={rankings}
@@ -568,8 +623,12 @@ Bid with $93 remaining
       />,
     );
 
-    expect(screen.getByText('Not the live waiver wire')).toBeTruthy();
-    expect(screen.getByText('Shai Gilgeous-Alexander')).toBeTruthy();
+    expect(screen.getByText('Roster changes, not confirmed transactions')).toBeTruthy();
+    expect(screen.getByText('Inferred roster activity')).toBeTruthy();
+    expect(screen.getByText('Winning behavior signals')).toBeTruthy();
+    expect(screen.getByText('Added')).toBeTruthy();
+    expect(screen.getByText('Runner-up · #1')).toBeTruthy();
+    expect(screen.getAllByText('Shai Gilgeous-Alexander')).toHaveLength(2);
     expect(screen.queryByText('Nikola Jokic')).toBeNull();
   });
 });

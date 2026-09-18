@@ -306,6 +306,105 @@ export const leagueMatchups = fantasySchema.table(
   ],
 );
 
+export const rosterPeriodSnapshots = fantasySchema.table(
+  'roster_period_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    leagueSeasonId: uuid('league_season_id')
+      .notNull()
+      .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
+      onDelete: 'set null',
+    }),
+    rosterPeriod: integer('roster_period').notNull(),
+    periodStartAt: timestamp('period_start_at', { withTimezone: true }).notNull(),
+    periodEndAt: timestamp('period_end_at', { withTimezone: true }).notNull(),
+    isBaseline: boolean('is_baseline').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('roster_period_snapshots_season_period_unique').on(
+      table.leagueSeasonId,
+      table.rosterPeriod,
+    ),
+    index('roster_period_snapshots_season_start_idx').on(table.leagueSeasonId, table.periodStartAt),
+  ],
+);
+
+export const rosterPeriodEntries = fantasySchema.table(
+  'roster_period_entries',
+  {
+    snapshotId: uuid('snapshot_id')
+      .notNull()
+      .references(() => rosterPeriodSnapshots.id, { onDelete: 'cascade' }),
+    leagueTeamSeasonId: uuid('league_team_season_id')
+      .notNull()
+      .references(() => leagueTeamSeasons.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'cascade' }),
+    position: text('position').notNull(),
+    status: text('status').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.snapshotId, table.playerId] }),
+    index('roster_period_entries_team_idx').on(table.leagueTeamSeasonId),
+    index('roster_period_entries_player_idx').on(table.playerId),
+  ],
+);
+
+export const inferredRosterChanges = fantasySchema.table(
+  'inferred_roster_changes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    leagueSeasonId: uuid('league_season_id')
+      .notNull()
+      .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    previousSnapshotId: uuid('previous_snapshot_id')
+      .notNull()
+      .references(() => rosterPeriodSnapshots.id, { onDelete: 'cascade' }),
+    snapshotId: uuid('snapshot_id')
+      .notNull()
+      .references(() => rosterPeriodSnapshots.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'cascade' }),
+    fromTeamSeasonId: uuid('from_team_season_id').references(() => leagueTeamSeasons.id, {
+      onDelete: 'cascade',
+    }),
+    toTeamSeasonId: uuid('to_team_season_id').references(() => leagueTeamSeasons.id, {
+      onDelete: 'cascade',
+    }),
+    previousRosterPeriod: integer('previous_roster_period').notNull(),
+    rosterPeriod: integer('roster_period').notNull(),
+    observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),
+    changeType: text('change_type').notNull(),
+    fromPosition: text('from_position'),
+    fromStatus: text('from_status'),
+    toPosition: text('to_position'),
+    toStatus: text('to_status'),
+    inferenceMethod: text('inference_method').notNull().default('adjacent-roster-delta'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('inferred_roster_changes_season_period_player_unique').on(
+      table.leagueSeasonId,
+      table.rosterPeriod,
+      table.playerId,
+    ),
+    index('inferred_roster_changes_from_team_idx').on(table.fromTeamSeasonId),
+    index('inferred_roster_changes_to_team_idx').on(table.toTeamSeasonId),
+    index('inferred_roster_changes_season_observed_idx').on(table.leagueSeasonId, table.observedAt),
+  ],
+);
+
 export const projectionSnapshots = fantasySchema.table(
   'projection_snapshots',
   {

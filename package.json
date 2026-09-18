@@ -20,6 +20,8 @@
     "lint": "nx run-many -t lint",
     "performance:import": "nx run importer:league-performance-import -- --commit",
     "performance:validate": "nx run importer:league-performance-import",
+    "rosters:import": "nx run importer:roster-history-import -- --commit",
+    "rosters:validate": "nx run importer:roster-history-import",
     "production:import": "nx run importer:production-import -- --commit",
     "production:validate": "nx run importer:production-import",
     "projections:import": "nx run importer:projection-import -- --commit",

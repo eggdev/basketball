@@ -87,3 +87,27 @@ Fantrax matchup scores are weekly scoring-period totals, not daily results. The 
 derives schedule-neutral all-play percentage, expected wins, schedule luck, scoring
 consistency, and active games from those weekly totals. These metrics describe team
 performance; they do not prove which draft pick, trade, or waiver move caused it.
+
+## Fantrax daily roster history
+
+The v1.8 public API does not expose an authoritative transaction endpoint. It does
+expose historical daily rosters through `getTeamRosters`, so the importer stores every
+roster period and derives ownership changes between adjacent snapshots:
+
+```sh
+bun run rosters:validate
+bun run rosters:import
+```
+
+The first populated period in each season is a baseline rather than hundreds of
+acquisitions. Later ownership appearances are labeled as inferred adds, disappearances
+as drops, and immediate team-to-team movements as team changes. Active, reserve, IR,
+and eligible-position changes on the same team remain in the snapshots but are not
+misclassified as transactions.
+
+Responses are cached under `cache/fantrax/<season>/roster-periods/`. Missing responses
+are fetched at a conservative one request per second with retry backoff; pass
+`--request-interval-ms=...` only when deliberately changing that behavior. These
+records cannot reveal waiver priority, FAAB, multi-player trade packages, or Fantrax's
+official transaction label, so the UI and Eve consistently call them inferred roster
+activity.

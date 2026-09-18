@@ -27,6 +27,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'latest_adp_snapshot'
     | 'latest_projection_snapshot'
     | 'league_performance_history'
+    | 'league_roster_activity'
     | 'league_roster_snapshot'
     | 'pre_draft_workspace'
     | 'reconcile_league_team_identity'
@@ -37,6 +38,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'replace_player_production'
     | 'save_fantrax_adp_snapshot'
     | 'save_league_performance'
+    | 'save_league_roster_history'
     | 'save_pre_draft_plan'
     | 'save_pre_draft_target'
     | 'save_projection_snapshot';
@@ -392,6 +394,122 @@ export interface LeaguePerformanceImportResult {
   readonly standingCount: number;
 }
 
+export type InferredRosterChangeType = 'add' | 'drop' | 'team-change';
+
+export interface LeagueRosterHistoryBatch {
+  readonly changes: ReadonlyArray<{
+    readonly changeType: InferredRosterChangeType;
+    readonly fantraxId: string;
+    readonly fromPosition: string | null;
+    readonly fromStatus: string | null;
+    readonly fromTeamId: string | null;
+    readonly leagueId: string;
+    readonly observedAt: string;
+    readonly previousRosterPeriod: number;
+    readonly rosterPeriod: number;
+    readonly seasonKey: string;
+    readonly toPosition: string | null;
+    readonly toStatus: string | null;
+    readonly toTeamId: string | null;
+  }>;
+  readonly fingerprint: string;
+  readonly players: ReadonlyArray<{
+    readonly canonicalName: string;
+    readonly fantraxId: string;
+    readonly normalizedName: string;
+    readonly sourceName: string;
+  }>;
+  readonly seasons: ReadonlyArray<{
+    readonly baselineRosterPeriod: number;
+    readonly leagueHistoryId: string;
+    readonly leagueId: string;
+    readonly seasonKey: string;
+  }>;
+  readonly snapshots: ReadonlyArray<{
+    readonly entries: ReadonlyArray<{
+      readonly fantraxId: string;
+      readonly position: string;
+      readonly sourceTeamId: string;
+      readonly status: string;
+    }>;
+    readonly leagueId: string;
+    readonly periodEndAt: string;
+    readonly periodStartAt: string;
+    readonly rosterPeriod: number;
+    readonly seasonKey: string;
+    readonly sourcePayload: Readonly<Record<string, unknown>>;
+  }>;
+  readonly source: 'fantrax-roster-history';
+}
+
+export interface LeagueRosterHistoryImportResult {
+  readonly alreadyImported: boolean;
+  readonly changeCount: number;
+  readonly ingestionRunId: string;
+  readonly newPlayerCount: number;
+  readonly playerCount: number;
+  readonly seasonCount: number;
+  readonly snapshotCount: number;
+  readonly snapshotEntryCount: number;
+}
+
+export interface LeagueRosterActivityChange {
+  readonly changeType: InferredRosterChangeType;
+  readonly fromTeam: {
+    readonly managerName: string | null;
+    readonly teamName: string;
+    readonly teamSeasonId: string;
+  } | null;
+  readonly observedAt: string;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly previousRosterPeriod: number;
+  readonly rosterPeriod: number;
+  readonly toTeam: {
+    readonly managerName: string | null;
+    readonly teamName: string;
+    readonly teamSeasonId: string;
+  } | null;
+}
+
+export interface LeagueRosterActivityTeam {
+  readonly addCount: number;
+  readonly departureCount: number;
+  readonly dropCount: number;
+  readonly leagueMemberId: string | null;
+  readonly managerName: string | null;
+  readonly outcome: {
+    readonly madePlayoffs: boolean;
+    readonly postseasonResult: LeaguePostseasonResult;
+    readonly rank: number;
+  } | null;
+  readonly teamName: string;
+  readonly teamSeasonId: string;
+  readonly totalAcquisitionCount: number;
+  readonly transferInCount: number;
+  readonly transferOutCount: number;
+}
+
+export interface LeagueRosterActivitySeason {
+  readonly baselineRosterPeriod: number;
+  readonly changeCount: number;
+  readonly changes: ReadonlyArray<LeagueRosterActivityChange>;
+  readonly entryCount: number;
+  readonly seasonKey: string;
+  readonly snapshotCount: number;
+  readonly teams: ReadonlyArray<LeagueRosterActivityTeam>;
+}
+
+export interface LeagueRosterActivityHistory {
+  readonly seasons: ReadonlyArray<LeagueRosterActivitySeason>;
+  readonly summary: {
+    readonly changeCount: number;
+    readonly latestSeason: string | null;
+    readonly seasonCount: number;
+    readonly snapshotCount: number;
+  };
+}
+
 export interface LeagueRosterPlayer {
   readonly auctionCostCents: number;
   readonly nominationOrder: number | null;
@@ -739,6 +857,7 @@ export interface DatabaseService {
     DatabaseUnavailable
   >;
   readonly leaguePerformanceHistory: Effect.Effect<LeaguePerformanceHistory, DatabaseUnavailable>;
+  readonly leagueRosterActivity: Effect.Effect<LeagueRosterActivityHistory, DatabaseUnavailable>;
   readonly leagueRosterSnapshot: Effect.Effect<LeagueRosterSnapshot, DatabaseUnavailable>;
   readonly leagueTeamHistory: Effect.Effect<LeagueTeamHistory, DatabaseUnavailable>;
   readonly preDraftWorkspace: (
@@ -770,6 +889,9 @@ export interface DatabaseService {
   readonly saveLeaguePerformance: (
     batch: LeaguePerformanceBatch,
   ) => Effect.Effect<LeaguePerformanceImportResult, DatabaseUnavailable>;
+  readonly saveLeagueRosterHistory: (
+    batch: LeagueRosterHistoryBatch,
+  ) => Effect.Effect<LeagueRosterHistoryImportResult, DatabaseUnavailable>;
   readonly savePreDraftPlan: (
     input: SavePreDraftPlanInput,
   ) => Effect.Effect<PreDraftPlan, DatabaseUnavailable>;
@@ -1839,6 +1961,235 @@ const databaseServiceLayer = Layer.effect(
         databaseUnavailable(
           'league_performance_history',
           'The league performance history could not be loaded',
+        ),
+      ),
+    );
+
+    const leagueRosterActivity = Effect.gen(function* () {
+      const seasonRows = yield* sql<{
+        baseline_roster_period: number;
+        change_count: number;
+        entry_count: number;
+        season_key: string;
+        snapshot_count: number;
+      }>`
+        with snapshot_summary as (
+          select
+            snapshots.league_season_id,
+            min(snapshots.roster_period) filter (where snapshots.is_baseline)::integer
+              as baseline_roster_period,
+            count(*)::integer as snapshot_count
+          from fantasy.roster_period_snapshots snapshots
+          group by snapshots.league_season_id
+        ),
+        entry_summary as (
+          select
+            snapshots.league_season_id,
+            count(*)::integer as entry_count
+          from fantasy.roster_period_entries entries
+          join fantasy.roster_period_snapshots snapshots on snapshots.id = entries.snapshot_id
+          group by snapshots.league_season_id
+        ),
+        change_summary as (
+          select league_season_id, count(*)::integer as change_count
+          from fantasy.inferred_roster_changes
+          group by league_season_id
+        )
+        select
+          ls.season_key,
+          snapshot_summary.baseline_roster_period,
+          snapshot_summary.snapshot_count,
+          coalesce(entry_summary.entry_count, 0)::integer as entry_count,
+          coalesce(change_summary.change_count, 0)::integer as change_count
+        from snapshot_summary
+        join fantasy.league_seasons ls on ls.id = snapshot_summary.league_season_id
+        left join entry_summary on entry_summary.league_season_id = ls.id
+        left join change_summary on change_summary.league_season_id = ls.id
+        order by ls.season_key desc
+      `;
+      const teamRows = yield* sql<{
+        add_count: number;
+        drop_count: number;
+        league_member_id: string | null;
+        made_playoffs: boolean | null;
+        manager_name: string | null;
+        postseason_result: LeaguePostseasonResult | null;
+        rank: number | null;
+        season_key: string;
+        team_name: string;
+        team_season_id: string;
+        transfer_in_count: number;
+        transfer_out_count: number;
+      }>`
+        select
+          ls.season_key,
+          lts.id as team_season_id,
+          lts.team_name,
+          lts.league_member_id,
+          lm.display_name as manager_name,
+          standings.rank,
+          standings.made_playoffs,
+          standings.postseason_result,
+          count(changes.id) filter (
+            where changes.change_type = 'add' and changes.to_team_season_id = lts.id
+          )::integer as add_count,
+          count(changes.id) filter (
+            where changes.change_type = 'drop' and changes.from_team_season_id = lts.id
+          )::integer as drop_count,
+          count(changes.id) filter (
+            where changes.change_type = 'team-change' and changes.to_team_season_id = lts.id
+          )::integer as transfer_in_count,
+          count(changes.id) filter (
+            where changes.change_type = 'team-change' and changes.from_team_season_id = lts.id
+          )::integer as transfer_out_count
+        from fantasy.league_team_seasons lts
+        join fantasy.league_seasons ls on ls.id = lts.league_season_id
+        left join fantasy.league_members lm on lm.id = lts.league_member_id
+        left join fantasy.league_team_standings standings
+          on standings.league_team_season_id = lts.id
+        left join fantasy.inferred_roster_changes changes
+          on changes.from_team_season_id = lts.id or changes.to_team_season_id = lts.id
+        where exists (
+          select 1
+          from fantasy.roster_period_snapshots snapshots
+          where snapshots.league_season_id = ls.id
+        )
+        group by
+          ls.season_key,
+          lts.id,
+          lts.team_name,
+          lts.league_member_id,
+          lm.display_name,
+          standings.rank,
+          standings.made_playoffs,
+          standings.postseason_result
+        order by ls.season_key desc, add_count desc, transfer_in_count desc, lts.team_name
+      `;
+      const changeRows = yield* sql<{
+        change_type: InferredRosterChangeType;
+        from_manager_name: string | null;
+        from_team_name: string | null;
+        from_team_season_id: string | null;
+        observed_at: string;
+        player_id: string;
+        player_name: string;
+        previous_roster_period: number;
+        roster_period: number;
+        season_key: string;
+        to_manager_name: string | null;
+        to_team_name: string | null;
+        to_team_season_id: string | null;
+      }>`
+        select
+          ls.season_key,
+          changes.previous_roster_period,
+          changes.roster_period,
+          changes.observed_at::text,
+          changes.change_type,
+          p.id as player_id,
+          p.canonical_name as player_name,
+          from_team.id as from_team_season_id,
+          from_team.team_name as from_team_name,
+          from_member.display_name as from_manager_name,
+          to_team.id as to_team_season_id,
+          to_team.team_name as to_team_name,
+          to_member.display_name as to_manager_name
+        from fantasy.inferred_roster_changes changes
+        join fantasy.league_seasons ls on ls.id = changes.league_season_id
+        join fantasy.players p on p.id = changes.player_id
+        left join fantasy.league_team_seasons from_team
+          on from_team.id = changes.from_team_season_id
+        left join fantasy.league_members from_member
+          on from_member.id = from_team.league_member_id
+        left join fantasy.league_team_seasons to_team
+          on to_team.id = changes.to_team_season_id
+        left join fantasy.league_members to_member
+          on to_member.id = to_team.league_member_id
+        order by ls.season_key desc, changes.roster_period desc, p.canonical_name
+      `;
+
+      const teamsBySeason = new Map<string, LeagueRosterActivityTeam[]>();
+      for (const row of teamRows) {
+        const teams = teamsBySeason.get(row.season_key) ?? [];
+        teams.push({
+          addCount: row.add_count,
+          departureCount: row.drop_count + row.transfer_out_count,
+          dropCount: row.drop_count,
+          leagueMemberId: row.league_member_id,
+          managerName: row.manager_name,
+          outcome:
+            row.rank === null ||
+            row.made_playoffs === null ||
+            row.postseason_result === null
+              ? null
+              : {
+                  madePlayoffs: row.made_playoffs,
+                  postseasonResult: row.postseason_result,
+                  rank: row.rank,
+                },
+          teamName: row.team_name,
+          teamSeasonId: row.team_season_id,
+          totalAcquisitionCount: row.add_count + row.transfer_in_count,
+          transferInCount: row.transfer_in_count,
+          transferOutCount: row.transfer_out_count,
+        });
+        teamsBySeason.set(row.season_key, teams);
+      }
+      const changesBySeason = new Map<string, LeagueRosterActivityChange[]>();
+      for (const row of changeRows) {
+        const changes = changesBySeason.get(row.season_key) ?? [];
+        changes.push({
+          changeType: row.change_type,
+          fromTeam:
+            row.from_team_season_id === null || row.from_team_name === null
+              ? null
+              : {
+                  managerName: row.from_manager_name,
+                  teamName: row.from_team_name,
+                  teamSeasonId: row.from_team_season_id,
+                },
+          observedAt: row.observed_at,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          previousRosterPeriod: row.previous_roster_period,
+          rosterPeriod: row.roster_period,
+          toTeam:
+            row.to_team_season_id === null || row.to_team_name === null
+              ? null
+              : {
+                  managerName: row.to_manager_name,
+                  teamName: row.to_team_name,
+                  teamSeasonId: row.to_team_season_id,
+                },
+        });
+        changesBySeason.set(row.season_key, changes);
+      }
+      const seasons = seasonRows.map(
+        (row): LeagueRosterActivitySeason => ({
+          baselineRosterPeriod: row.baseline_roster_period,
+          changeCount: row.change_count,
+          changes: changesBySeason.get(row.season_key) ?? [],
+          entryCount: row.entry_count,
+          seasonKey: row.season_key,
+          snapshotCount: row.snapshot_count,
+          teams: teamsBySeason.get(row.season_key) ?? [],
+        }),
+      );
+
+      return {
+        seasons,
+        summary: {
+          changeCount: seasons.reduce((count, season) => count + season.changeCount, 0),
+          latestSeason: seasons[0]?.seasonKey ?? null,
+          seasonCount: seasons.length,
+          snapshotCount: seasons.reduce((count, season) => count + season.snapshotCount, 0),
+        },
+      } satisfies LeagueRosterActivityHistory;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'league_roster_activity',
+          'The inferred league roster activity could not be loaded',
         ),
       ),
     );
@@ -3562,6 +3913,309 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const saveLeagueRosterHistory = (
+      batch: LeagueRosterHistoryBatch,
+    ): Effect.Effect<LeagueRosterHistoryImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [existingRun] = yield* sql<{
+          change_count: number;
+          id: string;
+          new_player_count: number;
+          player_count: number;
+          season_count: number;
+          snapshot_count: number;
+          snapshot_entry_count: number;
+        }>`
+          select
+            id,
+            coalesce((details ->> 'changeCount')::integer, 0) as change_count,
+            coalesce((details ->> 'newPlayerCount')::integer, 0) as new_player_count,
+            coalesce((details ->> 'playerCount')::integer, 0) as player_count,
+            coalesce((details ->> 'seasonCount')::integer, 0) as season_count,
+            coalesce((details ->> 'snapshotCount')::integer, 0) as snapshot_count,
+            coalesce((details ->> 'snapshotEntryCount')::integer, 0)
+              as snapshot_entry_count
+          from fantasy.ingestion_runs
+          where
+            source = ${batch.source}
+            and resource = 'roster-history'
+            and status = 'completed'
+            and details ->> 'fingerprint' = ${batch.fingerprint}
+          order by finished_at desc
+          limit 1
+        `;
+        if (existingRun !== undefined) {
+          return {
+            alreadyImported: true,
+            changeCount: existingRun.change_count,
+            ingestionRunId: existingRun.id,
+            newPlayerCount: existingRun.new_player_count,
+            playerCount: existingRun.player_count,
+            seasonCount: existingRun.season_count,
+            snapshotCount: existingRun.snapshot_count,
+            snapshotEntryCount: existingRun.snapshot_entry_count,
+          };
+        }
+
+        const snapshotEntryCount = batch.snapshots.reduce(
+          (count, snapshot) => count + snapshot.entries.length,
+          0,
+        );
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, status, record_count, details)
+          values
+            (
+              ${batch.source},
+              'roster-history',
+              'running',
+              ${batch.snapshots.length + snapshotEntryCount + batch.changes.length},
+              ${sql.json({
+                changeCount: batch.changes.length,
+                fingerprint: batch.fingerprint,
+                playerCount: batch.players.length,
+                seasonCount: batch.seasons.length,
+                snapshotCount: batch.snapshots.length,
+                snapshotEntryCount,
+              })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) {
+          throw new Error('Roster history ingestion run was not created');
+        }
+
+        const sourceLeagueIds = batch.seasons.map((season) => season.leagueId);
+        const leagueSeasonRows = yield* sql<{
+          id: string;
+          source_league_id: string;
+        }>`
+          select id, source_league_id
+          from fantasy.league_seasons
+          where source = 'fantrax' and source_league_id in ${sql.in(sourceLeagueIds)}
+        `;
+        if (leagueSeasonRows.length !== batch.seasons.length) {
+          throw new Error(
+            `Roster history resolved ${leagueSeasonRows.length}/${batch.seasons.length} league seasons`,
+          );
+        }
+        const leagueSeasonIds = new Map(
+          leagueSeasonRows.map((season) => [season.source_league_id, season.id]),
+        );
+        const teamSeasonRows = yield* sql<{
+          id: string;
+          source_league_id: string;
+          source_team_id: string;
+        }>`
+          select lts.id, ls.source_league_id, lts.source_team_id
+          from fantasy.league_team_seasons lts
+          join fantasy.league_seasons ls on ls.id = lts.league_season_id
+          where ls.id in ${sql.in(leagueSeasonRows.map((season) => season.id))}
+        `;
+        const teamSeasonIds = new Map(
+          teamSeasonRows.map((team) => [
+            `${team.source_league_id}:${team.source_team_id}`,
+            team.id,
+          ]),
+        );
+        const resolveTeamSeasonId = (leagueId: string, sourceTeamId: string): string => {
+          const teamSeasonId = teamSeasonIds.get(`${leagueId}:${sourceTeamId}`);
+          if (teamSeasonId === undefined) {
+            throw new Error(`${leagueId} references unknown roster team ${sourceTeamId}`);
+          }
+          return teamSeasonId;
+        };
+
+        const playerIds = new Map<string, string>();
+        let newPlayerCount = 0;
+        for (const player of batch.players) {
+          const [identity] = yield* sql<{ player_id: string }>`
+            select player_id
+            from fantasy.player_identities
+            where source = 'fantrax' and external_id = ${player.fantraxId}
+          `;
+          let playerId = identity?.player_id ?? null;
+          if (playerId === null) {
+            const nameMatches = yield* sql<{ id: string }>`
+              select id
+              from fantasy.players
+              where normalized_name = ${player.normalizedName}
+            `;
+            if (nameMatches.length > 1) {
+              throw new Error(`Canonical player ${player.canonicalName} is ambiguous`);
+            }
+            playerId = nameMatches[0]?.id ?? null;
+          }
+          if (playerId === null) {
+            const [created] = yield* sql<{ id: string }>`
+              insert into fantasy.players (canonical_name, normalized_name)
+              values (${player.canonicalName}, ${player.normalizedName})
+              returning id
+            `;
+            if (created === undefined) throw new Error(`${player.canonicalName} was not created`);
+            playerId = created.id;
+            newPlayerCount += 1;
+          }
+          yield* sql`
+            insert into fantasy.player_identities
+              (player_id, source, external_id, source_name)
+            values
+              (${playerId}, 'fantrax', ${player.fantraxId}, ${player.sourceName})
+            on conflict (source, external_id) do update set
+              source_name = excluded.source_name,
+              updated_at = now()
+          `;
+          playerIds.set(player.fantraxId, playerId);
+        }
+
+        yield* sql`
+          delete from fantasy.roster_period_snapshots
+          where league_season_id in ${sql.in(leagueSeasonRows.map((season) => season.id))}
+        `;
+
+        const sourceRecords = batch.snapshots.map((snapshot) => ({
+          captured_at: new Date(),
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: snapshot.sourcePayload,
+          source_record_id: `${snapshot.seasonKey}:roster-period:${snapshot.rosterPeriod}`,
+        }));
+        for (let index = 0; index < sourceRecords.length; index += 250) {
+          yield* sql`
+            insert into fantasy.source_records ${sql.insert(sourceRecords.slice(index, index + 250))}
+          `;
+        }
+
+        const baselineByLeague = new Map(
+          batch.seasons.map((season) => [season.leagueId, season.baselineRosterPeriod]),
+        );
+        const snapshotIds = new Map<string, string>();
+        const snapshotRecords = batch.snapshots.map((snapshot, index) => {
+          const leagueSeasonId = leagueSeasonIds.get(snapshot.leagueId);
+          const sourceRecord = sourceRecords[index];
+          if (leagueSeasonId === undefined || sourceRecord === undefined) {
+            throw new Error('Roster snapshot references are incomplete');
+          }
+          const id = randomUUID();
+          snapshotIds.set(`${snapshot.leagueId}:${snapshot.rosterPeriod}`, id);
+          return {
+            id,
+            ingestion_run_id: ingestionRun.id,
+            is_baseline: baselineByLeague.get(snapshot.leagueId) === snapshot.rosterPeriod,
+            league_season_id: leagueSeasonId,
+            period_end_at: new Date(snapshot.periodEndAt),
+            period_start_at: new Date(snapshot.periodStartAt),
+            roster_period: snapshot.rosterPeriod,
+            source_record_id: sourceRecord.id,
+          };
+        });
+        for (let index = 0; index < snapshotRecords.length; index += 500) {
+          yield* sql`
+            insert into fantasy.roster_period_snapshots ${sql.insert(snapshotRecords.slice(index, index + 500))}
+          `;
+        }
+
+        const entryRecords = batch.snapshots.flatMap((snapshot) => {
+          const snapshotId = snapshotIds.get(`${snapshot.leagueId}:${snapshot.rosterPeriod}`);
+          if (snapshotId === undefined) throw new Error('Roster snapshot ID is missing');
+          return snapshot.entries.map((entry) => {
+            const playerId = playerIds.get(entry.fantraxId);
+            if (playerId === undefined) {
+              throw new Error(`Roster player ${entry.fantraxId} was not resolved`);
+            }
+            return {
+              league_team_season_id: resolveTeamSeasonId(snapshot.leagueId, entry.sourceTeamId),
+              player_id: playerId,
+              position: entry.position,
+              snapshot_id: snapshotId,
+              status: entry.status,
+            };
+          });
+        });
+        for (let index = 0; index < entryRecords.length; index += 2_000) {
+          yield* sql`
+            insert into fantasy.roster_period_entries ${sql.insert(entryRecords.slice(index, index + 2_000))}
+          `;
+        }
+
+        const changeRecords = batch.changes.map((change) => {
+          const leagueSeasonId = leagueSeasonIds.get(change.leagueId);
+          const playerId = playerIds.get(change.fantraxId);
+          const previousSnapshotId = snapshotIds.get(
+            `${change.leagueId}:${change.previousRosterPeriod}`,
+          );
+          const snapshotId = snapshotIds.get(`${change.leagueId}:${change.rosterPeriod}`);
+          if (
+            leagueSeasonId === undefined ||
+            playerId === undefined ||
+            previousSnapshotId === undefined ||
+            snapshotId === undefined
+          ) {
+            throw new Error('Roster change references are incomplete');
+          }
+          return {
+            change_type: change.changeType,
+            from_position: change.fromPosition,
+            from_status: change.fromStatus,
+            from_team_season_id:
+              change.fromTeamId === null
+                ? null
+                : resolveTeamSeasonId(change.leagueId, change.fromTeamId),
+            id: randomUUID(),
+            ingestion_run_id: ingestionRun.id,
+            league_season_id: leagueSeasonId,
+            observed_at: new Date(change.observedAt),
+            player_id: playerId,
+            previous_roster_period: change.previousRosterPeriod,
+            previous_snapshot_id: previousSnapshotId,
+            roster_period: change.rosterPeriod,
+            snapshot_id: snapshotId,
+            to_position: change.toPosition,
+            to_status: change.toStatus,
+            to_team_season_id:
+              change.toTeamId === null
+                ? null
+                : resolveTeamSeasonId(change.leagueId, change.toTeamId),
+          };
+        });
+        for (let index = 0; index < changeRecords.length; index += 1_500) {
+          yield* sql`
+            insert into fantasy.inferred_roster_changes ${sql.insert(changeRecords.slice(index, index + 1_500))}
+          `;
+        }
+
+        yield* sql`
+          update fantasy.ingestion_runs
+          set
+            status = 'completed',
+            finished_at = now(),
+            details = details || ${sql.json({ newPlayerCount })}
+          where id = ${ingestionRun.id}
+        `;
+        return {
+          alreadyImported: false,
+          changeCount: batch.changes.length,
+          ingestionRunId: ingestionRun.id,
+          newPlayerCount,
+          playerCount: batch.players.length,
+          seasonCount: batch.seasons.length,
+          snapshotCount: batch.snapshots.length,
+          snapshotEntryCount,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'save_league_roster_history',
+              'The Fantrax roster history import could not be saved',
+            ),
+          ),
+        );
+    };
+
     const saveProjectionSnapshot = (
       batch: ProjectionSnapshotBatch,
     ): Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable> => {
@@ -3793,6 +4447,7 @@ const databaseServiceLayer = Layer.effect(
       latestAdpSnapshot,
       latestProjectionSnapshot,
       leaguePerformanceHistory,
+      leagueRosterActivity,
       leagueRosterSnapshot,
       leagueTeamHistory,
       playerProductionHistory,
@@ -3803,6 +4458,7 @@ const databaseServiceLayer = Layer.effect(
       replacePlayerProduction,
       saveFantraxAdpSnapshot,
       saveLeaguePerformance,
+      saveLeagueRosterHistory,
       savePreDraftPlan,
       savePreDraftTarget,
       saveProjectionSnapshot,
