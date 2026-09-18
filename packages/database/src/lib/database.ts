@@ -22,6 +22,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'canonical_player_identities'
     | 'health'
     | 'historical_auction_market'
+    | 'historical_rankings'
     | 'league_roster_snapshot'
     | 'reconcile_league_team_identity'
     | 'league_team_history'
@@ -118,6 +119,34 @@ export interface HistoricalAuctionMarket {
     readonly purchaseCount: number;
     readonly seasonCount: number;
     readonly totalSpendCents: number;
+  };
+}
+
+export interface HistoricalRankingPlayer {
+  readonly auctionCostCents: number | null;
+  readonly components: Readonly<Record<string, number>>;
+  readonly fantasyPoints: number;
+  readonly fantasyPointsPerGame: number;
+  readonly gamesPlayed: number;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly rank: number;
+}
+
+export interface HistoricalRankingSeason {
+  readonly modelVersion: string;
+  readonly players: ReadonlyArray<HistoricalRankingPlayer>;
+  readonly ruleSetName: string;
+  readonly ruleSetVersion: number;
+  readonly seasonKey: string;
+}
+
+export interface HistoricalRankingSnapshot {
+  readonly seasons: ReadonlyArray<HistoricalRankingSeason>;
+  readonly summary: {
+    readonly latestSeason: string | null;
+    readonly playerSeasonCount: number;
+    readonly seasonCount: number;
   };
 }
 
@@ -317,6 +346,7 @@ export interface DatabaseService {
   >;
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
+  readonly historicalRankings: Effect.Effect<HistoricalRankingSnapshot, DatabaseUnavailable>;
   readonly leagueRosterSnapshot: Effect.Effect<LeagueRosterSnapshot, DatabaseUnavailable>;
   readonly leagueTeamHistory: Effect.Effect<LeagueTeamHistory, DatabaseUnavailable>;
   readonly reconcileLeagueTeamIdentity: (
@@ -513,6 +543,109 @@ const databaseServiceLayer = Layer.effect(
         databaseUnavailable(
           'player_production_history',
           'The player production history could not be loaded',
+        ),
+      ),
+    );
+
+    const historicalRankings = Effect.gen(function* () {
+      const rows = yield* sql<{
+        auction_cost_cents: number | null;
+        components: Record<string, number>;
+        fantasy_points: number;
+        fantasy_points_per_game: number;
+        games_played: number;
+        model_version: string;
+        player_id: string;
+        player_name: string;
+        rank: number;
+        rule_set_name: string;
+        rule_set_version: number;
+        season_key: string;
+      }>`
+        with selected_runs as (
+          select
+            rr.id,
+            rr.model_version,
+            rr.season_key,
+            srs.league_season_id,
+            srs.name as rule_set_name,
+            srs.version as rule_set_version,
+            row_number() over (
+              partition by rr.season_key
+              order by srs.version desc, rr.created_at desc
+            )::integer as run_order
+          from fantasy.ranking_runs rr
+          join fantasy.scoring_rule_sets srs on srs.id = rr.scoring_rule_set_id
+          where rr.model = 'historical-actual'
+        )
+        select
+          sr.season_key,
+          sr.model_version,
+          sr.rule_set_name,
+          sr.rule_set_version,
+          pr.player_id,
+          p.canonical_name as player_name,
+          pr.rank,
+          pr.projected_points::double precision as fantasy_points,
+          pr.projected_points_per_game::double precision as fantasy_points_per_game,
+          coalesce((pr.explanation ->> 'gamesPlayed')::integer, 0) as games_played,
+          coalesce(pr.explanation -> 'components', '{}'::jsonb) as components,
+          ar.amount_cents as auction_cost_cents
+        from selected_runs sr
+        join fantasy.player_rankings pr on pr.ranking_run_id = sr.id
+        join fantasy.players p on p.id = pr.player_id
+        left join fantasy.auction_results ar
+          on ar.league_season_id = sr.league_season_id
+          and ar.player_id = pr.player_id
+        where sr.run_order = 1
+        order by sr.season_key desc, pr.rank, p.canonical_name
+      `;
+
+      const seasonsByKey = new Map<string, HistoricalRankingSeason>();
+      for (const row of rows) {
+        const player = {
+          auctionCostCents: row.auction_cost_cents,
+          components: row.components,
+          fantasyPoints: row.fantasy_points,
+          fantasyPointsPerGame: row.fantasy_points_per_game,
+          gamesPlayed: row.games_played,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          rank: row.rank,
+        } satisfies HistoricalRankingPlayer;
+        const season = seasonsByKey.get(row.season_key);
+        if (season === undefined) {
+          seasonsByKey.set(row.season_key, {
+            modelVersion: row.model_version,
+            players: [player],
+            ruleSetName: row.rule_set_name,
+            ruleSetVersion: row.rule_set_version,
+            seasonKey: row.season_key,
+          });
+        } else {
+          seasonsByKey.set(row.season_key, {
+            ...season,
+            players: [...season.players, player],
+          });
+        }
+      }
+
+      const seasons = [...seasonsByKey.values()].sort((left, right) =>
+        right.seasonKey.localeCompare(left.seasonKey),
+      );
+      return {
+        seasons,
+        summary: {
+          latestSeason: seasons[0]?.seasonKey ?? null,
+          playerSeasonCount: seasons.reduce((total, season) => total + season.players.length, 0),
+          seasonCount: seasons.length,
+        },
+      } satisfies HistoricalRankingSnapshot;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'historical_rankings',
+          'The historical fantasy rankings could not be loaded',
         ),
       ),
     );
@@ -1849,6 +1982,7 @@ const databaseServiceLayer = Layer.effect(
         Effect.mapError(() => databaseUnavailable('health', 'The database health check failed')),
       ),
       historicalAuctionMarket,
+      historicalRankings,
       leagueRosterSnapshot,
       leagueTeamHistory,
       playerProductionHistory,

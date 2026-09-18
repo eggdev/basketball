@@ -1,10 +1,49 @@
 import React from 'react';
+import type {
+  HistoricalAuctionMarket,
+  HistoricalRankingSnapshot,
+  LeagueRosterSnapshot,
+  LeagueTeamHistory,
+} from '@fantasy-basketball/database/runtime';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
-import Page from '../src/app/page';
+import { AppShell } from '../src/app/app-shell';
+import { LeagueView } from '../src/app/league/league-view';
+import { ManagersView } from '../src/app/managers/managers-view';
+import { PlayersView } from '../src/app/players/players-view';
+import { TradesView } from '../src/app/trades/trades-view';
+import { WaiversView } from '../src/app/waivers/waivers-view';
 
-const market = vi.hoisted(() => ({
+const send = vi.hoisted(() => vi.fn<() => Promise<void>>(() => Promise.resolve()));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/players',
+}));
+
+vi.mock('eve/react', () => ({
+  useEveAgent: () => ({
+    cancel: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    data: { messages: [] },
+    error: undefined,
+    reset: vi.fn<() => void>(),
+    send,
+    status: 'ready',
+  }),
+}));
+
+vi.mock('../src/app/actions', () => ({
+  reconcileTeamIdentityAction: vi.fn<() => Promise<void>>(),
+}));
+
+const viewer = {
+  email: 'owner@example.com',
+  id: 'user-1',
+  image: null,
+  name: 'Owner',
+};
+
+const market = {
   players: [
     {
       averagePriceCents: 7_900,
@@ -37,14 +76,48 @@ const market = vi.hoisted(() => ({
   ],
   summary: {
     latestSeason: '2025-26',
-    playerCount: 235,
-    purchaseCount: 695,
+    playerCount: 2,
+    purchaseCount: 9,
     seasonCount: 5,
-    totalSpendCents: 1_080_300,
+    totalSpendCents: 155_000,
   },
-}));
+} satisfies HistoricalAuctionMarket;
 
-const rosterSnapshot = vi.hoisted(() => ({
+const rankings = {
+  seasons: [
+    {
+      modelVersion: '1',
+      players: [
+        {
+          auctionCostCents: 8_500,
+          components: { assists: 700, points: 1_000 },
+          fantasyPoints: 3_400,
+          fantasyPointsPerGame: 44.2,
+          gamesPlayed: 77,
+          playerId: 'player-1',
+          playerName: 'Nikola Jokic',
+          rank: 1,
+        },
+        {
+          auctionCostCents: null,
+          components: { assists: 500, points: 1_200 },
+          fantasyPoints: 3_100,
+          fantasyPointsPerGame: 41.3,
+          gamesPlayed: 75,
+          playerId: 'player-2',
+          playerName: 'Shai Gilgeous-Alexander',
+          rank: 2,
+        },
+      ],
+      ruleSetName: 'League Points',
+      ruleSetVersion: 1,
+      seasonKey: '2025-26',
+    },
+  ],
+  summary: { latestSeason: '2025-26', playerSeasonCount: 2, seasonCount: 1 },
+} satisfies HistoricalRankingSnapshot;
+
+const rosterSnapshot = {
   seasons: [
     {
       baseBudgetCents: 20_000,
@@ -61,17 +134,17 @@ const rosterSnapshot = vi.hoisted(() => ({
           owner: { displayName: 'Manager One', memberId: 'member-1' },
           roster: [],
           rosterCount: 0,
-          sourceTeamId: 'team-2',
+          sourceTeamId: 'team-next',
           spendCents: 0,
           teamName: 'Moon Shots',
-          teamSeasonId: 'team-season-2',
+          teamSeasonId: 'team-season-next',
         },
       ],
       totalSpendCents: 0,
     },
     {
       baseBudgetCents: 20_000,
-      draftedPlayerCount: 1,
+      draftedPlayerCount: 2,
       name: 'Fantasy Basketball 2025-26',
       rosterSize: 13,
       rosterStatus: 'partial' as const,
@@ -97,8 +170,27 @@ const rosterSnapshot = vi.hoisted(() => ({
           teamName: 'Moon Shots',
           teamSeasonId: 'team-season-1',
         },
+        {
+          baseBudgetBalanceCents: 14_000,
+          division: null,
+          owner: { displayName: 'Manager Two', memberId: 'member-2' },
+          roster: [
+            {
+              auctionCostCents: 6_000,
+              nominationOrder: 2,
+              playerId: 'player-3',
+              playerName: 'Luka Doncic',
+              rosterSlot: 1,
+            },
+          ],
+          rosterCount: 1,
+          sourceTeamId: 'team-2',
+          spendCents: 6_000,
+          teamName: 'Sky Hooks',
+          teamSeasonId: 'team-season-2',
+        },
       ],
-      totalSpendCents: 8_500,
+      totalSpendCents: 14_500,
     },
   ],
   summary: {
@@ -106,9 +198,9 @@ const rosterSnapshot = vi.hoisted(() => ({
     latestSeason: '2026-27',
     seasonCount: 2,
   },
-}));
+} satisfies LeagueRosterSnapshot;
 
-const teamHistory = vi.hoisted(() => ({
+const teamHistory = {
   members: [
     {
       canonicalKey: 'manager-one',
@@ -123,7 +215,7 @@ const teamHistory = vi.hoisted(() => ({
           totalSpendCents: 9_000,
         },
       ],
-      memberId: '1eaed817-a6b1-4e07-8860-849950efa9dc',
+      memberId: 'member-1',
       purchaseCount: 26,
       seasons: [
         {
@@ -131,7 +223,7 @@ const teamHistory = vi.hoisted(() => ({
           identityConfidence: 100,
           identityResolution: 'manager_alias',
           purchaseCount: 13,
-          seasonKey: '2024-25',
+          seasonKey: '2025-26',
           sourceTeamId: 'team-1',
           teamName: 'Moon Shots',
           totalSpendCents: 19_500,
@@ -144,145 +236,94 @@ const teamHistory = vi.hoisted(() => ({
   summary: {
     canonicalMemberCount: 1,
     latestSeason: '2025-26',
-    resolvedTeamSeasonCount: 4,
-    seasonCount: 5,
-    teamSeasonCount: 6,
-    unresolvedTeamSeasonCount: 2,
+    resolvedTeamSeasonCount: 1,
+    seasonCount: 1,
+    teamSeasonCount: 2,
+    unresolvedTeamSeasonCount: 1,
   },
   unresolvedTeams: [
     {
-      seasonKey: '2024-25',
-      sourceTeamId: 'team-1-old',
-      teamName: 'Unknown Team',
-      teamSeasonId: 'a1f0613a-0bc2-42f0-8795-1373e771d116',
-    },
-    {
       seasonKey: '2025-26',
-      sourceTeamId: 'team-2',
+      sourceTeamId: 'team-old',
       teamName: 'Unknown Team',
-      teamSeasonId: '8f942adb-4f54-45a3-a6fe-fdf7f7c743e0',
+      teamSeasonId: 'team-season-old',
     },
   ],
-}));
+} satisfies LeagueTeamHistory;
 
-const loadViewer = vi.hoisted(() =>
-  vi.fn<
-    () => Promise<{
-      email: string;
-      id: string;
-      image: null;
-      name: string;
-    } | null>
-  >(() =>
-    Promise.resolve({ email: 'owner@example.com', id: 'user-1', image: null, name: 'Owner' }),
-  ),
-);
+const renderInShell = (child: React.ReactNode) =>
+  render(<AppShell viewer={viewer}>{child}</AppShell>);
 
-vi.mock('../src/lib/historical-auction-market', () => ({
-  loadHistoricalAuctionMarket: () => Promise.resolve(market),
-}));
+describe('route workspace', () => {
+  it('renders persistent navigation and route-aware Eve chat', () => {
+    renderInShell(<div>Route content</div>);
 
-vi.mock('../src/lib/league-team-history', () => ({
-  loadLeagueTeamHistory: () => Promise.resolve(teamHistory),
-}));
-
-vi.mock('../src/lib/league-rosters', () => ({
-  loadLeagueRosters: () => Promise.resolve(rosterSnapshot),
-}));
-
-vi.mock('../src/lib/viewer', () => ({
-  loadViewer,
-}));
-
-vi.mock('../src/app/actions', () => ({
-  reconcileTeamIdentityAction: vi.fn<() => Promise<void>>(),
-}));
-
-vi.mock('eve/react', () => ({
-  useEveAgent: () => ({
-    data: { messages: [] },
-    cancel: vi.fn<() => Promise<void>>(),
-    error: undefined,
-    reset: vi.fn<() => void>(),
-    send: vi.fn<() => Promise<void>>(),
-    status: 'ready',
-  }),
-}));
-
-describe('Page', () => {
-  it('renders league rosters beside chat and keeps the historical market available', async () => {
-    const { baseElement } = render(await Page());
-
-    expect(baseElement).toBeTruthy();
-    expect(baseElement.textContent).toContain('League rosters');
-    expect(baseElement.textContent).toContain('Draft chat');
-    expect(baseElement.textContent).toContain('Nikola Jokic');
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Player market' }));
-
-    expect(baseElement.textContent).toContain('Historical player market');
-    expect(baseElement.textContent).toContain('$10,803');
+    expect(screen.getByRole('link', { name: /^League$/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /^Players$/ }).getAttribute('aria-current')).toBe(
+      'page',
+    );
+    expect(screen.getByText('Route content')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'League chat' })).toBeTruthy();
   });
 
-  it('filters the historical market by player name', async () => {
-    render(await Page());
+  it('shows canonical owners, roster costs, and pending seasons', () => {
+    renderInShell(<LeagueView authenticated snapshot={rosterSnapshot} />);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Player market' }));
-
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Find player' }), {
-      target: { value: 'Shai' },
-    });
-
-    expect(screen.getByText('Shai Gilgeous-Alexander')).toBeTruthy();
-    expect(screen.queryByText('Nikola Jokic')).toBeNull();
-  });
-
-  it('shows canonical owners, season rosters, and pending future rosters', async () => {
-    render(await Page());
-
-    expect(
-      (screen.getByRole('combobox', { name: 'Roster season' }) as HTMLSelectElement).value,
-    ).toBe('2025-26');
     expect(screen.getByText('Moon Shots')).toBeTruthy();
     expect(screen.getByText('Manager One')).toBeTruthy();
     expect(screen.getByText('Nikola Jokic')).toBeTruthy();
-    expect(screen.getAllByText('$85')).toHaveLength(3);
-    expect(screen.getByText('1/13')).toBeTruthy();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Roster season' }), {
       target: { value: '2026-27' },
     });
-
-    expect(screen.getByText('2026-27 teams are ready.')).toBeTruthy();
-    expect(screen.getByText('Roster awaiting import')).toBeTruthy();
+    expect(screen.getByText('2026-27 roster pending.')).toBeTruthy();
   });
 
-  it('surfaces canonical member history and unresolved identity work', async () => {
-    render(await Page());
+  it('combines historical rankings with league auction prices', () => {
+    renderInShell(<PlayersView market={market} rankings={rankings} />);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'League history' }));
+    expect(screen.getByText('Historical actuals')).toBeTruthy();
+    expect(screen.getByText('44.2')).toBeTruthy();
+    expect(screen.getByText('$85')).toBeTruthy();
 
-    expect(screen.getAllByText('Manager One')).toHaveLength(2);
-    expect(screen.getAllByText('Moon Shots')).toHaveLength(2);
-    fireEvent.click(screen.getByText('Reconcile 2 unmatched team-seasons'));
-
-    expect(
-      screen.getByRole('combobox', { name: 'Canonical manager for Unknown Team' }),
-    ).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Manager One' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Create new manager…' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Assign 2 seasons' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ask Eve' })).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Find player' }), {
+      target: { value: 'Shai' },
+    });
+    expect(screen.getByText('Shai Gilgeous-Alexander')).toBeTruthy();
+    expect(screen.queryByText('Nikola Jokic')).toBeNull();
   });
 
-  it('keeps manager history behind the owner session', async () => {
-    loadViewer.mockResolvedValueOnce(null);
-    render(await Page());
+  it('links canonical manager cards to detailed profiles', () => {
+    renderInShell(<ManagersView authenticated history={teamHistory} />);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'League history' }));
+    expect(screen.getByRole('heading', { name: 'Manager One' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Profile →' }).getAttribute('href')).toBe(
+      '/managers/member-1',
+    );
+    expect(screen.getByText('Reconcile 1 unmatched team-season')).toBeTruthy();
+  });
 
-    expect(screen.getByText('Sign in to view private league history.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sign in with GitHub' })).toBeTruthy();
-    expect(screen.queryByText('Manager One')).toBeNull();
+  it('provides a two-team historical trade comparison', () => {
+    renderInShell(<TradesView authenticated snapshot={rosterSnapshot} />);
+
+    expect(screen.getByText('Historical roster lab')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'First trade team' })).toBeTruthy();
+    expect(screen.getByText('Sky Hooks')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Compare with Eve' })).toBeTruthy();
+  });
+
+  it('labels undrafted production as a historical waiver proxy', () => {
+    renderInShell(
+      <WaiversView
+        authenticated
+        market={market}
+        rankings={rankings}
+        rosterSnapshot={rosterSnapshot}
+      />,
+    );
+
+    expect(screen.getByText('Not the live waiver wire')).toBeTruthy();
+    expect(screen.getByText('Shai Gilgeous-Alexander')).toBeTruthy();
+    expect(screen.queryByText('Nikola Jokic')).toBeNull();
   });
 });

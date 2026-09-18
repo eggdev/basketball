@@ -59,6 +59,7 @@
       "dependencies": {
         "@fantasy-basketball/auth": "workspace:*",
         "@fantasy-basketball/database": "workspace:*",
+        "@fantasy-basketball/fantasy": "workspace:*",
         "better-auth": "1.7.5",
         "effect": "3.22.2",
         "eve": "0.58.1",

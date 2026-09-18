@@ -2,8 +2,9 @@
 
 This package owns the application's Postgres interface and its Neon adapter.
 Callers use the Effect `Database` tag for health checks, atomic historical
-imports, the historical auction market, and canonical league-member history;
-SQL and connection-pool details remain inside the module.
+imports, the historical auction market, historical-actual ranking snapshots,
+league roster snapshots, and canonical league-member history; SQL and
+connection-pool details remain inside the module.
 
 Owner-confirmed team reconciliation is exposed as one transactional operation.
 It records an auditable override keyed by Fantrax league history, season, and

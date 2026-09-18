@@ -1,7 +1,7 @@
 # Fantasy Basketball
 
 A league-specific Fantrax draft and trade assistant. The application combines a
-typed Effect domain module, an Eve agent, and a Next.js draft-room interface in
+typed Effect domain module, an Eve agent, and a routed Next.js decision room in
 an Nx monorepo managed by Bun.
 
 ## Repository layout
@@ -189,25 +189,32 @@ lineup.
 
 ## Current implementation status
 
-The initial vertical slice can score a stat line with the league's custom rules
-through both the Effect module and Eve's `score_stat_line` tool. Neon now holds
-five validated historical auction seasons (2021–22 through 2025–26), with 695
+The application can score a stat line with the league's custom rules through
+both the Effect module and Eve's `score_stat_line` tool. Neon holds five
+validated historical auction seasons (2021–22 through 2025–26), with 695
 purchases mapped onto 235 canonical Fantrax players. Six seasons of team
-metadata (including the live 2026–27 league) produce 12 canonical members and
-66 team-season records. The draft board exposes both a searchable player market
-and signed-in manager tendency profiles. Eve queries the same snapshots through
-the `historical_auction_market` and `league_team_history` tools, so chat and UI
-share the calculations.
+metadata (including the live 2026–27 league) produce 13 historical canonical
+managers and 66 team-season records.
+
+The web application now has dedicated league, player, manager, draft, trade,
+waiver-research, and settings routes. Eve remains mounted in the shared
+application shell, keeps its session while navigating, and receives the current
+route plus page-specific context with each prompt. Private team history remains
+behind Better Auth. Eve queries the same auction, team-history, and roster
+snapshots through `historical_auction_market`, `league_team_history`, and
+`league_rosters`.
 
 Competitive outcomes will remain separate signals: playoff champion is the
 primary winning tier, while playoff finish, regular-season rank, total points,
 and matchup wins will be retained as secondary measures rather than collapsed
 into one generic result.
 
-Five seasons of player production can now be scored against the league rules
-and stored as historical actual rankings. Historical auction cost remains an
-observed market signal rather than a ranking; availability, projections, and
-replacement value still need to be joined before the app recommends bids.
+Five seasons of player production produce 1,001 stored player-season historical
+actual rankings. The player workspace joins those results to same-season draft
+cost and the weighted historical market while labeling them as actuals, not
+forecasts. Historical auction cost remains an observed market signal rather
+than a ranking; live availability, projections, and replacement value still
+need to be joined before the app recommends bids.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be
