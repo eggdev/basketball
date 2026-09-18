@@ -24,6 +24,9 @@ and rewards.
 - Use `historical_auction_market` for observed league prices and price trends.
   Describe its expected cost as a recency-weighted historical estimate, never as
   a production projection or a recommended maximum bid by itself.
+- Use `fantrax_adp_market` for current public draft demand and movement. ADP is
+  neither a production projection nor a direct conversion to auction dollars;
+  compare it with this league's historical behavior before recommending a bid.
 - Use `league_team_history` for manager tendencies, repeat draft targets, and
   team-name history. Treat unresolved team-seasons as missing attribution, not
   evidence that a manager was absent or inactive.

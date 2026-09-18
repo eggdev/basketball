@@ -202,6 +202,168 @@ export const sourceRecords = fantasySchema.table(
   ],
 );
 
+export const projectionSnapshots = fantasySchema.table(
+  'projection_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    source: text('source').notNull(),
+    seasonKey: text('season_key').notNull(),
+    asOf: timestamp('as_of', { withTimezone: true }).notNull(),
+    modelVersion: text('model_version').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    parameters: jsonb('parameters').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('projection_snapshots_fingerprint_unique').on(table.fingerprint),
+    index('projection_snapshots_source_season_as_of_idx').on(
+      table.source,
+      table.seasonKey,
+      table.asOf,
+    ),
+  ],
+);
+
+export const playerProjections = fantasySchema.table(
+  'player_projections',
+  {
+    snapshotId: uuid('snapshot_id')
+      .notNull()
+      .references(() => projectionSnapshots.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'cascade' }),
+    sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
+      onDelete: 'set null',
+    }),
+    teamAbbreviation: text('team_abbreviation').notNull(),
+    positions: jsonb('positions').$type<ReadonlyArray<string>>().notNull(),
+    expectedGames: numeric('expected_games', { precision: 5, scale: 2 }).notNull(),
+    statsPerGame: jsonb('stats_per_game').$type<Record<string, number>>().notNull(),
+    expectedFantasyPoints: numeric('expected_fantasy_points', {
+      precision: 12,
+      scale: 3,
+    }).notNull(),
+    expectedFantasyPointsPerGame: numeric('expected_fantasy_points_per_game', {
+      precision: 10,
+      scale: 3,
+    }).notNull(),
+    bonuses: jsonb('bonuses').$type<Record<string, number>>().notNull(),
+    availability: jsonb('availability').$type<Record<string, unknown>>().notNull(),
+    schedule: jsonb('schedule').$type<Record<string, unknown> | null>(),
+    scoringComponents: jsonb('scoring_components').$type<Record<string, number>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.snapshotId, table.playerId] }),
+    index('player_projections_player_id_idx').on(table.playerId),
+  ],
+);
+
+export const adpSnapshots = fantasySchema.table(
+  'adp_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    source: text('source').notNull(),
+    sport: text('sport').notNull(),
+    seasonKey: text('season_key').notNull(),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    recordCount: integer('record_count').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('adp_snapshots_fingerprint_unique').on(table.fingerprint),
+    index('adp_snapshots_source_season_captured_at_idx').on(
+      table.source,
+      table.seasonKey,
+      table.capturedAt,
+    ),
+  ],
+);
+
+export const playerAdp = fantasySchema.table(
+  'player_adp',
+  {
+    snapshotId: uuid('snapshot_id')
+      .notNull()
+      .references(() => adpSnapshots.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'cascade' }),
+    sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
+      onDelete: 'set null',
+    }),
+    position: text('position').notNull(),
+    adp: numeric('adp', { precision: 8, scale: 3 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.snapshotId, table.playerId] }),
+    index('player_adp_player_id_idx').on(table.playerId),
+  ],
+);
+
+export const preDraftPlans = fantasySchema.table(
+  'pre_draft_plans',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    leagueMemberId: uuid('league_member_id')
+      .notNull()
+      .references(() => leagueMembers.id, { onDelete: 'cascade' }),
+    leagueSeasonId: uuid('league_season_id')
+      .notNull()
+      .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    status: text('status').notNull().default('active'),
+    primaryGoal: text('primary_goal').notNull(),
+    strategyAngle: text('strategy_angle').notNull(),
+    riskTolerance: text('risk_tolerance').notNull(),
+    anchorBudgetCents: integer('anchor_budget_cents').notNull(),
+    coreBudgetCents: integer('core_budget_cents').notNull(),
+    endgameBudgetCents: integer('endgame_budget_cents').notNull(),
+    streamingSlots: integer('streaming_slots').notNull(),
+    notes: text('notes').notNull().default(''),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('pre_draft_plans_member_season_name_unique').on(
+      table.leagueMemberId,
+      table.leagueSeasonId,
+      table.name,
+    ),
+    index('pre_draft_plans_member_season_idx').on(table.leagueMemberId, table.leagueSeasonId),
+  ],
+);
+
+export const preDraftTargets = fantasySchema.table(
+  'pre_draft_targets',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => preDraftPlans.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'cascade' }),
+    stance: text('stance').notNull(),
+    maxBidCents: integer('max_bid_cents'),
+    priority: integer('priority').notNull().default(3),
+    rationale: text('rationale').notNull().default(''),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('pre_draft_targets_plan_player_unique').on(table.planId, table.playerId),
+    index('pre_draft_targets_plan_priority_idx').on(table.planId, table.priority),
+  ],
+);
+
 export const playerSeasonStats = fantasySchema.table(
   'player_season_stats',
   {

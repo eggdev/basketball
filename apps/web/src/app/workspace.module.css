@@ -177,6 +177,7 @@
 
 .field input,
 .field select,
+.field textarea,
 .inlineSelect,
 .reconciliationRow input,
 .reconciliationRow select {
@@ -193,11 +194,113 @@
 
 .field input:focus,
 .field select:focus,
+.field textarea:focus,
 .inlineSelect:focus,
 .reconciliationRow input:focus,
 .reconciliationRow select:focus {
   border-color: #38bdf8;
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+}
+
+.field textarea {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #30455f;
+  border-radius: 8px;
+  outline: none;
+  background: #081522;
+  color: #dbe7f4;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.planForm {
+  padding: 16px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.formWide {
+  grid-column: span 2;
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.formActions span {
+  color: #8295aa;
+  font-size: 0.66rem;
+}
+
+.targetWorkspace {
+  padding: 14px;
+}
+
+.targetForm {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.6fr) repeat(3, minmax(90px, 0.7fr));
+  gap: 9px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.targetForm button {
+  align-self: end;
+  justify-self: start;
+}
+
+.targetList {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.targetList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  color: #7dd3fc;
+  font-size: 0.65rem;
+  text-transform: capitalize;
+}
+
+.targetList li > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.targetList strong {
+  color: #dbe7f4;
+  font-size: 0.72rem;
+  text-transform: none;
+}
+
+.targetList small {
+  overflow: hidden;
+  color: #74869d;
+  font-size: 0.6rem;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .notice,
@@ -356,8 +459,25 @@
 }
 
 .tableViewport {
+  position: relative;
   max-height: calc(100dvh - 300px);
   overflow: auto;
+}
+
+.skipLink {
+  position: absolute;
+  z-index: 3;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: #38bdf8;
+  color: #07111f;
+  font-size: 0.65rem;
+  font-weight: 800;
+  transform: translateY(-140%);
+}
+
+.skipLink:focus {
+  transform: translateY(0);
 }
 
 .table {
@@ -774,6 +894,14 @@
   .settingsGrid {
     grid-template-columns: 1fr;
   }
+
+  .formGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .targetForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 680px) {
@@ -799,6 +927,20 @@
   .toolbar,
   .field {
     width: 100%;
+  }
+
+  .formGrid,
+  .targetForm {
+    grid-template-columns: 1fr;
+  }
+
+  .formWide {
+    grid-column: auto;
+  }
+
+  .formActions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .tableViewport {

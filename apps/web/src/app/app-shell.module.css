@@ -284,8 +284,8 @@
   gap: 6px;
 }
 
-.chatActions span {
-  color: #65778e;
+.chatActions output {
+  color: #8fa1b8;
   font-size: 0.62rem;
 }
 
@@ -326,6 +326,94 @@
 .quickPrompts button:hover:not(:disabled) {
   border-color: rgba(56, 189, 248, 0.45);
   color: #bde8fb;
+}
+
+.chatHistory {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 14px;
+  overflow-y: auto;
+}
+
+.historyHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.historyHeading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.historyHeading strong {
+  color: #dbe7f4;
+  font-size: 0.76rem;
+}
+
+.historyHeading span {
+  color: #74869d;
+  font-size: 0.64rem;
+}
+
+.historyHeading button {
+  flex: none;
+  padding: 6px 8px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 7px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.63rem;
+}
+
+.historyList {
+  display: grid;
+  gap: 8px;
+}
+
+.historyItem {
+  display: grid;
+  width: 100%;
+  gap: 6px;
+  padding: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 9px;
+  background: rgba(7, 17, 31, 0.58);
+  color: #b9c8d9;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.historyItem:hover,
+.historyItem[aria-current='true'] {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.09);
+}
+
+.historyItem strong {
+  overflow: hidden;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyItem span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #65778e;
+  font-size: 0.6rem;
+}
+
+.historyItem time {
+  flex: none;
 }
 
 .messages {

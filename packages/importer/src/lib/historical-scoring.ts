@@ -27,6 +27,15 @@ export interface HistoricalScoringRule {
   readonly statKey: HistoricalScoringStatKey;
 }
 
+export interface LeagueScoringConfiguration {
+  readonly name: string;
+  readonly rules: ReadonlyArray<HistoricalScoringRule>;
+  readonly scoringRules: ScoringRules;
+  readonly seasons: ReadonlyArray<string>;
+  readonly stackTripleDoubleBonuses: boolean;
+  readonly version: number;
+}
+
 export interface PlayerProductionSeason {
   readonly gamesPlayed: number;
   readonly playerId: string;
@@ -149,6 +158,73 @@ const scoringRulesFrom = (
   };
 };
 
+const parseLeagueScoringConfigurationUnsafe = (configJson: string): LeagueScoringConfiguration => {
+  const config = requiredObject(JSON.parse(configJson), 'scoring configuration');
+  const name = requiredString(config['name'], 'name');
+  const version = finiteNumber(config['version'], 'version');
+  if (!Number.isSafeInteger(version) || version <= 0) {
+    throw new Error('version must be a positive integer');
+  }
+  if (typeof config['stack_triple_double_bonuses'] !== 'boolean') {
+    throw new Error('stack_triple_double_bonuses must be a boolean');
+  }
+  const stackTripleDoubleBonuses = config['stack_triple_double_bonuses'];
+  if (!Array.isArray(config['applies_to_seasons']) || config['applies_to_seasons'].length === 0) {
+    throw new Error('applies_to_seasons must be a non-empty array');
+  }
+  const seasons = config['applies_to_seasons'].map((season, index) =>
+    requiredString(season, `applies_to_seasons[${index}]`),
+  );
+  if (new Set(seasons).size !== seasons.length) {
+    throw new Error('applies_to_seasons contains duplicates');
+  }
+  seasons.sort();
+
+  if (!Array.isArray(config['rules'])) throw new Error('rules must be an array');
+  const rules = config['rules'].map((value, index): HistoricalScoringRule => {
+    const rule = requiredObject(value, `rules[${index}]`);
+    const statKey = requiredString(rule['stat_key'], `rules[${index}].stat_key`);
+    if (!historicalScoringStatKeys.includes(statKey as HistoricalScoringStatKey)) {
+      throw new Error(`rules[${index}].stat_key ${statKey} is not supported`);
+    }
+    return {
+      label: requiredString(rule['label'], `rules[${index}].label`),
+      points: finiteNumber(rule['points'], `rules[${index}].points`),
+      statKey: statKey as HistoricalScoringStatKey,
+    };
+  });
+  const ruleKeys = new Set(rules.map((rule) => rule.statKey));
+  if (ruleKeys.size !== rules.length) throw new Error('rules contains duplicate stat keys');
+  const missingRules = historicalScoringStatKeys.filter((key) => !ruleKeys.has(key));
+  if (missingRules.length > 0) {
+    throw new Error(`rules is missing: ${missingRules.join(', ')}`);
+  }
+  const normalizedRules = [...rules].sort((left, right) =>
+    left.statKey.localeCompare(right.statKey),
+  );
+
+  return {
+    name,
+    rules: normalizedRules,
+    scoringRules: scoringRulesFrom(normalizedRules, stackTripleDoubleBonuses),
+    seasons,
+    stackTripleDoubleBonuses,
+    version,
+  };
+};
+
+export const parseLeagueScoringConfiguration = (
+  configJson: string,
+): Effect.Effect<LeagueScoringConfiguration, HistoricalScoringValidationError> =>
+  Effect.try({
+    try: () => parseLeagueScoringConfigurationUnsafe(configJson),
+    catch: (cause) =>
+      new HistoricalScoringValidationError({
+        message: 'League scoring validation failed',
+        reason: cause instanceof Error ? cause.message : 'invalid scoring configuration',
+      }),
+  });
+
 const seasonStatLine = (production: PlayerProductionSeason): SeasonStatLine => ({
   assists: nonNegativeStat(production.stats, 'ast'),
   blocks: nonNegativeStat(production.stats, 'blk'),
@@ -182,51 +258,8 @@ export const planHistoricalScoring = (
 ): Effect.Effect<HistoricalScoringPlan, HistoricalScoringValidationError> =>
   Effect.try({
     try: () => {
-      const config = requiredObject(JSON.parse(configJson), 'scoring configuration');
-      const name = requiredString(config['name'], 'name');
-      const version = finiteNumber(config['version'], 'version');
-      if (!Number.isSafeInteger(version) || version <= 0) {
-        throw new Error('version must be a positive integer');
-      }
-      if (typeof config['stack_triple_double_bonuses'] !== 'boolean') {
-        throw new Error('stack_triple_double_bonuses must be a boolean');
-      }
-      const stackTripleDoubleBonuses = config['stack_triple_double_bonuses'];
-      if (
-        !Array.isArray(config['applies_to_seasons']) ||
-        config['applies_to_seasons'].length === 0
-      ) {
-        throw new Error('applies_to_seasons must be a non-empty array');
-      }
-      const seasons = config['applies_to_seasons'].map((season, index) =>
-        requiredString(season, `applies_to_seasons[${index}]`),
-      );
-      if (new Set(seasons).size !== seasons.length) {
-        throw new Error('applies_to_seasons contains duplicates');
-      }
-      seasons.sort();
-
-      if (!Array.isArray(config['rules'])) throw new Error('rules must be an array');
-      const rules = config['rules'].map((value, index): HistoricalScoringRule => {
-        const rule = requiredObject(value, `rules[${index}]`);
-        const statKey = requiredString(rule['stat_key'], `rules[${index}].stat_key`);
-        if (!historicalScoringStatKeys.includes(statKey as HistoricalScoringStatKey)) {
-          throw new Error(`rules[${index}].stat_key ${statKey} is not supported`);
-        }
-        return {
-          label: requiredString(rule['label'], `rules[${index}].label`),
-          points: finiteNumber(rule['points'], `rules[${index}].points`),
-          statKey: statKey as HistoricalScoringStatKey,
-        };
-      });
-      const ruleKeys = new Set(rules.map((rule) => rule.statKey));
-      if (ruleKeys.size !== rules.length) throw new Error('rules contains duplicate stat keys');
-      const missingRules = historicalScoringStatKeys.filter((key) => !ruleKeys.has(key));
-      if (missingRules.length > 0) {
-        throw new Error(`rules is missing: ${missingRules.join(', ')}`);
-      }
-
-      const scoringRules = scoringRulesFrom(rules, stackTripleDoubleBonuses);
+      const { name, rules, scoringRules, seasons, stackTripleDoubleBonuses, version } =
+        parseLeagueScoringConfigurationUnsafe(configJson);
       const rankings: HistoricalPlayerRanking[] = [];
       for (const seasonKey of seasons) {
         const seasonProduction = production.filter((record) => record.seasonKey === seasonKey);
@@ -259,15 +292,12 @@ export const planHistoricalScoring = (
         rankings.push(...scored.map((record, index) => ({ ...record, rank: index + 1 })));
       }
 
-      const normalizedRules = [...rules].sort((left, right) =>
-        left.statKey.localeCompare(right.statKey),
-      );
       const fingerprint = createHash('sha256')
         .update(
           JSON.stringify({
             name,
             rankings,
-            rules: normalizedRules,
+            rules,
             seasons,
             stackTripleDoubleBonuses,
             version,
@@ -279,7 +309,7 @@ export const planHistoricalScoring = (
         fingerprint,
         name,
         rankings,
-        rules: normalizedRules,
+        rules,
         seasons,
         stackTripleDoubleBonuses,
         summary: {

@@ -3,6 +3,7 @@
 import type {
   HistoricalAuctionMarket,
   HistoricalRankingSnapshot,
+  LatestProjectionSnapshot,
 } from '@fantasy-basketball/database/runtime';
 import { useMemo, useState } from 'react';
 
@@ -12,16 +13,28 @@ import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
 
 type SortKey = 'auction' | 'expected' | 'points' | 'points-per-game' | 'rank';
+type ProjectionSortKey =
+  | 'availability'
+  | 'expected-market'
+  | 'games'
+  | 'playoffs'
+  | 'points'
+  | 'points-per-game'
+  | 'rank';
 
 export function PlayersView({
   market,
+  projections,
   rankings,
 }: {
   readonly market: HistoricalAuctionMarket | null;
+  readonly projections?: LatestProjectionSnapshot | null;
   readonly rankings: HistoricalRankingSnapshot | null;
 }) {
   const [seasonKey, setSeasonKey] = useState(rankings?.summary.latestSeason ?? '');
   const [query, setQuery] = useState('');
+  const [projectionQuery, setProjectionQuery] = useState('');
+  const [projectionSortKey, setProjectionSortKey] = useState<ProjectionSortKey>('rank');
   const [sortKey, setSortKey] = useState<SortKey>('rank');
   const season = useMemo(
     () => rankings?.seasons.find((candidate) => candidate.seasonKey === seasonKey) ?? null,
@@ -53,6 +66,37 @@ export function PlayersView({
       return left.rank - right.rank;
     });
   }, [marketByPlayer, query, season, sortKey]);
+  const projectedPlayers = useMemo(() => {
+    const normalized = projectionQuery.trim().toLocaleLowerCase();
+    const filtered = (projections?.players ?? []).filter((player) =>
+      player.playerName.toLocaleLowerCase().includes(normalized),
+    );
+    return [...filtered].sort((left, right) => {
+      if (projectionSortKey === 'points') return right.fantasyPoints - left.fantasyPoints;
+      if (projectionSortKey === 'points-per-game') {
+        return right.fantasyPointsPerGame - left.fantasyPointsPerGame;
+      }
+      if (projectionSortKey === 'games') {
+        return right.availability.expectedGames - left.availability.expectedGames;
+      }
+      if (projectionSortKey === 'availability') {
+        return right.availability.rate - left.availability.rate;
+      }
+      if (projectionSortKey === 'playoffs') {
+        return (
+          (right.schedule?.weightedExpectedPoints ?? -1) -
+          (left.schedule?.weightedExpectedPoints ?? -1)
+        );
+      }
+      if (projectionSortKey === 'expected-market') {
+        return (
+          (marketByPlayer.get(right.playerId)?.expectedPriceCents ?? -1) -
+          (marketByPlayer.get(left.playerId)?.expectedPriceCents ?? -1)
+        );
+      }
+      return left.rank - right.rank;
+    });
+  }, [marketByPlayer, projectionQuery, projections, projectionSortKey]);
   const averagePointsPerGame =
     season && season.players.length > 0
       ? season.players.reduce((total, player) => total + player.fantasyPointsPerGame, 0) /
@@ -65,24 +109,59 @@ export function PlayersView({
         actions={
           <AskEveButton
             className={styles.primaryButton}
-            context={{ season: season?.seasonKey ?? null }}
-            prompt={`Compare ${season?.seasonKey ?? 'the available'} historical fantasy production with this league's auction prices. Call out expensive names, inexpensive production, and important caveats.`}
+            context={{
+              projectionAsOf: projections?.asOf ?? null,
+              projectionSeason: projections?.seasonKey ?? null,
+              season: season?.seasonKey ?? null,
+            }}
+            prompt={
+              projections
+                ? `Analyze the ${projections.seasonKey} projection board as of ${projections.asOf}. Prioritize total fantasy points, expected games, availability risk, double- and triple-double bonuses, and this league's historical auction prices.`
+                : `Compare ${season?.seasonKey ?? 'the available'} historical fantasy production with this league's auction prices. Call out expensive names, inexpensive production, and important caveats.`
+            }
           >
             Analyze the board
           </AskEveButton>
         }
-        description="League-scored historical production alongside the prices this room has actually paid."
+        description="Availability-adjusted forecasts and league-scored history alongside the prices this room has actually paid."
         eyebrow="Player research"
-        title="Historical rankings"
+        title="Player rankings"
       />
 
-      <div className={styles.notice}>
-        <strong>Historical actuals</strong>
-        These are completed-season totals under the current scoring configuration—not forecasts or
-        recommended bids. Projection, availability, and replacement-value models come next.
-      </div>
+      {projections ? (
+        <div className={styles.notice}>
+          <strong>{projections.seasonKey} forecast</strong>
+          {projections.source} source · as of {projections.asOf.slice(0, 10)} · expected games drive
+          availability-adjusted totals. Bonus rates are estimated from historical game results.
+        </div>
+      ) : (
+        <div className={styles.warning}>
+          <strong>Historical actuals</strong>
+          Projection import pending. Add the private Hashtag export and run the projection importer;
+          completed-season results remain available below.
+        </div>
+      )}
 
-      {season ? (
+      {projections ? (
+        <section aria-label="Projection summary" className={styles.stats}>
+          <article className={styles.statCard}>
+            <span>Projection season</span>
+            <strong>{projections.seasonKey}</strong>
+          </article>
+          <article className={styles.statCard}>
+            <span>Projected players</span>
+            <strong>{projections.summary.playerCount}</strong>
+          </article>
+          <article className={styles.statCard}>
+            <span>Durable tier</span>
+            <strong>{projections.summary.durablePlayerCount}</strong>
+          </article>
+          <article className={styles.statCard}>
+            <span>Fragile tier</span>
+            <strong>{projections.summary.fragilePlayerCount}</strong>
+          </article>
+        </section>
+      ) : season ? (
         <section aria-label="Ranking summary" className={styles.stats}>
           <article className={styles.statCard}>
             <span>Scored seasons</span>
@@ -103,13 +182,124 @@ export function PlayersView({
         </section>
       ) : null}
 
-      <section className={styles.panel}>
+      {projections ? (
+        <section className={styles.panel}>
+          <header className={styles.panelHeader}>
+            <div>
+              <h2>Season projection board</h2>
+              <p>
+                {projections.modelVersion} · playoff value appears after the league playoff window
+                and NBA schedule are configured.
+              </p>
+            </div>
+            <div className={styles.toolbar}>
+              <label className={styles.field}>
+                <span>Sort</span>
+                <select
+                  aria-label="Sort projections"
+                  onChange={(event) =>
+                    setProjectionSortKey(event.target.value as ProjectionSortKey)
+                  }
+                  value={projectionSortKey}
+                >
+                  <option value="rank">Projected rank</option>
+                  <option value="points">Fantasy points</option>
+                  <option value="points-per-game">Points per game</option>
+                  <option value="games">Expected games</option>
+                  <option value="availability">Availability rate</option>
+                  <option value="playoffs">Playoff value</option>
+                  <option value="expected-market">Historical market</option>
+                </select>
+              </label>
+              <label className={styles.field}>
+                <span>Search</span>
+                <input
+                  aria-label="Find projected player"
+                  onChange={(event) => setProjectionQuery(event.target.value)}
+                  placeholder="Player name"
+                  type="search"
+                  value={projectionQuery}
+                />
+              </label>
+            </div>
+          </header>
+          <div className={styles.tableViewport}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Player</th>
+                  <th scope="col">Projected FP</th>
+                  <th scope="col">FP/G</th>
+                  <th scope="col">Expected games</th>
+                  <th scope="col">Availability</th>
+                  <th scope="col">Expected 2D / 3D</th>
+                  <th scope="col">Playoff value</th>
+                  <th scope="col">Historical market</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projectedPlayers.map((player) => {
+                  const marketPlayer = marketByPlayer.get(player.playerId);
+                  return (
+                    <tr key={player.playerId}>
+                      <td className={styles.rank}>{player.rank}</td>
+                      <th aria-label={player.playerName} scope="row">
+                        <span className={styles.tablePlayer}>
+                          <strong>{player.playerName}</strong>
+                          <small>
+                            {[player.teamAbbreviation, ...player.positions]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </small>
+                        </span>
+                      </th>
+                      <td>{formatFantasyPoints(player.fantasyPoints)}</td>
+                      <td>{formatFantasyPoints(player.fantasyPointsPerGame)}</td>
+                      <td>{player.availability.expectedGames.toFixed(1)}</td>
+                      <td
+                        className={
+                          player.availability.tier === 'durable'
+                            ? styles.positive
+                            : player.availability.tier === 'fragile'
+                              ? styles.negative
+                              : styles.neutral
+                        }
+                      >
+                        {Math.round(player.availability.rate * 100)}% · {player.availability.tier}
+                      </td>
+                      <td>
+                        {player.bonuses.expectedDoubleDoubles.toFixed(1)} /{' '}
+                        {player.bonuses.expectedTripleDoubles.toFixed(1)}
+                      </td>
+                      <td>
+                        {player.schedule
+                          ? formatFantasyPoints(player.schedule.weightedExpectedPoints)
+                          : 'Pending'}
+                      </td>
+                      <td>{marketPlayer ? formatPrice(marketPlayer.expectedPriceCents) : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {projectedPlayers.length === 0 ? (
+              <div className={styles.empty}>
+                <strong>No matching player</strong>
+                Try a different search.
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      <section className={styles.panel} style={{ marginTop: projections ? 16 : 0 }}>
         <header className={styles.panelHeader}>
           <div>
             <h2>Production and market board</h2>
             <p>
-              {season ? `${season.ruleSetName} v${season.ruleSetVersion}` : 'Ranking data'} · newer
-              auction seasons receive more weight in expected price.
+              {season ? `${season.ruleSetName} v${season.ruleSetVersion}` : 'Ranking data'} ·
+              completed seasons only; newer auction seasons receive more weight in expected price.
             </p>
           </div>
           {rankings && season ? (

@@ -2,6 +2,7 @@ import React from 'react';
 import type {
   HistoricalAuctionMarket,
   HistoricalRankingSnapshot,
+  LatestProjectionSnapshot,
   LeagueRosterSnapshot,
   LeagueTeamHistory,
 } from '@fantasy-basketball/database/runtime';
@@ -17,21 +18,25 @@ import { TradesView } from '../src/app/trades/trades-view';
 import { WaiversView } from '../src/app/waivers/waivers-view';
 
 const send = vi.hoisted(() => vi.fn<() => Promise<void>>(() => Promise.resolve()));
+const eveAgentOptions = vi.hoisted(() => ({ current: undefined as unknown }));
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/players',
 }));
 
 vi.mock('eve/react', () => ({
-  useEveAgent: () => ({
-    cancel: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-    data: { messages: [] },
-    error: undefined,
-    events: [],
-    reset: vi.fn<() => void>(),
-    send,
-    status: 'ready',
-  }),
+  useEveAgent: (options: unknown) => {
+    eveAgentOptions.current = options;
+    return {
+      cancel: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+      data: { messages: [] },
+      error: undefined,
+      events: [],
+      reset: vi.fn<() => void>(),
+      send,
+      status: 'ready',
+    };
+  },
 }));
 
 vi.mock('../src/app/actions', () => ({
@@ -118,6 +123,41 @@ const rankings = {
   ],
   summary: { latestSeason: '2025-26', playerSeasonCount: 2, seasonCount: 1 },
 } satisfies HistoricalRankingSnapshot;
+
+const projections = {
+  asOf: '2026-09-18T00:00:00.000Z',
+  createdAt: '2026-09-18T00:01:00.000Z',
+  modelVersion: 'availability-v1-scoring-v1',
+  players: [
+    {
+      availability: {
+        expectedGames: 76,
+        expectedGamesMissed: 6,
+        rate: 0.927,
+        scheduledGames: 82,
+        tier: 'durable' as const,
+      },
+      bonuses: {
+        doubleDoubleRate: 0.533,
+        expectedDoubleDoubles: 40.5,
+        expectedTripleDoubles: 3,
+        tripleDoubleRate: 0.039,
+      },
+      fantasyPoints: 3_600,
+      fantasyPointsPerGame: 47.4,
+      playerId: 'player-1',
+      playerName: 'Nikola Jokic',
+      positions: ['C'],
+      rank: 1,
+      schedule: null,
+      teamAbbreviation: 'DEN',
+    },
+  ],
+  seasonKey: '2026-27',
+  snapshotId: 'projection-1',
+  source: 'hashtag',
+  summary: { durablePlayerCount: 1, fragilePlayerCount: 0, playerCount: 1 },
+} satisfies LatestProjectionSnapshot;
 
 const rosterSnapshot = {
   seasons: [
@@ -257,6 +297,11 @@ const renderInShell = (child: React.ReactNode) =>
   render(<AppShell viewer={viewer}>{child}</AppShell>);
 
 describe('route workspace', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    eveAgentOptions.current = undefined;
+  });
+
   it('renders Eve output as safe GitHub-flavored Markdown', () => {
     const { container } = render(
       <ChatMarkdown>{`## Draft plan
@@ -290,9 +335,7 @@ Bid with $93 remaining
 
   it('turns model-provider failures into an actionable Eve message', () => {
     expect(
-      describeEveError(
-        new Error('MODEL_CALL_FAILED: AI Gateway customer_verification_required'),
-      ),
+      describeEveError(new Error('MODEL_CALL_FAILED: AI Gateway customer_verification_required')),
     ).toEqual({
       detail:
         'The model provider rejected this turn. Verify Vercel AI Gateway billing or configure OPENAI_API_KEY, then retry the message.',
@@ -348,6 +391,37 @@ Bid with $93 remaining
     );
     expect(screen.getByText('Route content')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'League chat' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'History' })).toBeTruthy();
+  });
+
+  it('restores a browser-indexed Eve conversation', () => {
+    window.localStorage.setItem(
+      'fantasy-basketball:eve-conversations:v1:user-1',
+      JSON.stringify({
+        activeConversationId: 'chat-1',
+        conversations: [
+          {
+            createdAt: '2026-09-18T12:00:00.000Z',
+            events: [],
+            id: 'chat-1',
+            session: { sessionId: 'eve-session-1', streamIndex: 0 },
+            title: 'Auction plan for playoff depth',
+            updatedAt: '2026-09-18T12:10:00.000Z',
+          },
+        ],
+        version: 1,
+      }),
+    );
+
+    renderInShell(<div>Route content</div>);
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+
+    expect(screen.getByText('Auction plan for playoff depth')).toBeTruthy();
+    expect(eveAgentOptions.current).toMatchObject({
+      initialEvents: [],
+      initialSession: { sessionId: 'eve-session-1', streamIndex: 0 },
+      resume: true,
+    });
   });
 
   it('shows canonical owners, roster costs, and pending seasons', () => {
@@ -375,6 +449,16 @@ Bid with $93 remaining
     });
     expect(screen.getByText('Shai Gilgeous-Alexander')).toBeTruthy();
     expect(screen.queryByText('Nikola Jokic')).toBeNull();
+  });
+
+  it('surfaces availability-adjusted season projections', () => {
+    renderInShell(<PlayersView market={market} projections={projections} rankings={rankings} />);
+
+    expect(screen.getByRole('heading', { name: 'Season projection board' })).toBeTruthy();
+    expect(screen.getByText('3,600.0')).toBeTruthy();
+    expect(screen.getByText('93% · durable')).toBeTruthy();
+    expect(screen.getByText(/40.5/)).toBeTruthy();
+    expect(screen.getByText('Pending')).toBeTruthy();
   });
 
   it('links canonical manager cards to detailed profiles', () => {

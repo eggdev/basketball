@@ -20,16 +20,24 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
   readonly message: string;
   readonly operation:
     | 'canonical_player_identities'
+    | 'canonical_players'
     | 'health'
     | 'historical_auction_market'
     | 'historical_rankings'
+    | 'latest_adp_snapshot'
+    | 'latest_projection_snapshot'
     | 'league_roster_snapshot'
+    | 'pre_draft_workspace'
     | 'reconcile_league_team_identity'
     | 'league_team_history'
     | 'replace_historical_auctions'
     | 'player_production_history'
     | 'replace_historical_scoring'
-    | 'replace_player_production';
+    | 'replace_player_production'
+    | 'save_fantrax_adp_snapshot'
+    | 'save_pre_draft_plan'
+    | 'save_pre_draft_target'
+    | 'save_projection_snapshot';
 }> {}
 
 export interface DatabaseHealth {
@@ -147,6 +155,56 @@ export interface HistoricalRankingSnapshot {
     readonly latestSeason: string | null;
     readonly playerSeasonCount: number;
     readonly seasonCount: number;
+  };
+}
+
+export interface PlayerProjectionReadModel {
+  readonly availability: {
+    readonly expectedGames: number;
+    readonly expectedGamesMissed: number;
+    readonly rate: number;
+    readonly scheduledGames: number;
+    readonly tier: 'durable' | 'managed' | 'fragile';
+  };
+  readonly bonuses: {
+    readonly doubleDoubleRate: number;
+    readonly expectedDoubleDoubles: number;
+    readonly expectedTripleDoubles: number;
+    readonly tripleDoubleRate: number;
+  };
+  readonly fantasyPoints: number;
+  readonly fantasyPointsPerGame: number;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly positions: ReadonlyArray<string>;
+  readonly rank: number;
+  readonly schedule: {
+    readonly fantasyPlayoffWeeks: ReadonlyArray<{
+      readonly expectedActiveGames: number;
+      readonly expectedFantasyPoints: number;
+      readonly label: string;
+      readonly scheduledGames: number;
+      readonly weight: number;
+      readonly weekKey: string;
+    }>;
+    readonly weightedExpectedGames: number;
+    readonly weightedExpectedPoints: number;
+  } | null;
+  readonly teamAbbreviation: string;
+}
+
+export interface LatestProjectionSnapshot {
+  readonly asOf: string;
+  readonly createdAt: string;
+  readonly modelVersion: string;
+  readonly players: ReadonlyArray<PlayerProjectionReadModel>;
+  readonly seasonKey: string;
+  readonly snapshotId: string;
+  readonly source: string;
+  readonly summary: {
+    readonly durablePlayerCount: number;
+    readonly fragilePlayerCount: number;
+    readonly playerCount: number;
   };
 }
 
@@ -273,6 +331,12 @@ export interface CanonicalPlayerIdentity {
   readonly playerId: string;
 }
 
+export interface CanonicalPlayer {
+  readonly canonicalName: string;
+  readonly normalizedName: string;
+  readonly playerId: string;
+}
+
 export interface PlayerProductionBatch {
   readonly fingerprint: string;
   readonly gameStatCount: number;
@@ -339,7 +403,194 @@ export interface HistoricalScoringImportResult {
   readonly seasonCount: number;
 }
 
+export interface ProjectionSnapshotBatch {
+  readonly asOf: string;
+  readonly fingerprint: string;
+  readonly modelVersion: string;
+  readonly records: ReadonlyArray<{
+    readonly canonicalName: string;
+    readonly existingPlayerId: string | null;
+    readonly normalizedName: string;
+    readonly projection: {
+      readonly availability: {
+        readonly expectedGames: number;
+        readonly expectedGamesMissed: number;
+        readonly rate: number;
+        readonly scheduledGames: number;
+        readonly tier: 'durable' | 'managed' | 'fragile';
+      };
+      readonly bonuses: {
+        readonly doubleDoubleRate: number;
+        readonly expectedDoubleDoubles: number;
+        readonly expectedTripleDoubles: number;
+        readonly tripleDoubleRate: number;
+      };
+      readonly fantasyPoints: number;
+      readonly fantasyPointsPerGame: number;
+      readonly positions: ReadonlyArray<string>;
+      readonly schedule: {
+        readonly fantasyPlayoffWeeks: ReadonlyArray<{
+          readonly expectedActiveGames: number;
+          readonly expectedFantasyPoints: number;
+          readonly label: string;
+          readonly scheduledGames: number;
+          readonly weight: number;
+          readonly weekKey: string;
+        }>;
+        readonly weightedExpectedGames: number;
+        readonly weightedExpectedPoints: number;
+      } | null;
+      readonly scoringComponents: Readonly<Record<string, number>>;
+      readonly statsPerGame: {
+        readonly assists: number;
+        readonly blocks: number;
+        readonly fieldGoalsAttempted: number;
+        readonly fieldGoalsMade: number;
+        readonly freeThrowsAttempted: number;
+        readonly freeThrowsMade: number;
+        readonly points: number;
+        readonly rebounds: number;
+        readonly steals: number;
+        readonly threePointersMade: number;
+        readonly turnovers: number;
+      };
+      readonly teamAbbreviation: string;
+    };
+    readonly sourceExternalId: string;
+    readonly sourceName: string;
+    readonly sourcePayload: Readonly<Record<string, string>>;
+  }>;
+  readonly seasonKey: string;
+  readonly source: 'hashtag';
+}
+
+export interface ProjectionSnapshotImportResult {
+  readonly ingestionRunId: string;
+  readonly newPlayerCount: number;
+  readonly playerProjectionCount: number;
+  readonly snapshotId: string;
+}
+
+export interface FantraxAdpSnapshotBatch {
+  readonly capturedAt: string;
+  readonly fingerprint: string;
+  readonly records: ReadonlyArray<{
+    readonly adp: number;
+    readonly canonicalName: string;
+    readonly existingPlayerId: string | null;
+    readonly fantraxId: string;
+    readonly normalizedName: string;
+    readonly position: string;
+    readonly sourceName: string;
+    readonly sourcePayload: Readonly<Record<string, unknown>>;
+  }>;
+  readonly seasonKey: string;
+  readonly source: 'fantrax-adp';
+  readonly sport: 'NBA';
+}
+
+export interface FantraxAdpSnapshotImportResult {
+  readonly alreadyImported: boolean;
+  readonly ingestionRunId: string;
+  readonly newPlayerCount: number;
+  readonly playerAdpCount: number;
+  readonly snapshotId: string;
+}
+
+export interface AdpMarketPlayer {
+  readonly adp: number;
+  readonly fantraxId: string;
+  /** Positive values mean the player moved earlier in public drafts. */
+  readonly movement: number | null;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly position: string;
+  readonly previousAdp: number | null;
+  readonly rank: number;
+}
+
+export interface LatestAdpSnapshot {
+  readonly capturedAt: string;
+  readonly players: ReadonlyArray<AdpMarketPlayer>;
+  readonly previousCapturedAt: string | null;
+  readonly seasonKey: string;
+  readonly snapshotId: string;
+  readonly source: string;
+  readonly summary: {
+    readonly fallerCount: number;
+    readonly playerCount: number;
+    readonly riserCount: number;
+  };
+}
+
+export type PreDraftGoal = 'make-playoffs' | 'win-championship';
+export type PreDraftRiskTolerance = 'conservative' | 'balanced' | 'aggressive';
+export type PreDraftTargetStance = 'avoid' | 'target' | 'watch';
+
+export interface PreDraftPlan {
+  readonly anchorBudgetCents: number;
+  readonly coreBudgetCents: number;
+  readonly endgameBudgetCents: number;
+  readonly id: string;
+  readonly name: string;
+  readonly notes: string;
+  readonly primaryGoal: PreDraftGoal;
+  readonly riskTolerance: PreDraftRiskTolerance;
+  readonly status: string;
+  readonly strategyAngle: string;
+  readonly streamingSlots: number;
+  readonly targets: ReadonlyArray<{
+    readonly maxBidCents: number | null;
+    readonly playerId: string;
+    readonly playerName: string;
+    readonly priority: number;
+    readonly rationale: string;
+    readonly stance: PreDraftTargetStance;
+    readonly targetId: string;
+  }>;
+  readonly updatedAt: string;
+}
+
+export interface PreDraftWorkspace {
+  readonly league: {
+    readonly baseBudgetCents: number;
+    readonly rosterSize: number;
+    readonly seasonKey: string;
+  } | null;
+  readonly owner: {
+    readonly canonicalKey: string;
+    readonly displayName: string;
+    readonly memberId: string;
+    readonly teamName: string | null;
+  } | null;
+  readonly plan: PreDraftPlan | null;
+}
+
+export interface SavePreDraftPlanInput {
+  readonly anchorBudgetCents: number;
+  readonly coreBudgetCents: number;
+  readonly endgameBudgetCents: number;
+  readonly name: string;
+  readonly notes: string;
+  readonly ownerCanonicalKey: string;
+  readonly primaryGoal: PreDraftGoal;
+  readonly riskTolerance: PreDraftRiskTolerance;
+  readonly seasonKey: string;
+  readonly strategyAngle: string;
+  readonly streamingSlots: number;
+}
+
+export interface SavePreDraftTargetInput {
+  readonly maxBidCents: number | null;
+  readonly planId: string;
+  readonly playerId: string;
+  readonly priority: number;
+  readonly rationale: string;
+  readonly stance: PreDraftTargetStance;
+}
+
 export interface DatabaseService {
+  readonly canonicalPlayers: Effect.Effect<ReadonlyArray<CanonicalPlayer>, DatabaseUnavailable>;
   readonly canonicalPlayerIdentities: Effect.Effect<
     ReadonlyArray<CanonicalPlayerIdentity>,
     DatabaseUnavailable
@@ -347,8 +598,17 @@ export interface DatabaseService {
   readonly health: Effect.Effect<DatabaseHealth, DatabaseUnavailable>;
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
   readonly historicalRankings: Effect.Effect<HistoricalRankingSnapshot, DatabaseUnavailable>;
+  readonly latestAdpSnapshot: Effect.Effect<LatestAdpSnapshot | null, DatabaseUnavailable>;
+  readonly latestProjectionSnapshot: Effect.Effect<
+    LatestProjectionSnapshot | null,
+    DatabaseUnavailable
+  >;
   readonly leagueRosterSnapshot: Effect.Effect<LeagueRosterSnapshot, DatabaseUnavailable>;
   readonly leagueTeamHistory: Effect.Effect<LeagueTeamHistory, DatabaseUnavailable>;
+  readonly preDraftWorkspace: (
+    ownerCanonicalKey: string,
+    seasonKey?: string,
+  ) => Effect.Effect<PreDraftWorkspace, DatabaseUnavailable>;
   readonly reconcileLeagueTeamIdentity: (
     input: LeagueTeamReconciliationInput,
   ) => Effect.Effect<LeagueTeamReconciliationResult, DatabaseUnavailable>;
@@ -365,6 +625,18 @@ export interface DatabaseService {
   readonly replacePlayerProduction: (
     batch: PlayerProductionBatch,
   ) => Effect.Effect<PlayerProductionImportResult, DatabaseUnavailable>;
+  readonly saveProjectionSnapshot: (
+    batch: ProjectionSnapshotBatch,
+  ) => Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable>;
+  readonly saveFantraxAdpSnapshot: (
+    batch: FantraxAdpSnapshotBatch,
+  ) => Effect.Effect<FantraxAdpSnapshotImportResult, DatabaseUnavailable>;
+  readonly savePreDraftPlan: (
+    input: SavePreDraftPlanInput,
+  ) => Effect.Effect<PreDraftPlan, DatabaseUnavailable>;
+  readonly savePreDraftTarget: (
+    input: SavePreDraftTargetInput,
+  ) => Effect.Effect<void, DatabaseUnavailable>;
 }
 
 export class Database extends Context.Tag('@fantasy-basketball/database/Database')<
@@ -509,6 +781,30 @@ const databaseServiceLayer = Layer.effect(
       ),
     );
 
+    const canonicalPlayers = sql<{
+      canonical_name: string;
+      normalized_name: string;
+      player_id: string;
+    }>`
+      select
+        id as player_id,
+        canonical_name,
+        normalized_name
+      from fantasy.players
+      order by canonical_name, id
+    `.pipe(
+      Effect.map((rows) =>
+        rows.map((row) => ({
+          canonicalName: row.canonical_name,
+          normalizedName: row.normalized_name,
+          playerId: row.player_id,
+        })),
+      ),
+      Effect.mapError(() =>
+        databaseUnavailable('canonical_players', 'The canonical players could not be loaded'),
+      ),
+    );
+
     const playerProductionHistory = sql<{
       games_played: number;
       player_id: string;
@@ -647,6 +943,189 @@ const databaseServiceLayer = Layer.effect(
           'historical_rankings',
           'The historical fantasy rankings could not be loaded',
         ),
+      ),
+    );
+
+    const latestProjectionSnapshot = Effect.gen(function* () {
+      const [snapshot] = yield* sql<{
+        as_of: string;
+        created_at: string;
+        id: string;
+        model_version: string;
+        season_key: string;
+        source: string;
+      }>`
+        select
+          id,
+          source,
+          season_key,
+          as_of::text,
+          model_version,
+          created_at::text
+        from fantasy.projection_snapshots
+        order by season_key desc, as_of desc, created_at desc
+        limit 1
+      `;
+      if (snapshot === undefined) return null;
+
+      const rows = yield* sql<{
+        availability: PlayerProjectionReadModel['availability'];
+        bonuses: PlayerProjectionReadModel['bonuses'];
+        expected_fantasy_points: number;
+        expected_fantasy_points_per_game: number;
+        player_id: string;
+        player_name: string;
+        positions: ReadonlyArray<string>;
+        rank: number;
+        schedule: PlayerProjectionReadModel['schedule'];
+        team_abbreviation: string;
+      }>`
+        select
+          pp.player_id,
+          p.canonical_name as player_name,
+          pp.team_abbreviation,
+          pp.positions,
+          pp.expected_fantasy_points::double precision,
+          pp.expected_fantasy_points_per_game::double precision,
+          pp.bonuses,
+          pp.availability,
+          pp.schedule,
+          row_number() over (
+            order by
+              pp.expected_fantasy_points desc,
+              pp.expected_fantasy_points_per_game desc,
+              p.canonical_name
+          )::integer as rank
+        from fantasy.player_projections pp
+        join fantasy.players p on p.id = pp.player_id
+        where pp.snapshot_id = ${snapshot.id}
+        order by rank
+      `;
+      const players = rows.map(
+        (row): PlayerProjectionReadModel => ({
+          availability: row.availability,
+          bonuses: row.bonuses,
+          fantasyPoints: row.expected_fantasy_points,
+          fantasyPointsPerGame: row.expected_fantasy_points_per_game,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          positions: row.positions,
+          rank: row.rank,
+          schedule: row.schedule,
+          teamAbbreviation: row.team_abbreviation,
+        }),
+      );
+
+      return {
+        asOf: snapshot.as_of,
+        createdAt: snapshot.created_at,
+        modelVersion: snapshot.model_version,
+        players,
+        seasonKey: snapshot.season_key,
+        snapshotId: snapshot.id,
+        source: snapshot.source,
+        summary: {
+          durablePlayerCount: players.filter((player) => player.availability.tier === 'durable')
+            .length,
+          fragilePlayerCount: players.filter((player) => player.availability.tier === 'fragile')
+            .length,
+          playerCount: players.length,
+        },
+      } satisfies LatestProjectionSnapshot;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'latest_projection_snapshot',
+          'The latest projection snapshot could not be loaded',
+        ),
+      ),
+    );
+
+    const latestAdpSnapshot = Effect.gen(function* () {
+      const snapshots = yield* sql<{
+        captured_at: string;
+        id: string;
+        season_key: string;
+        source: string;
+      }>`
+        select id, source, season_key, captured_at::text
+        from fantasy.adp_snapshots
+        order by captured_at desc, created_at desc
+        limit 2
+      `;
+      const snapshot = snapshots[0];
+      if (snapshot === undefined) return null;
+      const candidatePrevious = snapshots[1];
+      const previous =
+        candidatePrevious?.source === snapshot.source &&
+        candidatePrevious.season_key === snapshot.season_key
+          ? candidatePrevious
+          : undefined;
+
+      const rows = yield* sql<{
+        adp: number;
+        fantrax_id: string;
+        movement: number | null;
+        player_id: string;
+        player_name: string;
+        position: string;
+        previous_adp: number | null;
+        rank: number;
+      }>`
+        select
+          current_adp.player_id,
+          p.canonical_name as player_name,
+          pi.external_id as fantrax_id,
+          current_adp.position,
+          current_adp.adp::double precision as adp,
+          previous_adp.adp::double precision as previous_adp,
+          case
+            when previous_adp.adp is null then null
+            else (previous_adp.adp - current_adp.adp)::double precision
+          end as movement,
+          row_number() over (
+            order by current_adp.adp, p.canonical_name
+          )::integer as rank
+        from fantasy.player_adp current_adp
+        join fantasy.players p on p.id = current_adp.player_id
+        join fantasy.player_identities pi
+          on pi.player_id = current_adp.player_id
+          and pi.source = 'fantrax'
+        left join fantasy.player_adp previous_adp
+          on previous_adp.snapshot_id = ${previous?.id ?? null}
+          and previous_adp.player_id = current_adp.player_id
+        where current_adp.snapshot_id = ${snapshot.id}
+        order by rank
+      `;
+      const players = rows.map(
+        (row): AdpMarketPlayer => ({
+          adp: row.adp,
+          fantraxId: row.fantrax_id,
+          movement: row.movement,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          position: row.position,
+          previousAdp: row.previous_adp,
+          rank: row.rank,
+        }),
+      );
+
+      return {
+        capturedAt: snapshot.captured_at,
+        players,
+        previousCapturedAt: previous?.captured_at ?? null,
+        seasonKey: snapshot.season_key,
+        snapshotId: snapshot.id,
+        source: snapshot.source,
+        summary: {
+          fallerCount: players.filter((player) => (player.movement ?? 0) < -0.01).length,
+          playerCount: players.length,
+          riserCount: players.filter((player) => (player.movement ?? 0) > 0.01).length,
+        },
+      } satisfies LatestAdpSnapshot;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable('latest_adp_snapshot', 'The latest ADP snapshot could not be loaded'),
       ),
     );
 
@@ -1139,6 +1618,309 @@ const databaseServiceLayer = Layer.effect(
         ),
       ),
     );
+
+    const readPreDraftPlan = (planId: string): Effect.Effect<PreDraftPlan | null, unknown> =>
+      Effect.gen(function* () {
+        const [plan] = yield* sql<{
+          anchor_budget_cents: number;
+          core_budget_cents: number;
+          endgame_budget_cents: number;
+          id: string;
+          name: string;
+          notes: string;
+          primary_goal: PreDraftGoal;
+          risk_tolerance: PreDraftRiskTolerance;
+          status: string;
+          strategy_angle: string;
+          streaming_slots: number;
+          updated_at: string;
+        }>`
+          select
+            id,
+            name,
+            status,
+            primary_goal,
+            strategy_angle,
+            risk_tolerance,
+            anchor_budget_cents,
+            core_budget_cents,
+            endgame_budget_cents,
+            streaming_slots,
+            notes,
+            updated_at::text
+          from fantasy.pre_draft_plans
+          where id = ${planId}
+        `;
+        if (plan === undefined) return null;
+        const targets = yield* sql<{
+          id: string;
+          max_bid_cents: number | null;
+          player_id: string;
+          player_name: string;
+          priority: number;
+          rationale: string;
+          stance: PreDraftTargetStance;
+        }>`
+          select
+            pdt.id,
+            pdt.player_id,
+            p.canonical_name as player_name,
+            pdt.stance,
+            pdt.max_bid_cents,
+            pdt.priority,
+            pdt.rationale
+          from fantasy.pre_draft_targets pdt
+          join fantasy.players p on p.id = pdt.player_id
+          where pdt.plan_id = ${planId}
+          order by pdt.priority, p.canonical_name
+        `;
+        return {
+          anchorBudgetCents: plan.anchor_budget_cents,
+          coreBudgetCents: plan.core_budget_cents,
+          endgameBudgetCents: plan.endgame_budget_cents,
+          id: plan.id,
+          name: plan.name,
+          notes: plan.notes,
+          primaryGoal: plan.primary_goal,
+          riskTolerance: plan.risk_tolerance,
+          status: plan.status,
+          strategyAngle: plan.strategy_angle,
+          streamingSlots: plan.streaming_slots,
+          targets: targets.map((target) => ({
+            maxBidCents: target.max_bid_cents,
+            playerId: target.player_id,
+            playerName: target.player_name,
+            priority: target.priority,
+            rationale: target.rationale,
+            stance: target.stance,
+            targetId: target.id,
+          })),
+          updatedAt: plan.updated_at,
+        } satisfies PreDraftPlan;
+      });
+
+    const preDraftWorkspace = (
+      ownerCanonicalKey: string,
+      requestedSeasonKey?: string,
+    ): Effect.Effect<PreDraftWorkspace, DatabaseUnavailable> =>
+      Effect.gen(function* () {
+        const [season] = requestedSeasonKey
+          ? yield* sql<{
+              base_budget_cents: number;
+              id: string;
+              roster_size: number;
+              season_key: string;
+              source_league_history_id: string | null;
+            }>`
+              select id, source_league_history_id, season_key, roster_size, base_budget_cents
+              from fantasy.league_seasons
+              where source = 'fantrax' and season_key = ${requestedSeasonKey}
+              order by updated_at desc
+              limit 1
+            `
+          : yield* sql<{
+              base_budget_cents: number;
+              id: string;
+              roster_size: number;
+              season_key: string;
+              source_league_history_id: string | null;
+            }>`
+              select id, source_league_history_id, season_key, roster_size, base_budget_cents
+              from fantasy.league_seasons
+              where source = 'fantrax'
+              order by season_key desc, updated_at desc
+              limit 1
+            `;
+        if (season === undefined || season.source_league_history_id === null) {
+          return { league: null, owner: null, plan: null };
+        }
+
+        const [owner] = yield* sql<{
+          canonical_key: string;
+          display_name: string;
+          member_id: string;
+          team_name: string | null;
+        }>`
+          select
+            lm.id as member_id,
+            lm.canonical_key,
+            lm.display_name,
+            lts.team_name
+          from fantasy.league_members lm
+          left join fantasy.league_team_seasons lts
+            on lts.league_member_id = lm.id
+            and lts.league_season_id = ${season.id}
+          where
+            lm.source_league_history_id = ${season.source_league_history_id}
+            and lm.canonical_key = ${ownerCanonicalKey}
+          limit 1
+        `;
+        if (owner === undefined) {
+          return {
+            league: {
+              baseBudgetCents: season.base_budget_cents,
+              rosterSize: season.roster_size,
+              seasonKey: season.season_key,
+            },
+            owner: null,
+            plan: null,
+          };
+        }
+
+        const [planRow] = yield* sql<{ id: string }>`
+          select id
+          from fantasy.pre_draft_plans
+          where
+            league_member_id = ${owner.member_id}
+            and league_season_id = ${season.id}
+            and status = 'active'
+          order by updated_at desc
+          limit 1
+        `;
+        const plan = planRow === undefined ? null : yield* readPreDraftPlan(planRow.id);
+        return {
+          league: {
+            baseBudgetCents: season.base_budget_cents,
+            rosterSize: season.roster_size,
+            seasonKey: season.season_key,
+          },
+          owner: {
+            canonicalKey: owner.canonical_key,
+            displayName: owner.display_name,
+            memberId: owner.member_id,
+            teamName: owner.team_name,
+          },
+          plan,
+        } satisfies PreDraftWorkspace;
+      }).pipe(
+        Effect.mapError(() =>
+          databaseUnavailable('pre_draft_workspace', 'The pre-draft workspace could not be loaded'),
+        ),
+      );
+
+    const savePreDraftPlan = (
+      input: SavePreDraftPlanInput,
+    ): Effect.Effect<PreDraftPlan, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        if (
+          input.name.trim().length < 2 ||
+          input.strategyAngle.trim().length < 2 ||
+          input.streamingSlots < 0 ||
+          input.streamingSlots > 3 ||
+          input.anchorBudgetCents < 0 ||
+          input.coreBudgetCents < 0 ||
+          input.endgameBudgetCents < 0
+        ) {
+          throw new Error('The pre-draft plan is invalid');
+        }
+        const [reference] = yield* sql<{ league_member_id: string; league_season_id: string }>`
+          select lm.id as league_member_id, ls.id as league_season_id
+          from fantasy.league_seasons ls
+          join fantasy.league_members lm
+            on lm.source_league_history_id = ls.source_league_history_id
+          where
+            ls.source = 'fantrax'
+            and ls.season_key = ${input.seasonKey}
+            and lm.canonical_key = ${input.ownerCanonicalKey}
+          order by ls.updated_at desc
+          limit 1
+        `;
+        if (reference === undefined) throw new Error('The owner or league season was not found');
+        const [saved] = yield* sql<{ id: string }>`
+          insert into fantasy.pre_draft_plans
+            (
+              league_member_id,
+              league_season_id,
+              name,
+              status,
+              primary_goal,
+              strategy_angle,
+              risk_tolerance,
+              anchor_budget_cents,
+              core_budget_cents,
+              endgame_budget_cents,
+              streaming_slots,
+              notes
+            )
+          values
+            (
+              ${reference.league_member_id},
+              ${reference.league_season_id},
+              ${input.name.trim()},
+              'active',
+              ${input.primaryGoal},
+              ${input.strategyAngle.trim()},
+              ${input.riskTolerance},
+              ${input.anchorBudgetCents},
+              ${input.coreBudgetCents},
+              ${input.endgameBudgetCents},
+              ${input.streamingSlots},
+              ${input.notes.trim()}
+            )
+          on conflict (league_member_id, league_season_id, name) do update set
+            status = 'active',
+            primary_goal = excluded.primary_goal,
+            strategy_angle = excluded.strategy_angle,
+            risk_tolerance = excluded.risk_tolerance,
+            anchor_budget_cents = excluded.anchor_budget_cents,
+            core_budget_cents = excluded.core_budget_cents,
+            endgame_budget_cents = excluded.endgame_budget_cents,
+            streaming_slots = excluded.streaming_slots,
+            notes = excluded.notes,
+            updated_at = now()
+          returning id
+        `;
+        if (saved === undefined) throw new Error('The pre-draft plan was not saved');
+        const plan = yield* readPreDraftPlan(saved.id);
+        if (plan === null) throw new Error('The saved pre-draft plan could not be loaded');
+        return plan;
+      });
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable('save_pre_draft_plan', 'The pre-draft plan could not be saved'),
+          ),
+        );
+    };
+
+    const savePreDraftTarget = (
+      input: SavePreDraftTargetInput,
+    ): Effect.Effect<void, DatabaseUnavailable> => {
+      if (
+        input.priority < 1 ||
+        input.priority > 5 ||
+        (input.maxBidCents !== null && input.maxBidCents < 0)
+      ) {
+        return Effect.fail(
+          databaseUnavailable('save_pre_draft_target', 'The pre-draft target is invalid'),
+        );
+      }
+      return sql`
+        insert into fantasy.pre_draft_targets
+          (plan_id, player_id, stance, max_bid_cents, priority, rationale)
+        values
+          (
+            ${input.planId},
+            ${input.playerId},
+            ${input.stance},
+            ${input.maxBidCents},
+            ${input.priority},
+            ${input.rationale.trim()}
+          )
+        on conflict (plan_id, player_id) do update set
+          stance = excluded.stance,
+          max_bid_cents = excluded.max_bid_cents,
+          priority = excluded.priority,
+          rationale = excluded.rationale,
+          updated_at = now()
+      `.pipe(
+        Effect.asVoid,
+        Effect.mapError(() =>
+          databaseUnavailable('save_pre_draft_target', 'The pre-draft target could not be saved'),
+        ),
+      );
+    };
 
     const reconcileLeagueTeamIdentity = (
       input: LeagueTeamReconciliationInput,
@@ -1966,7 +2748,399 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const saveFantraxAdpSnapshot = (
+      batch: FantraxAdpSnapshotBatch,
+    ): Effect.Effect<FantraxAdpSnapshotImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [existingSnapshot] = yield* sql<{
+          ingestion_run_id: string;
+          player_count: number;
+          snapshot_id: string;
+        }>`
+          select
+            ads.id as snapshot_id,
+            ads.ingestion_run_id,
+            count(pa.player_id)::integer as player_count
+          from fantasy.adp_snapshots ads
+          left join fantasy.player_adp pa on pa.snapshot_id = ads.id
+          where ads.fingerprint = ${batch.fingerprint}
+          group by ads.id, ads.ingestion_run_id
+        `;
+        if (existingSnapshot !== undefined) {
+          return {
+            alreadyImported: true,
+            ingestionRunId: existingSnapshot.ingestion_run_id,
+            newPlayerCount: 0,
+            playerAdpCount: existingSnapshot.player_count,
+            snapshotId: existingSnapshot.snapshot_id,
+          };
+        }
+
+        const capturedAt = new Date(batch.capturedAt);
+        if (Number.isNaN(capturedAt.getTime())) throw new Error('ADP capturedAt is invalid');
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, season_key, status, record_count, details)
+          values
+            (
+              ${batch.source},
+              'average-draft-position',
+              ${batch.seasonKey},
+              'running',
+              ${batch.records.length},
+              ${sql.json({ capturedAt: batch.capturedAt, fingerprint: batch.fingerprint })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) throw new Error('The ADP ingestion run was not created');
+
+        const playerIds = new Map<string, string>();
+        let newPlayerCount = 0;
+        for (const record of batch.records) {
+          let playerId = record.existingPlayerId;
+          if (playerId === null) {
+            const [identity] = yield* sql<{ player_id: string }>`
+              select player_id
+              from fantasy.player_identities
+              where source = 'fantrax' and external_id = ${record.fantraxId}
+            `;
+            playerId = identity?.player_id ?? null;
+          }
+          if (playerId === null) {
+            const nameMatches = yield* sql<{ id: string }>`
+              select id
+              from fantasy.players
+              where normalized_name = ${record.normalizedName}
+            `;
+            if (nameMatches.length > 1) {
+              throw new Error(`Canonical player ${record.canonicalName} is ambiguous`);
+            }
+            playerId = nameMatches[0]?.id ?? null;
+          }
+          if (playerId === null) {
+            const [created] = yield* sql<{ id: string }>`
+              insert into fantasy.players (canonical_name, normalized_name)
+              values (${record.canonicalName}, ${record.normalizedName})
+              returning id
+            `;
+            if (created === undefined) throw new Error(`${record.canonicalName} was not created`);
+            playerId = created.id;
+            newPlayerCount += 1;
+          }
+
+          const [claimedIdentity] = yield* sql<{ player_id: string }>`
+            select player_id
+            from fantasy.player_identities
+            where source = 'fantrax' and external_id = ${record.fantraxId}
+          `;
+          if (claimedIdentity !== undefined && claimedIdentity.player_id !== playerId) {
+            throw new Error(`Fantrax identity ${record.fantraxId} is already claimed`);
+          }
+          yield* sql`
+            insert into fantasy.player_identities
+              (player_id, source, external_id, source_name)
+            values
+              (${playerId}, 'fantrax', ${record.fantraxId}, ${record.sourceName})
+            on conflict (source, external_id) do update set
+              source_name = excluded.source_name,
+              updated_at = now()
+          `;
+          playerIds.set(record.fantraxId, playerId);
+        }
+
+        const [snapshot] = yield* sql<{ id: string }>`
+          insert into fantasy.adp_snapshots
+            (
+              ingestion_run_id,
+              source,
+              sport,
+              season_key,
+              captured_at,
+              fingerprint,
+              record_count
+            )
+          values
+            (
+              ${ingestionRun.id},
+              ${batch.source},
+              ${batch.sport},
+              ${batch.seasonKey},
+              ${capturedAt},
+              ${batch.fingerprint},
+              ${batch.records.length}
+            )
+          returning id
+        `;
+        if (snapshot === undefined) throw new Error('The ADP snapshot was not created');
+
+        const sourceRecords = batch.records.map((record) => ({
+          captured_at: capturedAt,
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: record.sourcePayload,
+          source_record_id: `${batch.seasonKey}:${record.fantraxId}`,
+        }));
+        if (sourceRecords.length > 0) {
+          yield* sql`insert into fantasy.source_records ${sql.insert(sourceRecords)}`;
+        }
+        const adpRecords = batch.records.map((record, index) => {
+          const playerId = playerIds.get(record.fantraxId);
+          const sourceRecord = sourceRecords[index];
+          if (playerId === undefined || sourceRecord === undefined) {
+            throw new Error('Validated ADP references are incomplete');
+          }
+          return {
+            adp: record.adp,
+            player_id: playerId,
+            position: record.position,
+            snapshot_id: snapshot.id,
+            source_record_id: sourceRecord.id,
+          };
+        });
+        if (adpRecords.length > 0) {
+          yield* sql`insert into fantasy.player_adp ${sql.insert(adpRecords)}`;
+        }
+        yield* sql`
+          update fantasy.ingestion_runs
+          set
+            status = 'completed',
+            finished_at = now(),
+            details = details || ${sql.json({ newPlayerCount, snapshotId: snapshot.id })}
+          where id = ${ingestionRun.id}
+        `;
+        return {
+          alreadyImported: false,
+          ingestionRunId: ingestionRun.id,
+          newPlayerCount,
+          playerAdpCount: batch.records.length,
+          snapshotId: snapshot.id,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'save_fantrax_adp_snapshot',
+              'The Fantrax ADP snapshot could not be saved',
+            ),
+          ),
+        );
+    };
+
+    const saveProjectionSnapshot = (
+      batch: ProjectionSnapshotBatch,
+    ): Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [existingSnapshot] = yield* sql<{
+          ingestion_run_id: string;
+          new_player_count: number;
+          player_projection_count: number;
+          snapshot_id: string;
+        }>`
+          select
+            ps.id as snapshot_id,
+            ps.ingestion_run_id,
+            coalesce((ps.parameters ->> 'newPlayerCount')::integer, 0) as new_player_count,
+            count(pp.player_id)::integer as player_projection_count
+          from fantasy.projection_snapshots ps
+          left join fantasy.player_projections pp on pp.snapshot_id = ps.id
+          where ps.fingerprint = ${batch.fingerprint}
+          group by ps.id
+        `;
+        if (existingSnapshot !== undefined) {
+          return {
+            ingestionRunId: existingSnapshot.ingestion_run_id,
+            newPlayerCount: existingSnapshot.new_player_count,
+            playerProjectionCount: existingSnapshot.player_projection_count,
+            snapshotId: existingSnapshot.snapshot_id,
+          };
+        }
+
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, season_key, status, record_count, details)
+          values
+            (
+              ${batch.source},
+              'season-projections',
+              ${batch.seasonKey},
+              'running',
+              ${batch.records.length},
+              ${sql.json({
+                asOf: batch.asOf,
+                fingerprint: batch.fingerprint,
+                modelVersion: batch.modelVersion,
+              })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) throw new Error('Projection ingestion run was not created');
+
+        let newPlayerCount = 0;
+        const playerIds = new Map<string, string>();
+        for (const record of batch.records) {
+          let playerId = record.existingPlayerId;
+          if (playerId !== null) {
+            const [existingPlayer] = yield* sql<{ id: string }>`
+              select id from fantasy.players where id = ${playerId}
+            `;
+            if (existingPlayer === undefined) {
+              throw new Error(`Projection references unknown player ${playerId}`);
+            }
+          } else {
+            const providerIdentities = yield* sql<{ player_id: string }>`
+              select player_id
+              from fantasy.player_identities
+              where source = ${batch.source} and external_id = ${record.sourceExternalId}
+            `;
+            if (providerIdentities.length > 1) {
+              throw new Error(`Projection identity ${record.sourceExternalId} is ambiguous`);
+            }
+            playerId = providerIdentities[0]?.player_id ?? null;
+            if (playerId === null) {
+              const nameMatches = yield* sql<{ id: string }>`
+                select id
+                from fantasy.players
+                where normalized_name = ${record.normalizedName}
+              `;
+              if (nameMatches.length > 1) {
+                throw new Error(`Canonical player ${record.canonicalName} is ambiguous`);
+              }
+              playerId = nameMatches[0]?.id ?? null;
+            }
+            if (playerId === null) {
+              const [createdPlayer] = yield* sql<{ id: string }>`
+                insert into fantasy.players (canonical_name, normalized_name)
+                values (${record.canonicalName}, ${record.normalizedName})
+                returning id
+              `;
+              if (createdPlayer === undefined) {
+                throw new Error(`Canonical player ${record.canonicalName} was not created`);
+              }
+              playerId = createdPlayer.id;
+              newPlayerCount += 1;
+            }
+          }
+
+          const [claimedIdentity] = yield* sql<{ player_id: string }>`
+            select player_id
+            from fantasy.player_identities
+            where source = ${batch.source} and external_id = ${record.sourceExternalId}
+          `;
+          if (claimedIdentity !== undefined && claimedIdentity.player_id !== playerId) {
+            throw new Error(`Projection identity ${record.sourceExternalId} is already claimed`);
+          }
+          yield* sql`
+            insert into fantasy.player_identities
+              (player_id, source, external_id, source_name)
+            values
+              (${playerId}, ${batch.source}, ${record.sourceExternalId}, ${record.sourceName})
+            on conflict (source, external_id) do update set
+              source_name = excluded.source_name,
+              updated_at = now()
+          `;
+          playerIds.set(record.sourceExternalId, playerId);
+        }
+
+        const [snapshot] = yield* sql<{ id: string }>`
+          insert into fantasy.projection_snapshots
+            (
+              ingestion_run_id,
+              source,
+              season_key,
+              as_of,
+              model_version,
+              fingerprint,
+              parameters
+            )
+          values
+            (
+              ${ingestionRun.id},
+              ${batch.source},
+              ${batch.seasonKey},
+              ${new Date(batch.asOf)},
+              ${batch.modelVersion},
+              ${batch.fingerprint},
+              ${sql.json({ newPlayerCount })}
+            )
+          returning id
+        `;
+        if (snapshot === undefined) throw new Error('Projection snapshot was not created');
+
+        const sourceRecords = batch.records.map((record) => ({
+          captured_at: new Date(batch.asOf),
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: record.sourcePayload,
+          source_record_id: `${batch.seasonKey}:${record.sourceExternalId}`,
+        }));
+        if (sourceRecords.length > 0) {
+          yield* sql`
+            insert into fantasy.source_records ${sql.insert(sourceRecords)}
+          `;
+        }
+
+        const projectionRecords = batch.records.map((record, index) => {
+          const playerId = playerIds.get(record.sourceExternalId);
+          const sourceRecord = sourceRecords[index];
+          if (playerId === undefined || sourceRecord === undefined) {
+            throw new Error('Validated projection references are incomplete');
+          }
+          return {
+            availability: record.projection.availability,
+            bonuses: record.projection.bonuses,
+            expected_fantasy_points: record.projection.fantasyPoints,
+            expected_fantasy_points_per_game: record.projection.fantasyPointsPerGame,
+            expected_games: record.projection.availability.expectedGames,
+            player_id: playerId,
+            positions: record.projection.positions,
+            schedule: record.projection.schedule,
+            scoring_components: record.projection.scoringComponents,
+            snapshot_id: snapshot.id,
+            source_record_id: sourceRecord.id,
+            stats_per_game: record.projection.statsPerGame,
+            team_abbreviation: record.projection.teamAbbreviation,
+          };
+        });
+        if (projectionRecords.length > 0) {
+          yield* sql`
+            insert into fantasy.player_projections ${sql.insert(projectionRecords)}
+          `;
+        }
+
+        yield* sql`
+          update fantasy.ingestion_runs
+          set
+            status = 'completed',
+            finished_at = now(),
+            details = details || ${sql.json({ newPlayerCount, snapshotId: snapshot.id })}
+          where id = ${ingestionRun.id}
+        `;
+
+        return {
+          ingestionRunId: ingestionRun.id,
+          newPlayerCount,
+          playerProjectionCount: batch.records.length,
+          snapshotId: snapshot.id,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'save_projection_snapshot',
+              'The projection snapshot could not be saved',
+            ),
+          ),
+        );
+    };
+
     return Database.of({
+      canonicalPlayers,
       canonicalPlayerIdentities,
       health: sql<{ database_time: string }>`select now()::text as database_time`.pipe(
         Effect.flatMap(([row]) =>
@@ -1983,13 +3157,20 @@ const databaseServiceLayer = Layer.effect(
       ),
       historicalAuctionMarket,
       historicalRankings,
+      latestAdpSnapshot,
+      latestProjectionSnapshot,
       leagueRosterSnapshot,
       leagueTeamHistory,
       playerProductionHistory,
+      preDraftWorkspace,
       reconcileLeagueTeamIdentity,
       replaceHistoricalAuctions,
       replaceHistoricalScoring,
       replacePlayerProduction,
+      saveFantraxAdpSnapshot,
+      savePreDraftPlan,
+      savePreDraftTarget,
+      saveProjectionSnapshot,
     });
   }),
 );

@@ -7,6 +7,8 @@
     "packages/*"
   ],
   "scripts": {
+    "adp:import": "nx run importer:adp-import -- --commit",
+    "adp:validate": "nx run importer:adp-import",
     "build": "nx run web:build",
     "check": "bun run typecheck && bun run test && bun run lint && bun run test:python",
     "data:import": "nx run importer:data-import -- --commit",
@@ -18,6 +20,8 @@
     "lint": "nx run-many -t lint",
     "production:import": "nx run importer:production-import -- --commit",
     "production:validate": "nx run importer:production-import",
+    "projections:import": "nx run importer:projection-import -- --commit",
+    "projections:validate": "nx run importer:projection-import",
     "scoring:import": "nx run importer:scoring-import -- --commit",
     "scoring:validate": "nx run importer:scoring-import",
     "test": "nx run-many -t test -- --run",

@@ -1,7 +1,7 @@
 {
   "name": "League Points",
   "version": 1,
-  "applies_to_seasons": ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"],
+  "applies_to_seasons": ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26", "2026-27"],
   "stack_triple_double_bonuses": true,
   "rules": [
     { "stat_key": "ast", "label": "Assists (AST)", "points": 0.8 },

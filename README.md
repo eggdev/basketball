@@ -163,6 +163,19 @@ later undrafted season contributes $0; seasons before a player's debut do not.
 This is an explainable historical estimate, not a production projection or
 recommended maximum bid.
 
+The pre-draft room is anchored to the canonical league owner, Brendan Eggers
+(Clyde), rather than an email address or a historical team name. It persists
+named strategy scenarios, budget guardrails, risk posture, streaming-slot
+intent, and player target/watch/avoid decisions. Eve reloads the active plan as
+turn-scoped system context, so a saved UI change informs the next conversation
+without exposing Better Auth identifiers in the repository.
+
+Fantrax public ADP is stored as immutable, fingerprinted snapshots. Run
+`bun run adp:validate` to review a response and `bun run adp:import` to commit
+it. The current board and Eve tool derive movement from the previous changed
+snapshot; positive movement means a player is being drafted earlier. ADP stays
+separate from both production projections and this league's auction prices.
+
 ## Player production and historical scoring
 
 Historical regular-season production is imported from BALLDONTLIE and kept
@@ -219,8 +232,11 @@ Five seasons of player production produce 1,001 stored player-season historical
 actual rankings. The player workspace joins those results to same-season draft
 cost and the weighted historical market while labeling them as actuals, not
 forecasts. Historical auction cost remains an observed market signal rather
-than a ranking; live availability, projections, and replacement value still
-need to be joined before the app recommends bids.
+than a ranking. The projection importer now converts a locally supplied
+Hashtag snapshot into availability-adjusted league points, including estimated
+double-/triple-double bonuses and optional playoff-week schedule weighting.
+Replacement value and the league-specific recommended-bid model are the
+remaining valuation layers.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be

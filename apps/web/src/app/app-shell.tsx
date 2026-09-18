@@ -4,6 +4,7 @@ import { useEveAgent } from 'eve/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  useCallback,
   createContext,
   type FormEvent,
   type ReactNode,
@@ -14,6 +15,19 @@ import {
 } from 'react';
 
 import { authClient } from '../lib/auth-client';
+import {
+  createEveConversationHistory,
+  type EveConversation,
+  type EveConversationHistory,
+  getEveConversationStorageKey,
+  loadEveConversationHistory,
+  saveEveConversationHistory,
+  saveEveConversationSession,
+  saveEveConversationSnapshot,
+  selectEveConversation,
+  startNewEveConversation,
+  titleEveConversation,
+} from '../lib/eve-conversation-history';
 import styles from './app-shell.module.css';
 import { ChatMarkdown } from './chat-markdown';
 
@@ -108,8 +122,8 @@ const navigation: ReadonlyArray<NavigationGroup> = [
 
 const routePrompts: Readonly<Record<string, ReadonlyArray<string>>> = {
   '/draft': [
-    'Build a draft plan from our historical prices and roster construction.',
-    'Which players does this league consistently overpay for?',
+    'Challenge the assumptions in my active pre-draft scenario.',
+    'Where does current Fantrax ADP diverge most from our league market?',
   ],
   '/league': [
     'Compare the latest complete league rosters and identify construction patterns.',
@@ -142,6 +156,7 @@ const routeTitle = (pathname: string): string => {
 };
 
 const compactLayoutQuery = '(max-width: 1180px)';
+const eveHistoryChangeEvent = 'fantasy-basketball:eve-history-change';
 
 const statusLabels = {
   error: 'Needs attention',
@@ -150,6 +165,14 @@ const statusLabels = {
   streaming: 'Analyzing',
   submitted: 'Connecting',
 } as const;
+
+const formatConversationTimestamp = (value: string): string =>
+  new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+  }).format(new Date(value));
 
 export const describeEveError = (error: Error | undefined): EveChatFailure | null => {
   if (error === undefined) return null;
@@ -192,11 +215,7 @@ export const describeEveError = (error: Error | undefined): EveChatFailure | nul
     };
   }
 
-  if (
-    message.includes('fetch') ||
-    message.includes('network') ||
-    message.includes('route')
-  ) {
+  if (message.includes('fetch') || message.includes('network') || message.includes('route')) {
     return {
       detail: 'The Eve service could not be reached. Your message is available to retry.',
       title: 'The agent connection was interrupted',
@@ -250,8 +269,132 @@ export function AppShell({
   readonly children: ReactNode;
   readonly viewer: AppViewer | null;
 }) {
+  const storageKey = getEveConversationStorageKey(viewer?.id);
+  const subscribeToHistory = useCallback(
+    (onChange: () => void) => {
+      const handleStorage = (event: StorageEvent) => {
+        if (event.key === storageKey) onChange();
+      };
+      const handleLocalChange = (event: Event) => {
+        if ((event as CustomEvent<string>).detail === storageKey) onChange();
+      };
+      window.addEventListener('storage', handleStorage);
+      window.addEventListener(eveHistoryChangeEvent, handleLocalChange);
+      return () => {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener(eveHistoryChangeEvent, handleLocalChange);
+      };
+    },
+    [storageKey],
+  );
+  const getHistorySnapshot = useCallback(
+    () => window.localStorage.getItem(storageKey) ?? '',
+    [storageKey],
+  );
+  const serializedHistory = useSyncExternalStore(
+    subscribeToHistory,
+    getHistorySnapshot,
+    () => null,
+  );
+  const fallbackHistory = useMemo(
+    () =>
+      createEveConversationHistory(
+        '1970-01-01T00:00:00.000Z',
+        `pending-${viewer?.id ?? 'local-development'}`,
+      ),
+    [viewer?.id],
+  );
+  const history = useMemo(() => {
+    if (serializedHistory === null || serializedHistory === '') return fallbackHistory;
+    return loadEveConversationHistory(
+      { getItem: () => serializedHistory, setItem: () => undefined },
+      storageKey,
+    );
+  }, [fallbackHistory, serializedHistory, storageKey]);
+  const historyReady = serializedHistory !== null;
+
+  const updateHistory = useCallback(
+    (update: (current: EveConversationHistory) => EveConversationHistory) => {
+      const persisted = window.localStorage.getItem(storageKey);
+      const current =
+        persisted === null ? history : loadEveConversationHistory(window.localStorage, storageKey);
+      const next = update(current);
+      saveEveConversationHistory(window.localStorage, storageKey, next);
+      window.dispatchEvent(new CustomEvent(eveHistoryChangeEvent, { detail: storageKey }));
+    },
+    [history, storageKey],
+  );
+
+  const activeConversation =
+    history.conversations.find(
+      (conversation) => conversation.id === history.activeConversationId,
+    ) ?? history.conversations[0];
+
+  return (
+    <AppShellRuntime
+      conversation={activeConversation}
+      conversationHistory={history.conversations}
+      historyReady={historyReady}
+      key={historyReady ? activeConversation.id : 'hydrating'}
+      onConversationPrompt={(conversationId, message) =>
+        updateHistory((current) => titleEveConversation(current, conversationId, message))
+      }
+      onConversationSession={(conversationId, session) =>
+        updateHistory((current) => saveEveConversationSession(current, conversationId, session))
+      }
+      onConversationSnapshot={(conversationId, snapshot) =>
+        updateHistory((current) => saveEveConversationSnapshot(current, conversationId, snapshot))
+      }
+      onNewConversation={() => updateHistory(startNewEveConversation)}
+      onSelectConversation={(conversationId) =>
+        updateHistory((current) => selectEveConversation(current, conversationId))
+      }
+      viewer={viewer}
+    >
+      {children}
+    </AppShellRuntime>
+  );
+}
+
+interface AppShellRuntimeProps {
+  readonly children: ReactNode;
+  readonly conversation: EveConversation;
+  readonly conversationHistory: readonly EveConversation[];
+  readonly historyReady: boolean;
+  readonly onConversationPrompt: (conversationId: string, message: string) => void;
+  readonly onConversationSession: (
+    conversationId: string,
+    session: ReturnType<typeof useEveAgent>['session'],
+  ) => void;
+  readonly onConversationSnapshot: (
+    conversationId: string,
+    snapshot: Pick<ReturnType<typeof useEveAgent>, 'events' | 'session'>,
+  ) => void;
+  readonly onNewConversation: () => void;
+  readonly onSelectConversation: (conversationId: string) => void;
+  readonly viewer: AppViewer | null;
+}
+
+function AppShellRuntime({
+  children,
+  conversation,
+  conversationHistory,
+  historyReady,
+  onConversationPrompt,
+  onConversationSession,
+  onConversationSnapshot,
+  onNewConversation,
+  onSelectConversation,
+  viewer,
+}: AppShellRuntimeProps) {
   const pathname = usePathname();
-  const agent = useEveAgent();
+  const agent = useEveAgent({
+    initialEvents: conversation.events,
+    initialSession: conversation.session,
+    onFinish: (snapshot) => onConversationSnapshot(conversation.id, snapshot),
+    onSessionChange: (session) => onConversationSession(conversation.id, session),
+    resume: historyReady && conversation.session !== undefined,
+  });
   const [message, setMessage] = useState('');
   const compactLayout = useSyncExternalStore(
     subscribeToCompactLayout,
@@ -261,6 +404,7 @@ export function AppShell({
   const [desktopChatOpen, setDesktopChatOpen] = useState(true);
   const [compactChatOpen, setCompactChatOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [lastRequest, setLastRequest] = useState<EveRequest | null>(null);
   const chatEnabled = viewer !== null || process.env.NODE_ENV !== 'production';
@@ -272,6 +416,16 @@ export function AppShell({
     () => Object.keys(routePrompts).find((key) => pathname.startsWith(key)) ?? '/players',
     [pathname],
   );
+  const savedConversations = useMemo(
+    () =>
+      [...conversationHistory]
+        .filter(
+          (item) =>
+            item.id === conversation.id || item.session !== undefined || item.events.length > 0,
+        )
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    [conversation.id, conversationHistory],
+  );
   const chatOpen = compactLayout ? compactChatOpen : desktopChatOpen;
 
   const setChatOpen = (open: boolean) => {
@@ -280,6 +434,7 @@ export function AppShell({
   };
 
   const dispatch = (request: EveRequest) => {
+    onConversationPrompt(conversation.id, request.text);
     setLastRequest(request);
     setChatOpen(true);
     void agent
@@ -299,7 +454,6 @@ export function AppShell({
 
   const retryLastRequest = () => {
     if (lastRequest === null || isBusy || isResuming) return;
-    agent.reset();
     dispatch({
       context: lastRequest.context,
       text: lastRequest.text,
@@ -432,19 +586,30 @@ export function AppShell({
               <h2>League chat</h2>
             </div>
             <div className={styles.chatActions}>
-              <span aria-label="Eve status">
+              <output aria-label="Eve status">
                 {chatFailure === null ? statusLabels[agent.status] : 'Needs attention'}
-              </span>
+              </output>
               {isBusy ? (
                 <button onClick={() => void agent.cancel()} type="button">
                   Stop
                 </button>
               ) : null}
-              {agent.data.messages.length > 0 && !isBusy ? (
-                <button onClick={() => agent.reset()} type="button">
-                  New
-                </button>
-              ) : null}
+              <button
+                aria-expanded={historyOpen}
+                onClick={() => setHistoryOpen((open) => !open)}
+                type="button"
+              >
+                History
+              </button>
+              <button
+                onClick={() => {
+                  onNewConversation();
+                  setHistoryOpen(false);
+                }}
+                type="button"
+              >
+                New
+              </button>
               <button
                 aria-label="Close Eve chat"
                 className={styles.closeChat}
@@ -456,97 +621,149 @@ export function AppShell({
             </div>
           </header>
 
-          <div className={styles.quickPrompts}>
-            {(routePrompts[promptKey] ?? []).map((prompt) => (
-              <button
-                disabled={!chatEnabled || isResuming}
-                key={prompt}
-                onClick={() => send(prompt)}
-                type="button"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-
-          <div aria-live="polite" className={styles.messages}>
-            {!chatEnabled ? (
-              <div className={styles.emptyChat}>
-                <strong>Sign in to talk to Eve.</strong>
-                <span>The agent uses the same protected league data as these pages.</span>
-              </div>
-            ) : agent.data.messages.length === 0 ? (
-              <div className={styles.emptyChat}>
-                <strong>Ask from anywhere.</strong>
-                <span>
-                  The current route is attached to each turn so Eve knows what you are reviewing.
-                </span>
-              </div>
-            ) : (
-              agent.data.messages.map((item) => (
-                <article
-                  className={item.role === 'user' ? styles.userMessage : styles.agentMessage}
-                  key={item.id}
+          {historyOpen ? (
+            <section aria-label="Eve conversation history" className={styles.chatHistory}>
+              <div className={styles.historyHeading}>
+                <div>
+                  <strong>Recent conversations</strong>
+                  <span>Stored in this browser and resumed from Eve.</span>
+                </div>
+                <button
+                  onClick={() => {
+                    onNewConversation();
+                    setHistoryOpen(false);
+                  }}
+                  type="button"
                 >
-                  <small>{item.role === 'user' ? 'You' : 'Eve'}</small>
-                  {item.parts.map((part, index) =>
-                    part.type !== 'text' ? null : item.role === 'assistant' ? (
-                      <ChatMarkdown key={index}>{part.text}</ChatMarkdown>
-                    ) : (
-                      <p key={index}>{part.text}</p>
-                    ),
-                  )}
-                </article>
-              ))
-            )}
-            {isBusy ? (
-              <output className={styles.processingStatus}>
-                <span aria-hidden="true" />
-                {agent.status === 'submitted'
-                  ? 'Connecting to the analyst…'
-                  : 'Analyzing league data…'}
-              </output>
-            ) : null}
-          </div>
-
-          {chatFailure ? (
-            <section className={styles.chatError} role="alert">
-              <div>
-                <strong>{chatFailure.title}</strong>
-                <span>{chatFailure.detail}</span>
-              </div>
-              {lastRequest === null ? null : (
-                <button disabled={isBusy || isResuming} onClick={retryLastRequest} type="button">
-                  Retry last message
+                  Start new
                 </button>
-              )}
+              </div>
+              <div className={styles.historyList}>
+                {savedConversations.map((item) => (
+                  <button
+                    aria-current={item.id === conversation.id ? 'true' : undefined}
+                    className={styles.historyItem}
+                    key={item.id}
+                    onClick={() => {
+                      onSelectConversation(item.id);
+                      setHistoryOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <strong>{item.title}</strong>
+                    <span>
+                      {item.session === undefined ? 'Not sent yet' : 'Saved conversation'}
+                      <time dateTime={item.updatedAt}>
+                        {formatConversationTimestamp(item.updatedAt)}
+                      </time>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </section>
-          ) : null}
+          ) : (
+            <>
+              <div className={styles.quickPrompts}>
+                {(routePrompts[promptKey] ?? []).map((prompt) => (
+                  <button
+                    disabled={!chatEnabled || isResuming}
+                    key={prompt}
+                    onClick={() => send(prompt)}
+                    type="button"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
 
-          <form className={styles.composer} onSubmit={sendMessage}>
-            <label htmlFor="eve-message">Message Eve</label>
-            <div>
-              <textarea
-                disabled={!chatEnabled || isResuming}
-                id="eve-message"
-                onChange={(event) => setMessage(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                placeholder={
-                  chatEnabled ? 'Ask about a player, team, or price…' : 'Sign in to chat'
-                }
-                rows={2}
-                value={message}
-              />
-              <button disabled={!chatEnabled || isResuming || message.trim().length === 0}>
-                {isBusy ? 'Steer' : 'Send'}
-              </button>
-            </div>
-          </form>
+              <div aria-live="polite" className={styles.messages}>
+                {!chatEnabled ? (
+                  <div className={styles.emptyChat}>
+                    <strong>Sign in to talk to Eve.</strong>
+                    <span>The agent uses the same protected league data as these pages.</span>
+                  </div>
+                ) : agent.data.messages.length === 0 ? (
+                  <div className={styles.emptyChat}>
+                    <strong>
+                      {isResuming ? 'Restoring this conversation…' : 'Ask from anywhere.'}
+                    </strong>
+                    <span>
+                      {isResuming
+                        ? 'Eve is replaying the durable session.'
+                        : 'The current route is attached to each turn so Eve knows what you are reviewing.'}
+                    </span>
+                  </div>
+                ) : (
+                  agent.data.messages.map((item) => (
+                    <article
+                      className={item.role === 'user' ? styles.userMessage : styles.agentMessage}
+                      key={item.id}
+                    >
+                      <small>{item.role === 'user' ? 'You' : 'Eve'}</small>
+                      {item.parts.map((part, index) =>
+                        part.type !== 'text' ? null : item.role === 'assistant' ? (
+                          <ChatMarkdown key={index}>{part.text}</ChatMarkdown>
+                        ) : (
+                          <p key={index}>{part.text}</p>
+                        ),
+                      )}
+                    </article>
+                  ))
+                )}
+                {isBusy ? (
+                  <output className={styles.processingStatus}>
+                    <span aria-hidden="true" />
+                    {agent.status === 'submitted'
+                      ? 'Connecting to the analyst…'
+                      : 'Analyzing league data…'}
+                  </output>
+                ) : null}
+              </div>
+
+              {chatFailure ? (
+                <section className={styles.chatError} role="alert">
+                  <div>
+                    <strong>{chatFailure.title}</strong>
+                    <span>{chatFailure.detail}</span>
+                  </div>
+                  {lastRequest === null ? null : (
+                    <button
+                      disabled={isBusy || isResuming}
+                      onClick={retryLastRequest}
+                      type="button"
+                    >
+                      Retry last message
+                    </button>
+                  )}
+                </section>
+              ) : null}
+
+              <form className={styles.composer} onSubmit={sendMessage}>
+                <label htmlFor="eve-message">Message Eve</label>
+                <div>
+                  <textarea
+                    disabled={!chatEnabled || isResuming}
+                    id="eve-message"
+                    onChange={(event) => setMessage(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder={
+                      chatEnabled ? 'Ask about a player, team, or price…' : 'Sign in to chat'
+                    }
+                    rows={2}
+                    value={message}
+                  />
+                  <button disabled={!chatEnabled || isResuming || message.trim().length === 0}>
+                    {isBusy ? 'Steer' : 'Send'}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
         </aside>
       </div>
     </EveChatContext.Provider>
