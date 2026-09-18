@@ -8,7 +8,7 @@ import type {
 import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 
-import { AppShell } from '../src/app/app-shell';
+import { AppShell, describeEveError, getLatestEveTurnError } from '../src/app/app-shell';
 import { LeagueView } from '../src/app/league/league-view';
 import { ManagersView } from '../src/app/managers/managers-view';
 import { PlayersView } from '../src/app/players/players-view';
@@ -26,6 +26,7 @@ vi.mock('eve/react', () => ({
     cancel: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     data: { messages: [] },
     error: undefined,
+    events: [],
     reset: vi.fn<() => void>(),
     send,
     status: 'ready',
@@ -255,6 +256,45 @@ const renderInShell = (child: React.ReactNode) =>
   render(<AppShell viewer={viewer}>{child}</AppShell>);
 
 describe('route workspace', () => {
+  it('turns model-provider failures into an actionable Eve message', () => {
+    expect(
+      describeEveError(
+        new Error('MODEL_CALL_FAILED: AI Gateway customer_verification_required'),
+      ),
+    ).toEqual({
+      detail:
+        'The model provider rejected this turn. Verify Vercel AI Gateway billing or configure OPENAI_API_KEY, then retry the message.',
+      title: 'The model provider is unavailable',
+    });
+  });
+
+  it('does not expose an Eve failure when the agent has no error', () => {
+    expect(describeEveError(undefined)).toBeNull();
+  });
+
+  it('reads recoverable model failures from Eve stream events', () => {
+    const error = getLatestEveTurnError([
+      {
+        data: {
+          code: 'MODEL_CALL_FAILED',
+          message: 'The model call failed.',
+          sequence: 0,
+          turnId: 'turn-1',
+        },
+        meta: { at: '2026-09-18T00:00:00.000Z', id: 'event-1' },
+        type: 'turn.failed',
+      },
+      {
+        data: { continuationToken: 'continuation-1', wait: 'next-user-message' },
+        meta: { at: '2026-09-18T00:00:00.001Z', id: 'event-2' },
+        type: 'session.waiting',
+      },
+    ]);
+
+    expect(error?.message).toBe('MODEL_CALL_FAILED: The model call failed.');
+    expect(describeEveError(error)?.title).toBe('The model provider is unavailable');
+  });
+
   it('renders persistent navigation and route-aware Eve chat', () => {
     renderInShell(<div>Route content</div>);
 

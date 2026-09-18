@@ -1,6 +1,11 @@
 import { defineAgent } from 'eve';
+import { openai } from 'eve/models/openai';
+
+const directOpenAiKey = process.env['OPENAI_API_KEY']?.trim();
 
 export default defineAgent({
-  model: 'openai/gpt-5.6-sol',
+  // Prefer a direct provider credential when one is configured. Otherwise use
+  // Vercel AI Gateway through the deployment's project OIDC identity.
+  model: directOpenAiKey ? openai('gpt-5.6-sol') : 'openai/gpt-5.6-sol',
   reasoning: 'high',
 });

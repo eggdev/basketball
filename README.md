@@ -77,10 +77,16 @@ BETTER_AUTH_URL=http://localhost:3000
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 AUTH_ALLOWED_EMAIL=
+OPENAI_API_KEY=
 ```
 
 Do not commit provider or model credentials. Eve model credentials can be set
 through its local `/login` flow or the deployment environment.
+
+Production uses Vercel AI Gateway through project OIDC by default. The Vercel
+team must have AI Gateway billing verification enabled. Alternatively, set
+`OPENAI_API_KEY` in the deployment environment; the agent automatically uses
+the direct OpenAI provider when that variable is present.
 
 The application uses `DATABASE_URL` for pooled request traffic and reserves
 `DATABASE_URL_UNPOOLED` for migrations. Apply both committed schemas with:

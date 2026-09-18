@@ -30,6 +30,16 @@ interface EveChatValue {
   readonly send: (message: string, context?: EvePageContext) => void;
 }
 
+interface EveChatFailure {
+  readonly detail: string;
+  readonly title: string;
+}
+
+interface EveRequest {
+  readonly context: EvePageContext;
+  readonly text: string;
+}
+
 const EveChatContext = createContext<EveChatValue | null>(null);
 
 export function useEveChat(): EveChatValue {
@@ -132,6 +142,82 @@ const routeTitle = (pathname: string): string => {
 
 const compactLayoutQuery = '(max-width: 1180px)';
 
+const statusLabels = {
+  error: 'Needs attention',
+  ready: 'Ready',
+  resuming: 'Restoring chat',
+  streaming: 'Analyzing',
+  submitted: 'Connecting',
+} as const;
+
+export const describeEveError = (error: Error | undefined): EveChatFailure | null => {
+  if (error === undefined) return null;
+
+  const message = error.message.toLocaleLowerCase();
+  if (
+    message.includes('customer_verification_required') ||
+    message.includes('valid credit card') ||
+    message.includes('ai gateway') ||
+    message.includes('model call failed') ||
+    message.includes('model_call_failed')
+  ) {
+    return {
+      detail:
+        'The model provider rejected this turn. Verify Vercel AI Gateway billing or configure OPENAI_API_KEY, then retry the message.',
+      title: 'The model provider is unavailable',
+    };
+  }
+
+  if (
+    message.includes('401') ||
+    message.includes('authentication') ||
+    message.includes('unauthorized')
+  ) {
+    return {
+      detail: 'Your owner session may have expired. Refresh the page and sign in again.',
+      title: 'Eve could not verify your session',
+    };
+  }
+
+  if (
+    message.includes('fetch') ||
+    message.includes('network') ||
+    message.includes('route')
+  ) {
+    return {
+      detail: 'The Eve service could not be reached. Your message is available to retry.',
+      title: 'The agent connection was interrupted',
+    };
+  }
+
+  return {
+    detail: 'The turn did not complete. Start a fresh session and retry the message.',
+    title: 'Eve could not finish that request',
+  };
+};
+
+export const getLatestEveTurnError = (
+  events: ReturnType<typeof useEveAgent>['events'],
+): Error | undefined => {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+
+    if (event.type === 'turn.failed') {
+      return new Error(`${event.data.code}: ${event.data.message}`);
+    }
+
+    if (
+      event.type === 'turn.completed' ||
+      event.type === 'turn.cancelled' ||
+      event.type === 'message.received'
+    ) {
+      return undefined;
+    }
+  }
+
+  return undefined;
+};
+
 const subscribeToCompactLayout = (onChange: () => void): (() => void) => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
   const media = window.matchMedia(compactLayoutQuery);
@@ -163,9 +249,12 @@ export function AppShell({
   const [compactChatOpen, setCompactChatOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [lastRequest, setLastRequest] = useState<EveRequest | null>(null);
   const chatEnabled = viewer !== null || process.env.NODE_ENV !== 'production';
   const isBusy = agent.status === 'submitted' || agent.status === 'streaming';
   const isResuming = agent.status === 'resuming';
+  const turnError = isBusy || isResuming ? undefined : getLatestEveTurnError(agent.events);
+  const chatFailure = describeEveError(agent.error ?? turnError);
   const promptKey = useMemo(
     () => Object.keys(routePrompts).find((key) => pathname.startsWith(key)) ?? '/players',
     [pathname],
@@ -177,13 +266,30 @@ export function AppShell({
     else setDesktopChatOpen(open);
   };
 
+  const dispatch = (request: EveRequest) => {
+    setLastRequest(request);
+    setChatOpen(true);
+    void agent
+      .send(request.text, {
+        clientContext: { route: pathname, ...request.context },
+        ...(isBusy ? { turnPolicy: 'steer' as const } : {}),
+      })
+      // useEveAgent projects the failure into agent.error for the UI.
+      .catch(() => undefined);
+  };
+
   const send = (text: string, context: EvePageContext = {}) => {
     const trimmed = text.trim();
     if (!chatEnabled || isResuming || trimmed.length === 0) return;
-    setChatOpen(true);
-    void agent.send(trimmed, {
-      clientContext: { route: pathname, ...context },
-      ...(isBusy ? { turnPolicy: 'steer' as const } : {}),
+    dispatch({ context, text: trimmed });
+  };
+
+  const retryLastRequest = () => {
+    if (lastRequest === null || isBusy || isResuming) return;
+    agent.reset();
+    dispatch({
+      context: lastRequest.context,
+      text: lastRequest.text,
     });
   };
 
@@ -313,7 +419,9 @@ export function AppShell({
               <h2>League chat</h2>
             </div>
             <div className={styles.chatActions}>
-              <span>{agent.status}</span>
+              <span aria-label="Eve status">
+                {chatFailure === null ? statusLabels[agent.status] : 'Needs attention'}
+              </span>
               {isBusy ? (
                 <button onClick={() => void agent.cancel()} type="button">
                   Stop
@@ -374,9 +482,29 @@ export function AppShell({
                 </article>
               ))
             )}
+            {isBusy ? (
+              <output className={styles.processingStatus}>
+                <span aria-hidden="true" />
+                {agent.status === 'submitted'
+                  ? 'Connecting to the analyst…'
+                  : 'Analyzing league data…'}
+              </output>
+            ) : null}
           </div>
 
-          {agent.error ? <p className={styles.chatError}>{agent.error.message}</p> : null}
+          {chatFailure ? (
+            <section className={styles.chatError} role="alert">
+              <div>
+                <strong>{chatFailure.title}</strong>
+                <span>{chatFailure.detail}</span>
+              </div>
+              {lastRequest === null ? null : (
+                <button disabled={isBusy || isResuming} onClick={retryLastRequest} type="button">
+                  Retry last message
+                </button>
+              )}
+            </section>
+          ) : null}
 
           <form className={styles.composer} onSubmit={sendMessage}>
             <label htmlFor="eve-message">Message Eve</label>
