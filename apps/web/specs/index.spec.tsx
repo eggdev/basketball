@@ -268,6 +268,18 @@ describe('route workspace', () => {
     });
   });
 
+  it('distinguishes a restricted Luna model from generic provider failures', () => {
+    expect(
+      describeEveError(
+        new Error('MODEL_CALL_FAILED: Free tier users do not have access to this model.'),
+      ),
+    ).toEqual({
+      detail:
+        'GPT-5.6 Luna requires paid Vercel AI Gateway credits. Top up the Gateway balance, then retry the message.',
+      title: 'Luna needs paid Gateway credits',
+    });
+  });
+
   it('does not expose an Eve failure when the agent has no error', () => {
     expect(describeEveError(undefined)).toBeNull();
   });

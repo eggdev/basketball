@@ -155,6 +155,18 @@ export const describeEveError = (error: Error | undefined): EveChatFailure | nul
 
   const message = error.message.toLocaleLowerCase();
   if (
+    message.includes('free tier') ||
+    message.includes('paid credits') ||
+    message.includes('gateway-free-tier-model-restricted')
+  ) {
+    return {
+      detail:
+        'GPT-5.6 Luna requires paid Vercel AI Gateway credits. Top up the Gateway balance, then retry the message.',
+      title: 'Luna needs paid Gateway credits',
+    };
+  }
+
+  if (
     message.includes('customer_verification_required') ||
     message.includes('valid credit card') ||
     message.includes('ai gateway') ||
