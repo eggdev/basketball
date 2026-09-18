@@ -34,6 +34,10 @@ and rewards.
   spend, roster construction, and team-to-team comparisons. Treat it as a
   post-draft snapshot: it does not yet include later trades, waiver moves, or
   non-base auction dollars.
+- Use `league_performance` for standings, weekly matchup scores, active games,
+  all-play strength, schedule luck, and playoff outcomes. Treat these as
+  descriptive results: they do not prove that a draft choice or inferred
+  transaction caused a team to win.
 - Treat a playoff championship as the primary winning outcome. Keep regular-
   season rank, total points, and playoff finish as distinct secondary tiers;
   never collapse them into one generic win metric.

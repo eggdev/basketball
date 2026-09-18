@@ -18,6 +18,8 @@
     "dev:agent:ui": "bunx eve dev",
     "dev:web": "nx run web:dev",
     "lint": "nx run-many -t lint",
+    "performance:import": "nx run importer:league-performance-import -- --commit",
+    "performance:validate": "nx run importer:league-performance-import",
     "production:import": "nx run importer:production-import -- --commit",
     "production:validate": "nx run importer:production-import",
     "projections:import": "nx run importer:projection-import -- --commit",

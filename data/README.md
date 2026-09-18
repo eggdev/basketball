@@ -61,3 +61,29 @@ Unchanged responses are idempotent. When Fantrax values change, the next import
 creates a new immutable snapshot and the app derives movement against the prior
 snapshot. Positive movement means a player is being selected earlier. ADP is a
 public demand signal, not a points projection or direct auction-dollar value.
+
+## Fantrax league performance
+
+Historical standings and weekly matchup scores are fetched from Fantrax's documented
+`getStandings` and `getMatchupScores` endpoints. Validate every configured historical
+season without writing to Postgres:
+
+```sh
+bun run performance:validate
+```
+
+Commit the validated, fingerprinted result:
+
+```sh
+bun run performance:import
+```
+
+Provider responses are cached under `cache/fantrax/<season>/` and remain ignored by
+Git. Pass `--refresh` after the Nx argument separator to deliberately refetch them,
+or `--seasons=2024-25,2025-26` to limit a run. The importer spaces live requests and
+stores the exact source rows alongside normalized standings and matchups for audit.
+
+Fantrax matchup scores are weekly scoring-period totals, not daily results. The app
+derives schedule-neutral all-play percentage, expected wins, schedule luck, scoring
+consistency, and active games from those weekly totals. These metrics describe team
+performance; they do not prove which draft pick, trade, or waiver move caused it.

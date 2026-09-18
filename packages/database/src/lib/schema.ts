@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -199,6 +200,109 @@ export const sourceRecords = fantasySchema.table(
   },
   (table) => [
     uniqueIndex('source_records_run_record_unique').on(table.ingestionRunId, table.sourceRecordId),
+  ],
+);
+
+export const leagueSeasonPerformance = fantasySchema.table('league_season_performance', {
+  leagueSeasonId: uuid('league_season_id')
+    .primaryKey()
+    .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
+  ingestionRunId: uuid('ingestion_run_id')
+    .notNull()
+    .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+  scoringType: text('scoring_type').notNull(),
+  lastRegularSeasonPeriod: integer('last_regular_season_period').notNull(),
+  firstPlayoffPeriod: integer('first_playoff_period'),
+  finalScoringPeriod: integer('final_scoring_period').notNull(),
+  playoffTeamCount: integer('playoff_team_count').notNull(),
+  ...timestamps,
+});
+
+export const leagueTeamStandings = fantasySchema.table(
+  'league_team_standings',
+  {
+    leagueTeamSeasonId: uuid('league_team_season_id')
+      .primaryKey()
+      .references(() => leagueTeamSeasons.id, { onDelete: 'cascade' }),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
+      onDelete: 'set null',
+    }),
+    rank: integer('rank').notNull(),
+    record: text('record').notNull(),
+    wins: integer('wins').notNull(),
+    losses: integer('losses').notNull(),
+    ties: integer('ties').notNull(),
+    winPercentage: numeric('win_percentage', { precision: 7, scale: 5 }).notNull(),
+    gamesBack: numeric('games_back', { precision: 7, scale: 2 }).notNull(),
+    pointsFor: numeric('points_for', { precision: 14, scale: 3 }).notNull(),
+    madePlayoffs: boolean('made_playoffs').notNull(),
+    playoffSeed: integer('playoff_seed'),
+    postseasonResult: text('postseason_result').notNull(),
+    postseasonFinish: integer('postseason_finish'),
+    ...timestamps,
+  },
+  (table) => [index('league_team_standings_rank_idx').on(table.rank)],
+);
+
+export const leagueMatchups = fantasySchema.table(
+  'league_matchups',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    leagueSeasonId: uuid('league_season_id')
+      .notNull()
+      .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
+      onDelete: 'set null',
+    }),
+    scoringPeriod: integer('scoring_period').notNull(),
+    periodStartAt: timestamp('period_start_at', { withTimezone: true }).notNull(),
+    periodEndAt: timestamp('period_end_at', { withTimezone: true }).notNull(),
+    phase: text('phase').notNull(),
+    playoffRound: text('playoff_round'),
+    awayTeamSeasonId: uuid('away_team_season_id')
+      .notNull()
+      .references(() => leagueTeamSeasons.id, { onDelete: 'cascade' }),
+    homeTeamSeasonId: uuid('home_team_season_id')
+      .notNull()
+      .references(() => leagueTeamSeasons.id, { onDelete: 'cascade' }),
+    awayScore: numeric('away_score', { precision: 14, scale: 3 }).notNull(),
+    homeScore: numeric('home_score', { precision: 14, scale: 3 }).notNull(),
+    awayGamesPlayed: integer('away_games_played').notNull(),
+    homeGamesPlayed: integer('home_games_played').notNull(),
+    awayCategoryTotals: jsonb('away_category_totals')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    homeCategoryTotals: jsonb('home_category_totals')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    winnerTeamSeasonId: uuid('winner_team_season_id').references(() => leagueTeamSeasons.id, {
+      onDelete: 'set null',
+    }),
+    isTie: boolean('is_tie').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('league_matchups_season_period_teams_unique').on(
+      table.leagueSeasonId,
+      table.scoringPeriod,
+      table.awayTeamSeasonId,
+      table.homeTeamSeasonId,
+    ),
+    index('league_matchups_away_team_idx').on(table.awayTeamSeasonId),
+    index('league_matchups_home_team_idx').on(table.homeTeamSeasonId),
+    index('league_matchups_season_phase_period_idx').on(
+      table.leagueSeasonId,
+      table.phase,
+      table.scoringPeriod,
+    ),
   ],
 );
 

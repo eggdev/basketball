@@ -176,6 +176,15 @@ it. The current board and Eve tool derive movement from the previous changed
 snapshot; positive movement means a player is being drafted earlier. ADP stays
 separate from both production projections and this league's auction prices.
 
+Historical league outcomes come from Fantrax standings and weekly matchup-score
+endpoints. Run `bun run performance:validate` to review all configured historical
+seasons, then `bun run performance:import` to commit the fingerprinted result. The
+League view and Eve expose playoff finish, regular-season record, all-play strength,
+schedule luck, scoring consistency, and active games. Weekly matchup data is useful
+for evaluating performance but cannot by itself identify or attribute a trade or
+waiver transaction; that requires a separate transaction ledger or dated roster
+snapshots.
+
 ## Player production and historical scoring
 
 Historical regular-season production is imported from BALLDONTLIE and kept
@@ -223,10 +232,10 @@ behind Better Auth. Eve queries the same auction, team-history, and roster
 snapshots through `historical_auction_market`, `league_team_history`, and
 `league_rosters`.
 
-Competitive outcomes will remain separate signals: playoff champion is the
+Competitive outcomes are stored as separate signals: playoff champion is the
 primary winning tier, while playoff finish, regular-season rank, total points,
-and matchup wins will be retained as secondary measures rather than collapsed
-into one generic result.
+matchup wins, all-play strength, consistency, and schedule luck remain available
+for comparison rather than being collapsed into one generic result.
 
 Five seasons of player production produce 1,001 stored player-season historical
 actual rankings. The player workspace joins those results to same-season draft

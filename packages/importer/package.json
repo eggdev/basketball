@@ -59,6 +59,15 @@
           "forwardAllArgs": true
         }
       },
+      "league-performance-import": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/import-league-performance.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
+      },
       "production-import": {
         "executor": "nx:run-commands",
         "cache": false,

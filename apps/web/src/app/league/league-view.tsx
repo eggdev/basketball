@@ -1,6 +1,10 @@
 'use client';
 
-import type { LeagueRosterSnapshot } from '@fantasy-basketball/database/runtime';
+import type {
+  LeaguePerformanceHistory,
+  LeaguePostseasonResult,
+  LeagueRosterSnapshot,
+} from '@fantasy-basketball/database/runtime';
 import { useMemo, useState } from 'react';
 
 import { formatPrice } from '../../lib/format';
@@ -10,18 +14,37 @@ import styles from '../workspace.module.css';
 
 export function LeagueView({
   authenticated,
+  performance,
   snapshot,
 }: {
   readonly authenticated: boolean;
+  readonly performance: LeaguePerformanceHistory | null;
   readonly snapshot: LeagueRosterSnapshot | null;
 }) {
   const [seasonKey, setSeasonKey] = useState(
-    snapshot?.summary.latestPopulatedSeason ?? snapshot?.summary.latestSeason ?? '',
+    performance?.summary.latestSeason ??
+      snapshot?.summary.latestPopulatedSeason ??
+      snapshot?.summary.latestSeason ??
+      '',
   );
   const [query, setQuery] = useState('');
   const season = useMemo(
     () => snapshot?.seasons.find((candidate) => candidate.seasonKey === seasonKey) ?? null,
     [seasonKey, snapshot],
+  );
+  const performanceSeason = useMemo(
+    () => performance?.seasons.find((candidate) => candidate.seasonKey === seasonKey) ?? null,
+    [performance, seasonKey],
+  );
+  const availableSeasons = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...(performance?.seasons.map((candidate) => candidate.seasonKey) ?? []),
+          ...(snapshot?.seasons.map((candidate) => candidate.seasonKey) ?? []),
+        ]),
+      ].sort((left, right) => right.localeCompare(left)),
+    [performance, snapshot],
   );
   const teams = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -33,6 +56,19 @@ export function LeagueView({
         team.roster.some((player) => player.playerName.toLocaleLowerCase().includes(normalized)),
     );
   }, [query, season]);
+  const performanceTeams = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (normalized.length === 0) return performanceSeason?.teams ?? [];
+    return (performanceSeason?.teams ?? []).filter(
+      (team) =>
+        team.teamName.toLocaleLowerCase().includes(normalized) ||
+        team.managerName?.toLocaleLowerCase().includes(normalized) === true,
+    );
+  }, [performanceSeason, query]);
+  const regularSeasonLeader = performanceSeason?.teams.find((team) => team.rank === 1) ?? null;
+  const strongestAllPlayTeam = [...(performanceSeason?.teams ?? [])].sort(
+    (left, right) => right.allPlayWinPercentage - left.allPlayWinPercentage,
+  )[0];
 
   return (
     <div className={styles.page}>
@@ -40,34 +76,40 @@ export function LeagueView({
         actions={
           <AskEveButton
             className={styles.primaryButton}
-            context={{ season: season?.seasonKey ?? null }}
-            prompt={`Compare every ${season?.seasonKey ?? 'available'} league roster. Identify construction patterns, value picks, and teams that may be natural trade partners.`}
+            context={{ season: seasonKey || null }}
+            prompt={`Analyze ${seasonKey || 'all available'} league outcomes. Compare regular-season standings, all-play strength, schedule luck, playoff results, active games, and the original auction rosters. Identify which repeatable behaviors appear associated with winning.`}
           >
             Analyze league
           </AskEveButton>
         }
-        description="Canonical owners, team identities, auction spend, and complete draft-day rosters across seasons."
+        description="Regular-season strength, playoff outcomes, weekly consistency, active games, and the auction rosters that produced them."
         eyebrow="League intelligence"
-        title="League rosters"
+        title="League outcomes"
       />
 
-      {season ? (
+      {performanceSeason ? (
         <section aria-label="League summary" className={styles.stats}>
           <article className={styles.statCard}>
-            <span>Teams</span>
-            <strong>{season.teamCount}</strong>
+            <span>Playoff champion</span>
+            <strong>{performanceSeason.champion?.managerName ?? '—'}</strong>
           </article>
           <article className={styles.statCard}>
-            <span>Drafted players</span>
-            <strong>{season.draftedPlayerCount}</strong>
+            <span>Regular-season leader</span>
+            <strong>
+              {regularSeasonLeader?.managerName ?? regularSeasonLeader?.teamName ?? '—'}
+            </strong>
           </article>
           <article className={styles.statCard}>
-            <span>Roster size</span>
-            <strong>{season.rosterSize}</strong>
+            <span>Strongest all-play</span>
+            <strong>
+              {strongestAllPlayTeam === undefined
+                ? '—'
+                : `${strongestAllPlayTeam.managerName ?? strongestAllPlayTeam.teamName} · ${formatPercentage(strongestAllPlayTeam.allPlayWinPercentage)}`}
+            </strong>
           </article>
           <article className={styles.statCard}>
-            <span>Total auction spend</span>
-            <strong>{formatPrice(season.totalSpendCents)}</strong>
+            <span>Scoring format</span>
+            <strong>{formatScoringType(performanceSeason.scoringType)}</strong>
           </article>
         </section>
       ) : null}
@@ -75,10 +117,118 @@ export function LeagueView({
       <section className={styles.panel}>
         <header className={styles.panelHeader}>
           <div>
+            <h2>Success and failure profile</h2>
+            <p>
+              All-play estimates schedule-neutral strength; luck is actual wins minus expected wins.
+            </p>
+          </div>
+          {availableSeasons.length > 0 ? (
+            <div className={styles.toolbar}>
+              <label className={styles.field}>
+                <span>Season</span>
+                <select
+                  aria-label="Performance season"
+                  onChange={(event) => {
+                    setSeasonKey(event.target.value);
+                    setQuery('');
+                  }}
+                  value={seasonKey}
+                >
+                  {availableSeasons.map((candidate) => (
+                    <option key={candidate} value={candidate}>
+                      {candidate}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.field}>
+                <span>Search</span>
+                <input
+                  aria-label="Find performance by team or owner"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Team or owner"
+                  type="search"
+                  value={query}
+                />
+              </label>
+            </div>
+          ) : null}
+        </header>
+
+        {performanceSeason === null ? (
+          <DataUnavailable
+            detail={
+              authenticated
+                ? 'Historical standings and weekly matchup scores have not been imported yet.'
+                : 'Sign in with the league owner account to view historical outcomes.'
+            }
+            title={authenticated ? 'Performance data unavailable' : 'Owner access required'}
+          />
+        ) : (
+          <div className={styles.tableViewport}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Team</th>
+                  <th>Record</th>
+                  <th>Score / wk</th>
+                  <th>Opp / wk</th>
+                  <th>All-play</th>
+                  <th>Luck wins</th>
+                  <th>Active games</th>
+                  <th>Consistency</th>
+                  <th>Postseason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {performanceTeams.map((team) => (
+                  <tr key={team.teamSeasonId}>
+                    <td className={styles.rank}>{team.rank}</td>
+                    <td aria-label={`${team.teamName}, ${team.managerName ?? 'owner unresolved'}`}>
+                      <span className={styles.tablePlayer}>
+                        <strong>{team.teamName}</strong>
+                        <small>{team.managerName ?? 'Owner unresolved'}</small>
+                      </span>
+                    </td>
+                    <td>{team.record}</td>
+                    <td>{formatMetric(team.averageWeeklyScore)}</td>
+                    <td>{formatMetric(team.averageOpponentScore)}</td>
+                    <td>{formatPercentage(team.allPlayWinPercentage)}</td>
+                    <td
+                      className={
+                        team.luckWins > 0.5
+                          ? styles.positive
+                          : team.luckWins < -0.5
+                            ? styles.negative
+                            : styles.neutral
+                      }
+                    >
+                      {team.luckWins > 0 ? '+' : ''}
+                      {team.luckWins.toFixed(1)}
+                    </td>
+                    <td>{team.averageActiveGames.toFixed(1)}</td>
+                    <td>±{team.scoreStandardDeviation.toFixed(1)}</td>
+                    <td>
+                      <span className={styles.badge}>
+                        {formatPostseasonResult(team.postseasonResult)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className={styles.panel}>
+        <header className={styles.panelHeader}>
+          <div>
             <h2>Draft snapshots</h2>
             <p>These rosters represent auction results, before later trades and waiver moves.</p>
           </div>
-          {snapshot && season ? (
+          {snapshot && season && performance === null ? (
             <div className={styles.toolbar}>
               <label className={styles.field}>
                 <span>Season</span>
@@ -97,16 +247,6 @@ export function LeagueView({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className={styles.field}>
-                <span>Search</span>
-                <input
-                  aria-label="Find team, owner, or rostered player"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Team, owner, or player"
-                  type="search"
-                  value={query}
-                />
               </label>
             </div>
           ) : null}
@@ -187,3 +327,22 @@ export function LeagueView({
     </div>
   );
 }
+
+const formatMetric = (value: number): string =>
+  new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value);
+
+const formatPercentage = (value: number): string =>
+  new Intl.NumberFormat('en-US', { maximumFractionDigits: 0, style: 'percent' }).format(value);
+
+const formatScoringType = (value: string): string =>
+  value === 'HEAD_TO_HEAD_POINTS_BASED' ? 'Head-to-head points' : 'Head-to-head categories';
+
+const formatPostseasonResult = (value: LeaguePostseasonResult): string =>
+  ({
+    champion: 'Champion',
+    'missed-playoffs': 'Missed playoffs',
+    'playoff-qualifier': 'Playoff qualifier',
+    quarterfinalist: 'Quarterfinalist',
+    'runner-up': 'Runner-up',
+    semifinalist: 'Semifinalist',
+  })[value];

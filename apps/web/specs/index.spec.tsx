@@ -3,6 +3,7 @@ import type {
   HistoricalAuctionMarket,
   HistoricalRankingSnapshot,
   LatestProjectionSnapshot,
+  LeaguePerformanceHistory,
   LeagueRosterSnapshot,
   LeagueTeamHistory,
 } from '@fantasy-basketball/database/runtime';
@@ -242,6 +243,79 @@ const rosterSnapshot = {
   },
 } satisfies LeagueRosterSnapshot;
 
+const performanceHistory = {
+  seasons: [
+    {
+      champion: { managerName: 'Manager Two', teamName: 'Sky Hooks' },
+      firstPlayoffPeriod: 18,
+      lastRegularSeasonPeriod: 17,
+      playoffTeamCount: 6,
+      scoringType: 'HEAD_TO_HEAD_POINTS_BASED',
+      seasonKey: '2025-26',
+      teams: [
+        {
+          allPlayWinPercentage: 0.7,
+          averageActiveGames: 39.2,
+          averageOpponentScore: 601.3,
+          averageWeeklyScore: 640.5,
+          expectedWins: 11.9,
+          gamesBack: 0,
+          highScore: 720,
+          leagueMemberId: 'member-1',
+          lowScore: 550,
+          luckWins: 0.1,
+          madePlayoffs: true,
+          managerName: 'Manager One',
+          pointsFor: 10_500,
+          pointsPerActiveGame: 16.3,
+          postseasonFinish: 2,
+          postseasonResult: 'runner-up' as const,
+          rank: 1,
+          record: '12-5-0',
+          scoreStandardDeviation: 42.1,
+          sourceTeamId: 'team-1',
+          teamName: 'Moon Shots',
+          teamSeasonId: 'team-season-1',
+          weeklyScores: [],
+          winPercentage: 0.706,
+        },
+        {
+          allPlayWinPercentage: 0.74,
+          averageActiveGames: 40.1,
+          averageOpponentScore: 612.4,
+          averageWeeklyScore: 651.2,
+          expectedWins: 12.6,
+          gamesBack: 1,
+          highScore: 730,
+          leagueMemberId: 'member-2',
+          lowScore: 560,
+          luckWins: -1.6,
+          madePlayoffs: true,
+          managerName: 'Manager Two',
+          pointsFor: 10_300,
+          pointsPerActiveGame: 16.2,
+          postseasonFinish: 1,
+          postseasonResult: 'champion' as const,
+          rank: 2,
+          record: '11-6-0',
+          scoreStandardDeviation: 39.8,
+          sourceTeamId: 'team-2',
+          teamName: 'Sky Hooks',
+          teamSeasonId: 'team-season-2',
+          weeklyScores: [],
+          winPercentage: 0.647,
+        },
+      ],
+    },
+  ],
+  summary: {
+    latestSeason: '2025-26',
+    matchupCount: 105,
+    seasonCount: 1,
+    teamSeasonCount: 2,
+  },
+} satisfies LeaguePerformanceHistory;
+
 const teamHistory = {
   members: [
     {
@@ -425,13 +499,17 @@ Bid with $93 remaining
   });
 
   it('shows canonical owners, roster costs, and pending seasons', () => {
-    renderInShell(<LeagueView authenticated snapshot={rosterSnapshot} />);
+    renderInShell(
+      <LeagueView authenticated performance={performanceHistory} snapshot={rosterSnapshot} />,
+    );
 
-    expect(screen.getByText('Moon Shots')).toBeTruthy();
-    expect(screen.getByText('Manager One')).toBeTruthy();
+    expect(screen.getAllByText('Moon Shots')).toHaveLength(2);
+    expect(screen.getAllByText('Manager One')).toHaveLength(3);
     expect(screen.getByText('Nikola Jokic')).toBeTruthy();
+    expect(screen.getByText('Success and failure profile')).toBeTruthy();
+    expect(screen.getByText('Champion')).toBeTruthy();
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Roster season' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Performance season' }), {
       target: { value: '2026-27' },
     });
     expect(screen.getByText('2026-27 roster pending.')).toBeTruthy();

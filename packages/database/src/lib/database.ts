@@ -26,6 +26,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'historical_rankings'
     | 'latest_adp_snapshot'
     | 'latest_projection_snapshot'
+    | 'league_performance_history'
     | 'league_roster_snapshot'
     | 'pre_draft_workspace'
     | 'reconcile_league_team_identity'
@@ -35,6 +36,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'replace_historical_scoring'
     | 'replace_player_production'
     | 'save_fantrax_adp_snapshot'
+    | 'save_league_performance'
     | 'save_pre_draft_plan'
     | 'save_pre_draft_target'
     | 'save_projection_snapshot';
@@ -255,6 +257,139 @@ export interface LeagueTeamHistory {
     readonly teamSeasonId: string;
     readonly teamName: string;
   }>;
+}
+
+export type LeaguePostseasonResult =
+  | 'champion'
+  | 'missed-playoffs'
+  | 'playoff-qualifier'
+  | 'quarterfinalist'
+  | 'runner-up'
+  | 'semifinalist';
+
+export interface LeaguePerformanceWeeklyScore {
+  readonly gamesPlayed: number;
+  readonly opponentName: string;
+  readonly opponentScore: number;
+  readonly phase: 'playoffs' | 'regular-season';
+  readonly playoffRound: 'final' | 'quarterfinal' | 'semifinal' | null;
+  readonly result: 'loss' | 'tie' | 'win';
+  readonly score: number;
+  readonly scoringPeriod: number;
+}
+
+export interface LeaguePerformanceTeam {
+  readonly allPlayWinPercentage: number;
+  readonly averageActiveGames: number;
+  readonly averageOpponentScore: number;
+  readonly averageWeeklyScore: number;
+  readonly expectedWins: number;
+  readonly gamesBack: number;
+  readonly highScore: number;
+  readonly leagueMemberId: string | null;
+  readonly lowScore: number;
+  readonly luckWins: number;
+  readonly managerName: string | null;
+  readonly madePlayoffs: boolean;
+  readonly pointsFor: number;
+  readonly pointsPerActiveGame: number;
+  readonly postseasonFinish: number | null;
+  readonly postseasonResult: LeaguePostseasonResult;
+  readonly rank: number;
+  readonly record: string;
+  readonly scoreStandardDeviation: number;
+  readonly sourceTeamId: string;
+  readonly teamName: string;
+  readonly teamSeasonId: string;
+  readonly weeklyScores: ReadonlyArray<LeaguePerformanceWeeklyScore>;
+  readonly winPercentage: number;
+}
+
+export interface LeaguePerformanceSeason {
+  readonly champion: {
+    readonly managerName: string | null;
+    readonly teamName: string;
+  } | null;
+  readonly firstPlayoffPeriod: number | null;
+  readonly lastRegularSeasonPeriod: number;
+  readonly playoffTeamCount: number;
+  readonly scoringType: string;
+  readonly seasonKey: string;
+  readonly teams: ReadonlyArray<LeaguePerformanceTeam>;
+}
+
+export interface LeaguePerformanceHistory {
+  readonly seasons: ReadonlyArray<LeaguePerformanceSeason>;
+  readonly summary: {
+    readonly latestSeason: string | null;
+    readonly matchupCount: number;
+    readonly seasonCount: number;
+    readonly teamSeasonCount: number;
+  };
+}
+
+export interface LeaguePerformanceBatch {
+  readonly fingerprint: string;
+  readonly matchups: ReadonlyArray<{
+    readonly awayCategoryTotals: Readonly<Record<string, unknown>>;
+    readonly awayGamesPlayed: number;
+    readonly awayScore: number;
+    readonly awayTeamId: string;
+    readonly awayTeamName: string;
+    readonly homeCategoryTotals: Readonly<Record<string, unknown>>;
+    readonly homeGamesPlayed: number;
+    readonly homeScore: number;
+    readonly homeTeamId: string;
+    readonly homeTeamName: string;
+    readonly isTie: boolean;
+    readonly leagueId: string;
+    readonly periodEndAt: string;
+    readonly periodStartAt: string;
+    readonly phase: 'playoffs' | 'regular-season';
+    readonly playoffRound: 'final' | 'quarterfinal' | 'semifinal' | null;
+    readonly scoringPeriod: number;
+    readonly seasonKey: string;
+    readonly sourcePayload: Readonly<Record<string, unknown>>;
+    readonly winnerTeamId: string | null;
+  }>;
+  readonly seasons: ReadonlyArray<{
+    readonly finalScoringPeriod: number;
+    readonly firstPlayoffPeriod: number | null;
+    readonly lastRegularSeasonPeriod: number;
+    readonly leagueHistoryId: string;
+    readonly leagueId: string;
+    readonly playoffTeamCount: number;
+    readonly scoringType: string;
+    readonly seasonKey: string;
+  }>;
+  readonly source: 'fantrax-league-performance';
+  readonly standings: ReadonlyArray<{
+    readonly gamesBack: number;
+    readonly leagueId: string;
+    readonly losses: number;
+    readonly madePlayoffs: boolean;
+    readonly playoffSeed: number | null;
+    readonly pointsFor: number;
+    readonly postseasonFinish: number | null;
+    readonly postseasonResult: LeaguePostseasonResult;
+    readonly rank: number;
+    readonly record: string;
+    readonly seasonKey: string;
+    readonly sourcePayload: Readonly<Record<string, unknown>>;
+    readonly sourceTeamId: string;
+    readonly teamName: string;
+    readonly ties: number;
+    readonly winPercentage: number;
+    readonly wins: number;
+  }>;
+}
+
+export interface LeaguePerformanceImportResult {
+  readonly alreadyImported: boolean;
+  readonly ingestionRunId: string;
+  readonly matchupCount: number;
+  readonly seasonCount: number;
+  readonly standingCount: number;
 }
 
 export interface LeagueRosterPlayer {
@@ -603,6 +738,7 @@ export interface DatabaseService {
     LatestProjectionSnapshot | null,
     DatabaseUnavailable
   >;
+  readonly leaguePerformanceHistory: Effect.Effect<LeaguePerformanceHistory, DatabaseUnavailable>;
   readonly leagueRosterSnapshot: Effect.Effect<LeagueRosterSnapshot, DatabaseUnavailable>;
   readonly leagueTeamHistory: Effect.Effect<LeagueTeamHistory, DatabaseUnavailable>;
   readonly preDraftWorkspace: (
@@ -631,6 +767,9 @@ export interface DatabaseService {
   readonly saveFantraxAdpSnapshot: (
     batch: FantraxAdpSnapshotBatch,
   ) => Effect.Effect<FantraxAdpSnapshotImportResult, DatabaseUnavailable>;
+  readonly saveLeaguePerformance: (
+    batch: LeaguePerformanceBatch,
+  ) => Effect.Effect<LeaguePerformanceImportResult, DatabaseUnavailable>;
   readonly savePreDraftPlan: (
     input: SavePreDraftPlanInput,
   ) => Effect.Effect<PreDraftPlan, DatabaseUnavailable>;
@@ -1448,6 +1587,258 @@ const databaseServiceLayer = Layer.effect(
         databaseUnavailable(
           'league_team_history',
           'The canonical league team history could not be loaded',
+        ),
+      ),
+    );
+
+    const leaguePerformanceHistory = Effect.gen(function* () {
+      const standingRows = yield* sql<{
+        first_playoff_period: number | null;
+        games_back: number;
+        last_regular_season_period: number;
+        league_member_id: string | null;
+        made_playoffs: boolean;
+        manager_name: string | null;
+        playoff_team_count: number;
+        points_for: number;
+        postseason_finish: number | null;
+        postseason_result: LeaguePostseasonResult;
+        rank: number;
+        record: string;
+        scoring_type: string;
+        season_key: string;
+        source_team_id: string;
+        team_name: string;
+        team_season_id: string;
+        ties: number;
+        win_percentage: number;
+        wins: number;
+      }>`
+        select
+          ls.season_key,
+          lsp.scoring_type,
+          lsp.last_regular_season_period,
+          lsp.first_playoff_period,
+          lsp.playoff_team_count,
+          lts.id as team_season_id,
+          lts.source_team_id,
+          lts.team_name,
+          lm.id as league_member_id,
+          lm.display_name as manager_name,
+          standings.rank,
+          standings.record,
+          standings.wins,
+          standings.ties,
+          standings.win_percentage::double precision as win_percentage,
+          standings.games_back::double precision as games_back,
+          standings.points_for::double precision as points_for,
+          standings.made_playoffs,
+          standings.postseason_result,
+          standings.postseason_finish
+        from fantasy.league_team_standings standings
+        join fantasy.league_team_seasons lts
+          on lts.id = standings.league_team_season_id
+        join fantasy.league_seasons ls on ls.id = lts.league_season_id
+        join fantasy.league_season_performance lsp on lsp.league_season_id = ls.id
+        left join fantasy.league_members lm on lm.id = lts.league_member_id
+        order by ls.season_key desc, standings.rank, lts.team_name
+      `;
+
+      const matchupRows = yield* sql<{
+        away_games_played: number;
+        away_score: number;
+        away_team_name: string;
+        away_team_season_id: string;
+        home_games_played: number;
+        home_score: number;
+        home_team_name: string;
+        home_team_season_id: string;
+        phase: 'playoffs' | 'regular-season';
+        playoff_round: 'final' | 'quarterfinal' | 'semifinal' | null;
+        scoring_period: number;
+        season_key: string;
+      }>`
+        select
+          ls.season_key,
+          matchups.scoring_period,
+          matchups.phase,
+          matchups.playoff_round,
+          matchups.away_team_season_id,
+          away.team_name as away_team_name,
+          matchups.away_score::double precision as away_score,
+          matchups.away_games_played,
+          matchups.home_team_season_id,
+          home.team_name as home_team_name,
+          matchups.home_score::double precision as home_score,
+          matchups.home_games_played
+        from fantasy.league_matchups matchups
+        join fantasy.league_seasons ls on ls.id = matchups.league_season_id
+        join fantasy.league_team_seasons away on away.id = matchups.away_team_season_id
+        join fantasy.league_team_seasons home on home.id = matchups.home_team_season_id
+        order by ls.season_key desc, matchups.scoring_period, away.team_name
+      `;
+
+      const weeklyScoresByTeam = new Map<string, LeaguePerformanceWeeklyScore[]>();
+      const regularScoresBySeasonPeriod = new Map<string, Map<string, number>>();
+      const addWeeklyScore = (teamSeasonId: string, score: LeaguePerformanceWeeklyScore): void => {
+        const scores = weeklyScoresByTeam.get(teamSeasonId) ?? [];
+        scores.push(score);
+        weeklyScoresByTeam.set(teamSeasonId, scores);
+      };
+      for (const row of matchupRows) {
+        const awayResult =
+          row.away_score === row.home_score
+            ? ('tie' as const)
+            : row.away_score > row.home_score
+              ? ('win' as const)
+              : ('loss' as const);
+        const homeResult =
+          awayResult === 'tie'
+            ? ('tie' as const)
+            : awayResult === 'win'
+              ? ('loss' as const)
+              : 'win';
+        addWeeklyScore(row.away_team_season_id, {
+          gamesPlayed: row.away_games_played,
+          opponentName: row.home_team_name,
+          opponentScore: row.home_score,
+          phase: row.phase,
+          playoffRound: row.playoff_round,
+          result: awayResult,
+          score: row.away_score,
+          scoringPeriod: row.scoring_period,
+        });
+        addWeeklyScore(row.home_team_season_id, {
+          gamesPlayed: row.home_games_played,
+          opponentName: row.away_team_name,
+          opponentScore: row.away_score,
+          phase: row.phase,
+          playoffRound: row.playoff_round,
+          result: homeResult,
+          score: row.home_score,
+          scoringPeriod: row.scoring_period,
+        });
+        if (row.phase === 'regular-season') {
+          const key = `${row.season_key}:${row.scoring_period}`;
+          const scores = regularScoresBySeasonPeriod.get(key) ?? new Map<string, number>();
+          scores.set(row.away_team_season_id, row.away_score);
+          scores.set(row.home_team_season_id, row.home_score);
+          regularScoresBySeasonPeriod.set(key, scores);
+        }
+      }
+
+      const roundMetric = (value: number): number => Math.round(value * 1000) / 1000;
+      const average = (values: ReadonlyArray<number>): number =>
+        values.length === 0 ? 0 : values.reduce((total, value) => total + value, 0) / values.length;
+      const allPlayWinPercentage = (
+        seasonKey: string,
+        teamSeasonId: string,
+        scores: ReadonlyArray<LeaguePerformanceWeeklyScore>,
+      ): number => {
+        let points = 0;
+        let comparisons = 0;
+        for (const score of scores.filter((candidate) => candidate.phase === 'regular-season')) {
+          const periodScores = regularScoresBySeasonPeriod.get(
+            `${seasonKey}:${score.scoringPeriod}`,
+          );
+          if (periodScores === undefined) continue;
+          for (const [otherTeamSeasonId, otherScore] of periodScores) {
+            if (otherTeamSeasonId === teamSeasonId) continue;
+            comparisons += 1;
+            points += score.score === otherScore ? 0.5 : score.score > otherScore ? 1 : 0;
+          }
+        }
+        return comparisons === 0 ? 0 : points / comparisons;
+      };
+
+      const seasonsByKey = new Map<string, LeaguePerformanceSeason>();
+      for (const row of standingRows) {
+        const weeklyScores = weeklyScoresByTeam.get(row.team_season_id) ?? [];
+        const regularScores = weeklyScores.filter((score) => score.phase === 'regular-season');
+        const scoreValues = regularScores.map((score) => score.score);
+        const opponentValues = regularScores.map((score) => score.opponentScore);
+        const activeGames = regularScores.map((score) => score.gamesPlayed);
+        const scoreAverage = average(scoreValues);
+        const scoreVariance = average(
+          scoreValues.map((score) => (score - scoreAverage) * (score - scoreAverage)),
+        );
+        const allPlay = allPlayWinPercentage(row.season_key, row.team_season_id, regularScores);
+        const expectedWins = allPlay * regularScores.length;
+        const totalActiveGames = activeGames.reduce((total, games) => total + games, 0);
+        const team = {
+          allPlayWinPercentage: roundMetric(allPlay),
+          averageActiveGames: roundMetric(average(activeGames)),
+          averageOpponentScore: roundMetric(average(opponentValues)),
+          averageWeeklyScore: roundMetric(scoreAverage),
+          expectedWins: roundMetric(expectedWins),
+          gamesBack: row.games_back,
+          highScore: scoreValues.length === 0 ? 0 : Math.max(...scoreValues),
+          leagueMemberId: row.league_member_id,
+          lowScore: scoreValues.length === 0 ? 0 : Math.min(...scoreValues),
+          luckWins: roundMetric(row.wins + row.ties * 0.5 - expectedWins),
+          madePlayoffs: row.made_playoffs,
+          managerName: row.manager_name,
+          pointsFor: row.points_for,
+          pointsPerActiveGame:
+            totalActiveGames === 0
+              ? 0
+              : roundMetric(
+                  scoreValues.reduce((total, score) => total + score, 0) / totalActiveGames,
+                ),
+          postseasonFinish: row.postseason_finish,
+          postseasonResult: row.postseason_result,
+          rank: row.rank,
+          record: row.record,
+          scoreStandardDeviation: roundMetric(Math.sqrt(scoreVariance)),
+          sourceTeamId: row.source_team_id,
+          teamName: row.team_name,
+          teamSeasonId: row.team_season_id,
+          weeklyScores,
+          winPercentage: row.win_percentage,
+        } satisfies LeaguePerformanceTeam;
+        const season = seasonsByKey.get(row.season_key);
+        if (season === undefined) {
+          seasonsByKey.set(row.season_key, {
+            champion:
+              team.postseasonResult === 'champion'
+                ? { managerName: team.managerName, teamName: team.teamName }
+                : null,
+            firstPlayoffPeriod: row.first_playoff_period,
+            lastRegularSeasonPeriod: row.last_regular_season_period,
+            playoffTeamCount: row.playoff_team_count,
+            scoringType: row.scoring_type,
+            seasonKey: row.season_key,
+            teams: [team],
+          });
+        } else {
+          seasonsByKey.set(row.season_key, {
+            ...season,
+            champion:
+              team.postseasonResult === 'champion'
+                ? { managerName: team.managerName, teamName: team.teamName }
+                : season.champion,
+            teams: [...season.teams, team],
+          });
+        }
+      }
+
+      const seasons = [...seasonsByKey.values()].sort((left, right) =>
+        right.seasonKey.localeCompare(left.seasonKey),
+      );
+      return {
+        seasons,
+        summary: {
+          latestSeason: seasons[0]?.seasonKey ?? null,
+          matchupCount: matchupRows.length,
+          seasonCount: seasons.length,
+          teamSeasonCount: standingRows.length,
+        },
+      } satisfies LeaguePerformanceHistory;
+    }).pipe(
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'league_performance_history',
+          'The league performance history could not be loaded',
         ),
       ),
     );
@@ -2929,6 +3320,248 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const saveLeaguePerformance = (
+      batch: LeaguePerformanceBatch,
+    ): Effect.Effect<LeaguePerformanceImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [existingRun] = yield* sql<{
+          id: string;
+          matchup_count: number;
+          season_count: number;
+          standing_count: number;
+        }>`
+          select
+            id,
+            coalesce((details ->> 'matchupCount')::integer, 0) as matchup_count,
+            coalesce((details ->> 'seasonCount')::integer, 0) as season_count,
+            coalesce((details ->> 'standingCount')::integer, 0) as standing_count
+          from fantasy.ingestion_runs
+          where
+            source = ${batch.source}
+            and resource = 'league-performance'
+            and status = 'completed'
+            and details ->> 'fingerprint' = ${batch.fingerprint}
+          order by finished_at desc
+          limit 1
+        `;
+        if (existingRun !== undefined) {
+          return {
+            alreadyImported: true,
+            ingestionRunId: existingRun.id,
+            matchupCount: existingRun.matchup_count,
+            seasonCount: existingRun.season_count,
+            standingCount: existingRun.standing_count,
+          };
+        }
+
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, status, record_count, details)
+          values
+            (
+              ${batch.source},
+              'league-performance',
+              'running',
+              ${batch.standings.length + batch.matchups.length},
+              ${sql.json({
+                fingerprint: batch.fingerprint,
+                matchupCount: batch.matchups.length,
+                seasonCount: batch.seasons.length,
+                standingCount: batch.standings.length,
+              })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) {
+          throw new Error('League performance ingestion run was not created');
+        }
+
+        const sourceLeagueIds = batch.seasons.map((season) => season.leagueId);
+        const leagueSeasonRows = yield* sql<{
+          id: string;
+          source_league_id: string;
+        }>`
+          select id, source_league_id
+          from fantasy.league_seasons
+          where source = 'fantrax' and source_league_id in ${sql.in(sourceLeagueIds)}
+        `;
+        if (leagueSeasonRows.length !== batch.seasons.length) {
+          throw new Error(
+            `League performance resolved ${leagueSeasonRows.length}/${batch.seasons.length} league seasons`,
+          );
+        }
+        const leagueSeasonIds = new Map(
+          leagueSeasonRows.map((season) => [season.source_league_id, season.id]),
+        );
+        const leagueSeasonIdValues = leagueSeasonRows.map((season) => season.id);
+        const teamSeasonRows = yield* sql<{
+          id: string;
+          source_league_id: string;
+          source_team_id: string;
+        }>`
+          select
+            lts.id,
+            ls.source_league_id,
+            lts.source_team_id
+          from fantasy.league_team_seasons lts
+          join fantasy.league_seasons ls on ls.id = lts.league_season_id
+          where ls.id in ${sql.in(leagueSeasonIdValues)}
+        `;
+        const teamSeasonIds = new Map(
+          teamSeasonRows.map((team) => [
+            `${team.source_league_id}:${team.source_team_id}`,
+            team.id,
+          ]),
+        );
+        const resolveTeamSeasonId = (leagueId: string, sourceTeamId: string): string => {
+          const teamSeasonId = teamSeasonIds.get(`${leagueId}:${sourceTeamId}`);
+          if (teamSeasonId === undefined) {
+            throw new Error(`${leagueId} references unknown team ${sourceTeamId}`);
+          }
+          return teamSeasonId;
+        };
+
+        yield* sql`
+          delete from fantasy.league_matchups
+          where league_season_id in ${sql.in(leagueSeasonIdValues)}
+        `;
+        yield* sql`
+          delete from fantasy.league_team_standings
+          where league_team_season_id in ${sql.in(teamSeasonRows.map((team) => team.id))}
+        `;
+        yield* sql`
+          delete from fantasy.league_season_performance
+          where league_season_id in ${sql.in(leagueSeasonIdValues)}
+        `;
+
+        const performanceRecords = batch.seasons.map((season) => {
+          const leagueSeasonId = leagueSeasonIds.get(season.leagueId);
+          if (leagueSeasonId === undefined) {
+            throw new Error(`League season ${season.leagueId} was not resolved`);
+          }
+          return {
+            final_scoring_period: season.finalScoringPeriod,
+            first_playoff_period: season.firstPlayoffPeriod,
+            ingestion_run_id: ingestionRun.id,
+            last_regular_season_period: season.lastRegularSeasonPeriod,
+            league_season_id: leagueSeasonId,
+            playoff_team_count: season.playoffTeamCount,
+            scoring_type: season.scoringType,
+            updated_at: new Date(),
+          };
+        });
+        yield* sql`
+          insert into fantasy.league_season_performance ${sql.insert(performanceRecords)}
+        `;
+
+        const standingSourceRecords = batch.standings.map((standing) => ({
+          captured_at: new Date(),
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: standing.sourcePayload,
+          source_record_id: `${standing.seasonKey}:standings:${standing.sourceTeamId}`,
+        }));
+        const matchupSourceRecords = batch.matchups.map((matchup) => ({
+          captured_at: new Date(),
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: matchup.sourcePayload,
+          source_record_id: `${matchup.seasonKey}:matchup:${matchup.scoringPeriod}:${matchup.awayTeamId}:${matchup.homeTeamId}`,
+        }));
+        yield* sql`
+          insert into fantasy.source_records ${sql.insert([
+            ...standingSourceRecords,
+            ...matchupSourceRecords,
+          ])}
+        `;
+
+        const standingRecords = batch.standings.map((standing, index) => {
+          const sourceRecord = standingSourceRecords[index];
+          if (sourceRecord === undefined) throw new Error('Standing source record is missing');
+          return {
+            games_back: standing.gamesBack,
+            ingestion_run_id: ingestionRun.id,
+            league_team_season_id: resolveTeamSeasonId(standing.leagueId, standing.sourceTeamId),
+            losses: standing.losses,
+            made_playoffs: standing.madePlayoffs,
+            playoff_seed: standing.playoffSeed,
+            points_for: standing.pointsFor,
+            postseason_finish: standing.postseasonFinish,
+            postseason_result: standing.postseasonResult,
+            rank: standing.rank,
+            record: standing.record,
+            source_record_id: sourceRecord.id,
+            ties: standing.ties,
+            updated_at: new Date(),
+            win_percentage: standing.winPercentage,
+            wins: standing.wins,
+          };
+        });
+        yield* sql`
+          insert into fantasy.league_team_standings ${sql.insert(standingRecords)}
+        `;
+
+        const matchupRecords = batch.matchups.map((matchup, index) => {
+          const leagueSeasonId = leagueSeasonIds.get(matchup.leagueId);
+          const sourceRecord = matchupSourceRecords[index];
+          if (leagueSeasonId === undefined || sourceRecord === undefined) {
+            throw new Error('Matchup references are incomplete');
+          }
+          return {
+            away_category_totals: matchup.awayCategoryTotals,
+            away_games_played: matchup.awayGamesPlayed,
+            away_score: matchup.awayScore,
+            away_team_season_id: resolveTeamSeasonId(matchup.leagueId, matchup.awayTeamId),
+            home_category_totals: matchup.homeCategoryTotals,
+            home_games_played: matchup.homeGamesPlayed,
+            home_score: matchup.homeScore,
+            home_team_season_id: resolveTeamSeasonId(matchup.leagueId, matchup.homeTeamId),
+            id: randomUUID(),
+            ingestion_run_id: ingestionRun.id,
+            is_tie: matchup.isTie,
+            league_season_id: leagueSeasonId,
+            period_end_at: new Date(matchup.periodEndAt),
+            period_start_at: new Date(matchup.periodStartAt),
+            phase: matchup.phase,
+            playoff_round: matchup.playoffRound,
+            scoring_period: matchup.scoringPeriod,
+            source_record_id: sourceRecord.id,
+            winner_team_season_id:
+              matchup.winnerTeamId === null
+                ? null
+                : resolveTeamSeasonId(matchup.leagueId, matchup.winnerTeamId),
+          };
+        });
+        yield* sql`
+          insert into fantasy.league_matchups ${sql.insert(matchupRecords)}
+        `;
+        yield* sql`
+          update fantasy.ingestion_runs
+          set status = 'completed', finished_at = now()
+          where id = ${ingestionRun.id}
+        `;
+
+        return {
+          alreadyImported: false,
+          ingestionRunId: ingestionRun.id,
+          matchupCount: batch.matchups.length,
+          seasonCount: batch.seasons.length,
+          standingCount: batch.standings.length,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'save_league_performance',
+              'The league performance import could not be saved',
+            ),
+          ),
+        );
+    };
+
     const saveProjectionSnapshot = (
       batch: ProjectionSnapshotBatch,
     ): Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable> => {
@@ -3159,6 +3792,7 @@ const databaseServiceLayer = Layer.effect(
       historicalRankings,
       latestAdpSnapshot,
       latestProjectionSnapshot,
+      leaguePerformanceHistory,
       leagueRosterSnapshot,
       leagueTeamHistory,
       playerProductionHistory,
@@ -3168,6 +3802,7 @@ const databaseServiceLayer = Layer.effect(
       replaceHistoricalScoring,
       replacePlayerProduction,
       saveFantraxAdpSnapshot,
+      saveLeaguePerformance,
       savePreDraftPlan,
       savePreDraftTarget,
       saveProjectionSnapshot,
