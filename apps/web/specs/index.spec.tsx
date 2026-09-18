@@ -95,6 +95,14 @@ const market = {
 const rankings = {
   seasons: [
     {
+      auctionPlayers: [
+        {
+          auctionCostCents: 8_500,
+          playerId: 'player-1',
+          playerName: 'Nikola Jokic',
+        },
+      ],
+      baseBudgetCents: 20_000,
       modelVersion: '1',
       players: [
         {
@@ -118,9 +126,11 @@ const rankings = {
           rank: 2,
         },
       ],
+      rosterSize: 13,
       ruleSetName: 'League Points',
       ruleSetVersion: 1,
       seasonKey: '2025-26',
+      teamCount: 12,
     },
   ],
   summary: { latestSeason: '2025-26', playerSeasonCount: 2, seasonCount: 1 },

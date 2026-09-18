@@ -50,7 +50,8 @@ const run = async () => {
     ),
   ]);
   const scoring = await Effect.runPromise(parseLeagueScoringConfiguration(scoringSource));
-  const modelVersion = argument('model-version') ?? `availability-v1-scoring-v${scoring.version}`;
+  const modelVersion =
+    argument('model-version') ?? `availability-v2-source-bonuses-scoring-v${scoring.version}`;
   const plan = await Effect.runPromise(
     planHashtagProjectionImport({
       asOf,
@@ -96,7 +97,15 @@ const run = async () => {
     Effect.gen(function* () {
       const database = yield* Database;
       return yield* commitHashtagProjectionImport(plan, database);
-    }),
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          if ('reason' in error && typeof error.reason === 'string') {
+            console.error(`Projection database failure: ${error.reason}`);
+          }
+        }),
+      ),
+    ),
   );
   console.log(
     JSON.stringify(

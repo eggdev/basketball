@@ -42,6 +42,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'save_pre_draft_plan'
     | 'save_pre_draft_target'
     | 'save_projection_snapshot';
+  readonly reason?: string;
 }> {}
 
 export interface DatabaseHealth {
@@ -145,12 +146,22 @@ export interface HistoricalRankingPlayer {
   readonly rank: number;
 }
 
+export interface HistoricalRankingAuctionPlayer {
+  readonly auctionCostCents: number;
+  readonly playerId: string;
+  readonly playerName: string;
+}
+
 export interface HistoricalRankingSeason {
+  readonly auctionPlayers: ReadonlyArray<HistoricalRankingAuctionPlayer>;
+  readonly baseBudgetCents: number;
   readonly modelVersion: string;
   readonly players: ReadonlyArray<HistoricalRankingPlayer>;
+  readonly rosterSize: number;
   readonly ruleSetName: string;
   readonly ruleSetVersion: number;
   readonly seasonKey: string;
+  readonly teamCount: number;
 }
 
 export interface HistoricalRankingSnapshot {
@@ -809,6 +820,7 @@ export interface PreDraftWorkspace {
     readonly baseBudgetCents: number;
     readonly rosterSize: number;
     readonly seasonKey: string;
+    readonly teamCount: number;
   } | null;
   readonly owner: {
     readonly canonicalKey: string;
@@ -990,8 +1002,36 @@ const makePool = (config: DatabaseConfig) =>
     (pool) => Effect.promise(() => pool.end()).pipe(Effect.orDie),
   );
 
-const databaseUnavailable = (operation: DatabaseUnavailable['operation'], message: string) =>
-  new DatabaseUnavailable({ message, operation });
+const databaseFailureReason = (cause: unknown): string => {
+  const messages: string[] = [];
+  let current: unknown = cause;
+  for (let depth = 0; depth < 5 && current !== null && current !== undefined; depth += 1) {
+    if (current instanceof Error && current.message.trim() !== '') messages.push(current.message);
+    if (typeof current === 'object') {
+      const details = current as Readonly<Record<string, unknown>>;
+      for (const key of ['detail', 'where', 'column'] as const) {
+        const value = details[key];
+        if (typeof value === 'string' && value.trim() !== '') {
+          messages.push(value);
+        }
+      }
+    }
+    if (typeof current !== 'object' || !('cause' in current)) break;
+    current = current.cause;
+  }
+  return messages.length > 0 ? [...new Set(messages)].join(': ') : String(cause);
+};
+
+const databaseUnavailable = (
+  operation: DatabaseUnavailable['operation'],
+  message: string,
+  cause?: unknown,
+) =>
+  new DatabaseUnavailable({
+    message,
+    operation,
+    ...(cause === undefined ? {} : { reason: databaseFailureReason(cause) }),
+  });
 
 const normalizeLeagueMemberKey = (value: string): string =>
   value
@@ -1107,6 +1147,7 @@ const databaseServiceLayer = Layer.effect(
     const historicalRankings = Effect.gen(function* () {
       const rows = yield* sql<{
         auction_cost_cents: number | null;
+        base_budget_cents: number;
         components: Record<string, number>;
         fantasy_points: number;
         fantasy_points_per_game: number;
@@ -1115,9 +1156,11 @@ const databaseServiceLayer = Layer.effect(
         player_id: string;
         player_name: string;
         rank: number;
+        roster_size: number;
         rule_set_name: string;
         rule_set_version: number;
         season_key: string;
+        team_count: number;
       }>`
         with selected_runs as (
           select
@@ -1140,6 +1183,9 @@ const databaseServiceLayer = Layer.effect(
           sr.model_version,
           sr.rule_set_name,
           sr.rule_set_version,
+          ls.team_count,
+          ls.roster_size,
+          ls.base_budget_cents,
           pr.player_id,
           p.canonical_name as player_name,
           pr.rank,
@@ -1149,6 +1195,7 @@ const databaseServiceLayer = Layer.effect(
           coalesce(pr.explanation -> 'components', '{}'::jsonb) as components,
           ar.amount_cents as auction_cost_cents
         from selected_runs sr
+        join fantasy.league_seasons ls on ls.id = sr.league_season_id
         join fantasy.player_rankings pr on pr.ranking_run_id = sr.id
         join fantasy.players p on p.id = pr.player_id
         left join fantasy.auction_results ar
@@ -1156,6 +1203,22 @@ const databaseServiceLayer = Layer.effect(
           and ar.player_id = pr.player_id
         where sr.run_order = 1
         order by sr.season_key desc, pr.rank, p.canonical_name
+      `;
+      const auctionRows = yield* sql<{
+        auction_cost_cents: number;
+        player_id: string;
+        player_name: string;
+        season_key: string;
+      }>`
+        select
+          ls.season_key,
+          ar.player_id,
+          p.canonical_name as player_name,
+          ar.amount_cents as auction_cost_cents
+        from fantasy.auction_results ar
+        join fantasy.league_seasons ls on ls.id = ar.league_season_id
+        join fantasy.players p on p.id = ar.player_id
+        order by ls.season_key desc, ar.amount_cents desc, p.canonical_name
       `;
 
       const seasonsByKey = new Map<string, HistoricalRankingSeason>();
@@ -1173,11 +1236,15 @@ const databaseServiceLayer = Layer.effect(
         const season = seasonsByKey.get(row.season_key);
         if (season === undefined) {
           seasonsByKey.set(row.season_key, {
+            auctionPlayers: [],
+            baseBudgetCents: row.base_budget_cents,
             modelVersion: row.model_version,
             players: [player],
+            rosterSize: row.roster_size,
             ruleSetName: row.rule_set_name,
             ruleSetVersion: row.rule_set_version,
             seasonKey: row.season_key,
+            teamCount: row.team_count,
           });
         } else {
           seasonsByKey.set(row.season_key, {
@@ -1185,6 +1252,21 @@ const databaseServiceLayer = Layer.effect(
             players: [...season.players, player],
           });
         }
+      }
+      for (const row of auctionRows) {
+        const season = seasonsByKey.get(row.season_key);
+        if (season === undefined) continue;
+        seasonsByKey.set(row.season_key, {
+          ...season,
+          auctionPlayers: [
+            ...season.auctionPlayers,
+            {
+              auctionCostCents: row.auction_cost_cents,
+              playerId: row.player_id,
+              playerName: row.player_name,
+            },
+          ],
+        });
       }
 
       const seasons = [...seasonsByKey.values()].sort((left, right) =>
@@ -2118,9 +2200,7 @@ const databaseServiceLayer = Layer.effect(
           leagueMemberId: row.league_member_id,
           managerName: row.manager_name,
           outcome:
-            row.rank === null ||
-            row.made_playoffs === null ||
-            row.postseason_result === null
+            row.rank === null || row.made_playoffs === null || row.postseason_result === null
               ? null
               : {
                   madePlayoffs: row.made_playoffs,
@@ -2453,8 +2533,9 @@ const databaseServiceLayer = Layer.effect(
               roster_size: number;
               season_key: string;
               source_league_history_id: string | null;
+              team_count: number;
             }>`
-              select id, source_league_history_id, season_key, roster_size, base_budget_cents
+              select id, source_league_history_id, season_key, roster_size, base_budget_cents, team_count
               from fantasy.league_seasons
               where source = 'fantrax' and season_key = ${requestedSeasonKey}
               order by updated_at desc
@@ -2466,8 +2547,9 @@ const databaseServiceLayer = Layer.effect(
               roster_size: number;
               season_key: string;
               source_league_history_id: string | null;
+              team_count: number;
             }>`
-              select id, source_league_history_id, season_key, roster_size, base_budget_cents
+              select id, source_league_history_id, season_key, roster_size, base_budget_cents, team_count
               from fantasy.league_seasons
               where source = 'fantrax'
               order by season_key desc, updated_at desc
@@ -2503,6 +2585,7 @@ const databaseServiceLayer = Layer.effect(
               baseBudgetCents: season.base_budget_cents,
               rosterSize: season.roster_size,
               seasonKey: season.season_key,
+              teamCount: season.team_count,
             },
             owner: null,
             plan: null,
@@ -2525,6 +2608,7 @@ const databaseServiceLayer = Layer.effect(
             baseBudgetCents: season.base_budget_cents,
             rosterSize: season.roster_size,
             seasonKey: season.season_key,
+            teamCount: season.team_count,
           },
           owner: {
             canonicalKey: owner.canonical_key,
@@ -4382,7 +4466,7 @@ const databaseServiceLayer = Layer.effect(
             expected_fantasy_points_per_game: record.projection.fantasyPointsPerGame,
             expected_games: record.projection.availability.expectedGames,
             player_id: playerId,
-            positions: record.projection.positions,
+            positions: JSON.stringify(record.projection.positions),
             schedule: record.projection.schedule,
             scoring_components: record.projection.scoringComponents,
             snapshot_id: snapshot.id,
@@ -4417,10 +4501,11 @@ const databaseServiceLayer = Layer.effect(
       return sql
         .withTransaction(operation)
         .pipe(
-          Effect.mapError(() =>
+          Effect.mapError((cause) =>
             databaseUnavailable(
               'save_projection_snapshot',
               'The projection snapshot could not be saved',
+              cause,
             ),
           ),
         );

@@ -79,9 +79,7 @@ export interface ProjectionSnapshotCommitter<Error> {
   ) => Effect.Effect<ProjectionSnapshotCommitResult, Error>;
 }
 
-export class HashtagProjectionSourceError extends Data.TaggedError(
-  'HashtagProjectionSourceError',
-)<{
+export class HashtagProjectionSourceError extends Data.TaggedError('HashtagProjectionSourceError')<{
   readonly message: string;
   readonly reason: string;
 }> {}
@@ -102,7 +100,9 @@ const normalizedHeader = (value: string): string =>
     .replaceAll(/^_|_$/g, '');
 
 const normalizedRow = (row: Record<string, string>): Record<string, string> =>
-  Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizedHeader(key), value.trim()]));
+  Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [normalizedHeader(key), value.trim()]),
+  );
 
 const field = (
   row: Readonly<Record<string, string>>,
@@ -137,6 +137,45 @@ const numberField = (
     throw new Error(`${label} must be a non-negative number`);
   }
   return value;
+};
+
+const optionalProjectedBonusRates = (
+  row: Readonly<Record<string, string>>,
+):
+  | {
+      readonly doubleDoubleRate: number;
+      readonly tripleDoubleRate: number;
+    }
+  | undefined => {
+  const doubleDouble = optionalField(row, [
+    'dd',
+    '2d',
+    'double_double_rate',
+    'double_doubles_per_game',
+  ]);
+  const tripleDouble = optionalField(row, [
+    'td',
+    '3d',
+    'triple_double_rate',
+    'triple_doubles_per_game',
+  ]);
+  if (doubleDouble === null && tripleDouble === null) return undefined;
+  if (doubleDouble === null || tripleDouble === null) {
+    throw new Error('double-double and triple-double projection rates must be supplied together');
+  }
+
+  const doubleDoubleRate = Number(doubleDouble);
+  const tripleDoubleRate = Number(tripleDouble);
+  if (!Number.isFinite(doubleDoubleRate) || doubleDoubleRate < 0 || doubleDoubleRate > 1) {
+    throw new Error('double-double projection rate must be between zero and one');
+  }
+  if (!Number.isFinite(tripleDoubleRate) || tripleDoubleRate < 0 || tripleDoubleRate > 1) {
+    throw new Error('triple-double projection rate must be between zero and one');
+  }
+  if (tripleDoubleRate > doubleDoubleRate) {
+    throw new Error('triple-double projection rate cannot exceed double-double projection rate');
+  }
+  return { doubleDoubleRate, tripleDoubleRate };
 };
 
 const shootingVolume = (
@@ -195,6 +234,11 @@ const abbreviationParts = (
 };
 
 const abbreviatedName = (value: string): boolean => abbreviationParts(value) !== null;
+
+const collapseLeadingInitials = (value: string): string => {
+  const match = /^((?:[A-Za-z]\.){2,})\s*(.+)$/.exec(value.trim());
+  return match === null ? value.trim() : `${match[1]!.replaceAll('.', '')} ${match[2]!}`;
+};
 
 const abbreviationCandidates = (
   sourceName: string,
@@ -271,6 +315,10 @@ export const planHashtagProjectionImport = (input: {
         normalizedName: string;
         playerKey: string;
         positions: ReadonlyArray<string>;
+        projectedBonusRates?: {
+          readonly doubleDoubleRate: number;
+          readonly tripleDoubleRate: number;
+        };
         sourceExternalId: string;
         sourceName: string;
         sourcePayload: Readonly<Record<string, string>>;
@@ -284,8 +332,16 @@ export const planHashtagProjectionImport = (input: {
       for (const sourcePayload of parsedRows) {
         const row = normalizedRow(sourcePayload);
         const sourceName = field(row, ['player', 'name'], 'player name');
-        const normalizedSourceName = normalizeProviderPlayerName(sourceName);
-        let candidates = playersByNormalizedName.get(normalizedSourceName) ?? [];
+        const completeSourceName = collapseLeadingInitials(sourceName);
+        const normalizedSourceName = normalizeProviderPlayerName(completeSourceName);
+        const rawNormalizedSourceName = normalizeProviderPlayerName(sourceName);
+        let candidates = [
+          ...(playersByNormalizedName.get(normalizedSourceName) ?? []),
+          ...(playersByNormalizedName.get(rawNormalizedSourceName) ?? []),
+        ].filter(
+          (candidate, index, all) =>
+            all.findIndex((item) => item.playerId === candidate.playerId) === index,
+        );
         if (candidates.length === 0 && abbreviatedName(sourceName)) {
           candidates = [...abbreviationCandidates(sourceName, input.canonicalPlayers)];
         }
@@ -298,7 +354,7 @@ export const planHashtagProjectionImport = (input: {
           continue;
         }
         const existing = candidates[0] ?? null;
-        if (existing === null && abbreviatedName(sourceName)) {
+        if (existing === null && abbreviatedName(sourceName) && completeSourceName === sourceName) {
           issues.push({
             candidatePlayerIds: [],
             kind: 'unresolved_abbreviation',
@@ -307,7 +363,7 @@ export const planHashtagProjectionImport = (input: {
           continue;
         }
 
-        const canonicalName = existing?.canonicalName ?? sourceName.trim();
+        const canonicalName = existing?.canonicalName ?? completeSourceName;
         const normalizedName = normalizeProviderPlayerName(canonicalName);
         const playerKey = existing?.playerId ?? `hashtag:${normalizedName}`;
         if (seenPlayerKeys.has(playerKey)) throw new Error(`${sourceName} appears more than once`);
@@ -336,6 +392,7 @@ export const planHashtagProjectionImport = (input: {
           normalizedName,
           playerKey,
           positions: positions(field(row, ['pos', 'position'], 'position')),
+          projectedBonusRates: optionalProjectedBonusRates(row),
           sourceExternalId: explicitExternalId ?? normalizedName,
           sourceName,
           sourcePayload,
@@ -370,6 +427,7 @@ export const planHashtagProjectionImport = (input: {
           playerId: row.playerKey,
           playerName: row.canonicalName,
           positions: row.positions,
+          projectedBonusRates: row.projectedBonusRates,
           schedule: input.schedulesByTeam?.[row.teamAbbreviation],
           statsPerGame: row.statLine,
           teamAbbreviation: row.teamAbbreviation,
@@ -399,13 +457,24 @@ export const planHashtagProjectionImport = (input: {
           left.canonicalName.localeCompare(right.canonicalName),
       );
       issues.sort((left, right) => left.sourceName.localeCompare(right.sourceName));
+      const fingerprintRecords = records.map((record) => ({
+        canonicalName: record.canonicalName,
+        normalizedName: record.normalizedName,
+        projection: {
+          ...record.projection,
+          playerId: record.sourceExternalId,
+        },
+        sourceExternalId: record.sourceExternalId,
+        sourceName: record.sourceName,
+        sourcePayload: record.sourcePayload,
+      }));
       const fingerprint = createHash('sha256')
         .update(
           JSON.stringify({
             asOf: asOf.toISOString(),
             issues,
             modelVersion: input.modelVersion,
-            records,
+            records: fingerprintRecords,
             seasonKey: input.seasonKey,
             source: 'hashtag',
           }),

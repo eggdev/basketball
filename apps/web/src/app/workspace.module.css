@@ -64,6 +64,7 @@
 .secondaryButton {
   padding: 9px 12px;
   font-size: 0.72rem;
+  text-decoration: none;
 }
 
 .secondaryButton,
@@ -90,6 +91,16 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.sectionStack {
+  display: grid;
+  gap: 14px;
+}
+
+.sectionStack > .stats,
+.sectionStack > .warning {
+  margin-bottom: 0;
 }
 
 .statCard,
@@ -883,6 +894,236 @@
   text-align: right;
 }
 
+.liveBidLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(250px, 0.65fr);
+}
+
+.liveBidPanel {
+  margin-bottom: 15px;
+}
+
+.liveBidControls {
+  min-width: 0;
+  padding: 16px;
+}
+
+.liveBidForm {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.8fr) repeat(3, minmax(105px, 0.65fr)) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.liveBidForm button {
+  white-space: nowrap;
+}
+
+.liveBidEmpty {
+  display: grid;
+  min-height: 230px;
+  place-content: center;
+  padding: 30px;
+  color: #74869d;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.liveBidEmpty strong {
+  margin-bottom: 3px;
+  color: #dbe7f4;
+  font-size: 0.92rem;
+}
+
+.liveDecision {
+  margin-top: 15px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 12px;
+  background: rgba(7, 17, 31, 0.46);
+}
+
+.liveDecisionHero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.liveDecisionHero > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.liveDecisionHero strong {
+  color: #f1f5f9;
+  font-size: 1rem;
+}
+
+.liveDecisionHero small {
+  color: #8295aa;
+  font-size: 0.66rem;
+}
+
+.liveAction {
+  min-width: 92px;
+  padding: 8px 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 850;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.livePositive {
+  color: #6ee7b7 !important;
+}
+
+.liveNegative {
+  color: #fda4af !important;
+}
+
+.liveCaution {
+  color: #fbbf24 !important;
+}
+
+.liveMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 15px 0 0;
+}
+
+.liveMetrics div {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.09);
+  border-radius: 8px;
+  background: rgba(13, 28, 46, 0.65);
+}
+
+.liveMetrics dt {
+  color: #65778e;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+
+.liveMetrics dd {
+  margin: 4px 0 0;
+  color: #dbe7f4;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.liveReasons {
+  display: grid;
+  gap: 5px;
+  margin: 13px 0 0;
+  padding-left: 17px;
+  color: #93a6ba;
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+.liveJudgment {
+  margin-top: 12px;
+  padding: 10px 11px;
+  border-left: 2px solid #7dd3fc;
+  background: rgba(56, 189, 248, 0.05);
+  color: #8fa1b8;
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+.liveJudgment span {
+  margin-right: 7px;
+  color: #7dd3fc;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.liveActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.liveDraftRail {
+  display: grid;
+  align-content: start;
+  border-left: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(7, 17, 31, 0.24);
+}
+
+.liveDraftRail section {
+  padding: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.liveDraftRail header,
+.liveDraftRail li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.liveDraftRail header > strong {
+  color: #dbe7f4;
+  font-size: 0.7rem;
+}
+
+.liveDraftRail header > small,
+.liveDraftRail p {
+  color: #65778e;
+  font-size: 0.61rem;
+}
+
+.liveDraftRail button {
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  color: #7dd3fc;
+  cursor: pointer;
+  font-size: 0.58rem;
+}
+
+.liveDraftRail ul {
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.liveDraftRail li {
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.07);
+}
+
+.liveDraftRail li > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.liveDraftRail li strong {
+  overflow: hidden;
+  color: #b9c8d9;
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveDraftRail li small,
+.liveDraftRail li em {
+  color: #65778e;
+  font-size: 0.57rem;
+  font-style: normal;
+}
+
 @media (max-width: 1000px) {
   .stats,
   .readinessGrid {
@@ -901,6 +1142,24 @@
 
   .targetForm {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liveBidLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .liveBidForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liveBidPlayerField {
+    grid-column: span 2;
+  }
+
+  .liveDraftRail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid rgba(148, 163, 184, 0.1);
+    border-left: 0;
   }
 }
 
@@ -958,5 +1217,15 @@
 
   .slotGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liveBidForm,
+  .liveMetrics,
+  .liveDraftRail {
+    grid-template-columns: 1fr;
+  }
+
+  .liveBidPlayerField {
+    grid-column: auto;
   }
 }

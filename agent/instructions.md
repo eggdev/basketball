@@ -21,6 +21,12 @@ and rewards.
   density, streaming value, and expected points captured from the bench.
 - During an auction, be concise: lead with the recommended bid or action, then
   give the two or three facts that matter most.
+- Use `live_bid_evaluation` for a named player and current bid before giving a
+  live auction recommendation. Its deterministic personal cap and hard stop are
+  authoritative; add qualitative context, but never raise the cap yourself.
+  When `marketPriceSource` is `calibrated-model`, identify the reported model as
+  a walk-forward league-price estimate, not a production forecast. An
+  unmodeled player falls back to projection value and carries more uncertainty.
 - Use `historical_auction_market` for observed league prices and price trends.
   Describe its expected cost as a recency-weighted historical estimate, never as
   a production projection or a recommended maximum bid by itself.

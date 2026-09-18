@@ -1,15 +1,18 @@
 import { leagueOwnerProfile } from '@fantasy-basketball/fantasy';
+import Link from 'next/link';
 
 import { formatPrice, formatSignedPrice } from '../../lib/format';
 import { loadHistoricalAuctionMarket } from '../../lib/historical-auction-market';
 import { loadLatestAdpSnapshot } from '../../lib/latest-adp';
 import { loadLeagueRosters } from '../../lib/league-rosters';
+import { loadLatestProjectionSnapshot } from '../../lib/latest-projections';
 import { loadPreDraftWorkspace } from '../../lib/pre-draft-workspace';
 import { loadViewer } from '../../lib/viewer';
 import { savePreDraftPlanAction, savePreDraftTargetAction } from '../actions';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
+import { LiveBidPanel } from './live-bid-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,11 +20,12 @@ const dollars = (cents: number): number => cents / 100;
 
 export default async function DraftPage() {
   const viewer = await loadViewer().catch(() => null);
-  const [market, rosterSnapshot, adp, workspace] = await Promise.all([
+  const [market, rosterSnapshot, adp, workspace, projection] = await Promise.all([
     loadHistoricalAuctionMarket().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadLeagueRosters().catch(() => null),
     loadLatestAdpSnapshot().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadPreDraftWorkspace().catch(() => null),
+    viewer === null ? Promise.resolve(null) : loadLatestProjectionSnapshot().catch(() => null),
   ]);
   const liveSeason = rosterSnapshot?.seasons[0] ?? null;
   const seasonKey = workspace?.league?.seasonKey ?? liveSeason?.seasonKey ?? '2026-27';
@@ -43,13 +47,18 @@ export default async function DraftPage() {
     <div className={styles.page}>
       <PageHeader
         actions={
-          <AskEveButton
-            className={styles.primaryButton}
-            context={{ planId: plan?.id ?? null, season: seasonKey }}
-            prompt={evePrompt}
-          >
-            Workshop with Eve
-          </AskEveButton>
+          <>
+            <Link className={styles.secondaryButton} href="/draft/valuation">
+              Valuation lab
+            </Link>
+            <AskEveButton
+              className={styles.primaryButton}
+              context={{ planId: plan?.id ?? null, season: seasonKey }}
+              prompt={evePrompt}
+            >
+              Workshop with Eve
+            </AskEveButton>
+          </>
         }
         description={`A persistent planning room for ${leagueOwnerProfile.displayName}: test roster-building angles, set budget guardrails, and turn market signals into draft targets.`}
         eyebrow="Pre-draft lab"
@@ -105,6 +114,20 @@ export default async function DraftPage() {
           </p>
         </article>
       </section>
+
+      {viewer !== null && workspace?.league != null && projection !== null ? (
+        <LiveBidPanel
+          baseBudgetCents={workspace.league.baseBudgetCents}
+          players={projection.players.map((player) => ({
+            fantasyPointsPerGame: player.fantasyPointsPerGame,
+            id: player.playerId,
+            name: player.playerName,
+            positions: player.positions,
+            rank: player.rank,
+          }))}
+          rosterSize={workspace.league.rosterSize}
+        />
+      ) : null}
 
       {viewer === null || workspace?.league == null ? (
         <DataUnavailable

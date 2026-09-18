@@ -77,6 +77,7 @@ BETTER_AUTH_URL=http://localhost:3000
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 AUTH_ALLOWED_EMAIL=
+AI_GATEWAY_API_KEY=
 OPENAI_API_KEY=
 ```
 
@@ -87,6 +88,11 @@ Production uses Vercel AI Gateway through project OIDC by default. The Vercel
 team must have AI Gateway billing verification enabled. Alternatively, set
 `OPENAI_API_KEY` in the deployment environment; the agent automatically uses
 the direct OpenAI provider when that variable is present.
+
+The live draft evaluator also uses AI Gateway for TypeSafe AI's Jev evaluation
+model. Local development can use `AI_GATEWAY_API_KEY`; the deployment can use
+the same project OIDC identity as Eve. A Jev failure never changes the numeric
+cap: the UI falls back to the deterministic valuation and labels that state.
 
 The application uses `DATABASE_URL` for pooled request traffic and reserves
 `DATABASE_URL_UNPOOLED` for migrations. Apply both committed schemas with:
@@ -252,9 +258,21 @@ cost and the weighted historical market while labeling them as actuals, not
 forecasts. Historical auction cost remains an observed market signal rather
 than a ranking. The projection importer now converts a locally supplied
 Hashtag snapshot into availability-adjusted league points, including estimated
-double-/triple-double bonuses and optional playoff-week schedule weighting.
-Replacement value and the league-specific recommended-bid model are the
-remaining valuation layers.
+double-/triple-double bonuses and optional playoff-week schedule weighting. The
+valuation lab compares four fixed price models through walk-forward tests: each
+season is predicted only from earlier auctions and lagged production. It selects
+the lowest drafted-player mean absolute error, derives price-tier ranges from
+historical errors, and keeps hindsight realized value visibly separate. The
+current selection feeds both the draft UI and Eve's live-bid tool.
+
+The live draft room reserves $1 minimum bids, then allocates the remaining
+league auction pool by projected points above the 156-player replacement line.
+It keeps calibrated market price separate from projected production value and
+the owner's personal cap, and asks Jev only for qualitative roster and plan
+fit. Players without a defensible historical signal fall back to projection
+value during live evaluation rather than presenting a false calibrated price.
+Manual draft-room state and the last 20 evaluations survive refresh in the
+browser; the feature is read-only and cannot place a Fantrax bid.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be

@@ -69,6 +69,39 @@ describe('buildProjectionRun', () => {
     expect(projection.scoringComponents.tripleDoubles).toBeCloseTo(163.636, 3);
   });
 
+  it('uses explicit projected bonus rates instead of historical estimates', () => {
+    const run = buildProjectionRun({
+      history: [
+        {
+          doubleDoubles: 1,
+          gamesPlayed: 70,
+          playerId: 'jokic',
+          seasonKey: '2025-26',
+          tripleDoubles: 0,
+        },
+      ],
+      players: [
+        jokic({
+          projectedBonusRates: {
+            doubleDoubleRate: 0.8,
+            tripleDoubleRate: 0.5,
+          },
+        }),
+      ],
+      rules: currentLeagueScoring,
+    });
+
+    const projection = run.players[0]!;
+    expect(projection.bonuses).toEqual({
+      doubleDoubleRate: 0.8,
+      expectedDoubleDoubles: 57.6,
+      expectedTripleDoubles: 36,
+      tripleDoubleRate: 0.5,
+    });
+    expect(projection.scoringComponents.doubleDoubles).toBe(115.2);
+    expect(projection.scoringComponents.tripleDoubles).toBe(180);
+  });
+
   it('makes availability and championship-week schedule value explicit', () => {
     const run = buildProjectionRun({
       history: [],

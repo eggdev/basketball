@@ -1,6 +1,10 @@
 import { scoreSeason, type GameStatLine, type ScoringRules } from './scoring';
 
 export interface PlayerStatProjection {
+  readonly projectedBonusRates?: {
+    readonly doubleDoubleRate: number;
+    readonly tripleDoubleRate: number;
+  };
   readonly expectedGames: number;
   readonly playerId: string;
   readonly playerName: string;
@@ -95,6 +99,12 @@ const finiteNonNegative = (value: number, label: string): number => {
   return value;
 };
 
+const probability = (value: number, label: string): number => {
+  finiteNonNegative(value, label);
+  if (value > 1) throw new RangeError(`${label} must be at most one`);
+  return value;
+};
+
 const rate = (events: number, games: number): number => (games === 0 ? 0 : events / games);
 
 const round = (value: number, places = 3): number => {
@@ -131,7 +141,11 @@ const weightedBonusRate = (
 const validateSettings = (settings: ProjectionModelSettings): void => {
   finiteNonNegative(settings.doubleDoublePriorGames, 'double-double prior games');
   finiteNonNegative(settings.tripleDoublePriorGames, 'triple-double prior games');
-  if (!Number.isFinite(settings.recencyDecay) || settings.recencyDecay <= 0 || settings.recencyDecay > 1) {
+  if (
+    !Number.isFinite(settings.recencyDecay) ||
+    settings.recencyDecay <= 0 ||
+    settings.recencyDecay > 1
+  ) {
     throw new RangeError('recency decay must be greater than zero and at most one');
   }
 };
@@ -151,14 +165,16 @@ export function buildProjectionRun(input: {
   );
   const doubleDoublePriorRate = rate(
     input.history.reduce(
-      (total, season) => total + finiteNonNegative(season.doubleDoubles, 'historical double-doubles'),
+      (total, season) =>
+        total + finiteNonNegative(season.doubleDoubles, 'historical double-doubles'),
       0,
     ),
     totalHistoricalGames,
   );
   const tripleDoublePriorRate = rate(
     input.history.reduce(
-      (total, season) => total + finiteNonNegative(season.tripleDoubles, 'historical triple-doubles'),
+      (total, season) =>
+        total + finiteNonNegative(season.tripleDoubles, 'historical triple-doubles'),
       0,
     ),
     totalHistoricalGames,
@@ -181,23 +197,40 @@ export function buildProjectionRun(input: {
     }
 
     const playerHistory = historyByPlayer.get(player.playerId) ?? [];
-    const doubleDoubleRate = weightedBonusRate(
-      playerHistory,
-      'doubleDoubles',
-      doubleDoublePriorRate,
-      settings.doubleDoublePriorGames,
-      settings.recencyDecay,
-    );
-    const tripleDoubleRate = Math.min(
-      doubleDoubleRate,
-      weightedBonusRate(
-        playerHistory,
-        'tripleDoubles',
-        tripleDoublePriorRate,
-        settings.tripleDoublePriorGames,
-        settings.recencyDecay,
-      ),
-    );
+    const doubleDoubleRate =
+      player.projectedBonusRates === undefined
+        ? weightedBonusRate(
+            playerHistory,
+            'doubleDoubles',
+            doubleDoublePriorRate,
+            settings.doubleDoublePriorGames,
+            settings.recencyDecay,
+          )
+        : probability(
+            player.projectedBonusRates.doubleDoubleRate,
+            `${player.playerName} projected double-double rate`,
+          );
+    const tripleDoubleRate =
+      player.projectedBonusRates === undefined
+        ? Math.min(
+            doubleDoubleRate,
+            weightedBonusRate(
+              playerHistory,
+              'tripleDoubles',
+              tripleDoublePriorRate,
+              settings.tripleDoublePriorGames,
+              settings.recencyDecay,
+            ),
+          )
+        : probability(
+            player.projectedBonusRates.tripleDoubleRate,
+            `${player.playerName} projected triple-double rate`,
+          );
+    if (tripleDoubleRate > doubleDoubleRate) {
+      throw new RangeError(
+        `${player.playerName} projected triple-double rate cannot exceed double-double rate`,
+      );
+    }
     const expectedDoubleDoubles = doubleDoubleRate * expectedGames;
     const expectedTripleDoubles = tripleDoubleRate * expectedGames;
     const seasonStats = {
@@ -226,7 +259,9 @@ export function buildProjectionRun(input: {
         : (() => {
             const fantasyPlayoffWeeks = player.schedule.fantasyPlayoffWeeks.map((week) => {
               if (!Number.isSafeInteger(week.scheduledGames) || week.scheduledGames < 0) {
-                throw new RangeError(`${week.weekKey} scheduled games must be a non-negative integer`);
+                throw new RangeError(
+                  `${week.weekKey} scheduled games must be a non-negative integer`,
+                );
               }
               const expectedActiveGames = week.scheduledGames * availabilityRate;
               return {
