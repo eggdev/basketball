@@ -55,6 +55,26 @@ export const playerIdentities = fantasySchema.table(
   ],
 );
 
+export const playerIdentityMerges = fantasySchema.table(
+  'player_identity_merges',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    sourcePlayerId: uuid('source_player_id').notNull(),
+    targetPlayerId: uuid('target_player_id').notNull(),
+    sourceCanonicalName: text('source_canonical_name').notNull(),
+    targetCanonicalName: text('target_canonical_name').notNull(),
+    previewFingerprint: text('preview_fingerprint').notNull(),
+    reason: text('reason').notNull(),
+    resolvedByUserId: text('resolved_by_user_id').notNull(),
+    referenceCounts: jsonb('reference_counts').$type<Record<string, number>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('player_identity_merges_source_player_id_idx').on(table.sourcePlayerId),
+    index('player_identity_merges_target_player_id_idx').on(table.targetPlayerId),
+  ],
+);
+
 export const leagueSeasons = fantasySchema.table(
   'league_seasons',
   {

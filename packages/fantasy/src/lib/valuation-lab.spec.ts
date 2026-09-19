@@ -129,7 +129,7 @@ describe('buildAuctionValuationLab', () => {
     );
   });
 
-  it('bridges a unique suffix-only name alias without changing the current player id', () => {
+  it('leaves split UUIDs unjoined even when names differ only by a suffix', () => {
     const lab = buildAuctionValuationLab({
       current: {
         baseBudgetCents: 10_000,
@@ -154,6 +154,34 @@ describe('buildAuctionValuationLab', () => {
     const estimate = lab.current?.players[0];
 
     expect(estimate?.playerId).toBe('projection-player-1');
+    expect(estimate?.historyPlayerId).toBeNull();
+    expect(estimate?.historicalSeasonCount).toBe(0);
+  });
+
+  it('joins reconciled UUIDs normally without a name bridge', () => {
+    const lab = buildAuctionValuationLab({
+      current: {
+        baseBudgetCents: 10_000,
+        players: [
+          {
+            fantasyPoints: 2_800,
+            fantasyPointsPerGame: 40,
+            playerId: 'player-1',
+            playerName: 'Player 1 Jr.',
+            rank: 1,
+          },
+        ],
+        rosterSize: 2,
+        seasonKey: '2025-26',
+        teamCount: 2,
+      },
+      historicalSeasons: [
+        season('2022-23', [1_000, 2_000, null], [30, 25, 20]),
+        season('2023-24', [2_000, 3_000, 500], [32, 24, 22]),
+      ],
+    });
+    const estimate = lab.current?.players[0];
+
     expect(estimate?.historyPlayerId).toBe('player-1');
     expect(estimate?.historicalSeasonCount).toBe(2);
     expect(estimate?.marketEstimateCents).toBeGreaterThan(0);

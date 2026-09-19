@@ -196,21 +196,6 @@ const percentile = (values: ReadonlyArray<number>, quantile: number): number => 
 const priceTierFor = (priceCents: number): AuctionPriceTier =>
   priceCents > 4_000 ? 'anchor' : priceCents > 1_000 ? 'core' : 'endgame';
 
-const playerNameKey = (value: string): string => {
-  const tokens = value
-    .normalize('NFKD')
-    .replaceAll(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase()
-    .replaceAll('&', ' and ')
-    .replaceAll(/[.'’]/g, '')
-    .replaceAll(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .split(/\s+/);
-  const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
-  while (tokens.length > 0 && suffixes.has(tokens.at(-1)!)) tokens.pop();
-  return tokens.join(' ');
-};
-
 const playerMap = (season: AuctionValuationSeason): ReadonlyMap<string, AuctionValuationPlayer> =>
   new Map(season.players.map((player) => [player.playerId, player]));
 
@@ -569,22 +554,6 @@ export function buildAuctionValuationLab(input: {
     assertPositiveInteger(input.current.teamCount, 'current team count');
     const definition = MODEL_DEFINITIONS.find((candidate) => candidate.id === selectedModel.id);
     if (definition === undefined) throw new Error(`Unknown model ${selectedModel.id}`);
-    const historicalPlayerIds = new Set(
-      historicalSeasons.flatMap((season) => [
-        ...season.players.map((player) => player.playerId),
-        ...(season.auctionPrices ?? []).map((player) => player.playerId),
-      ]),
-    );
-    const historicalIdsByName = new Map<string, Set<string>>();
-    historicalSeasons.forEach((season) => {
-      [...season.players, ...(season.auctionPrices ?? [])].forEach((player) => {
-        const key = playerNameKey(player.playerName);
-        historicalIdsByName.set(
-          key,
-          new Set([...(historicalIdsByName.get(key) ?? []), player.playerId]),
-        );
-      });
-    });
     const latestHistoricalSeason = historicalSeasons.at(-1);
     const laggedValues =
       latestHistoricalSeason === undefined
@@ -607,14 +576,7 @@ export function buildAuctionValuationLab(input: {
     );
     const players = input.current.players
       .map((player): CurrentAuctionEstimate => {
-        const nameMatches = [...(historicalIdsByName.get(playerNameKey(player.playerName)) ?? [])];
-        const historyPlayerId =
-          player.historicalPlayerId ??
-          (historicalPlayerIds.has(player.playerId)
-            ? player.playerId
-            : nameMatches.length === 1
-              ? nameMatches[0]!
-              : player.playerId);
+        const historyPlayerId = player.historicalPlayerId ?? player.playerId;
         const marketHistory = recencyMarketPrice(historyPlayerId, historicalSeasons);
         const marketEstimateCents = predictedPriceFor({
           definition,
@@ -648,22 +610,12 @@ export function buildAuctionValuationLab(input: {
     current = { players, seasonKey: input.current.seasonKey };
   }
 
-  const identityBridgeCount =
-    current?.players.filter(
-      (player) => player.historyPlayerId !== null && player.historyPlayerId !== player.playerId,
-    ).length ?? 0;
-
   return {
     current,
     limitations: [
       'Historical preseason projections and ADP are not yet archived, so production signals use only the immediately preceding season’s actual output.',
       'League budget trades and earned auction dollars are not yet represented; production value uses each season’s base auction pool.',
       'Rookies and players without prior league or NBA history remain unmodeled until a rookie prior is added; live evaluation falls back to projection value.',
-      ...(identityBridgeCount === 0
-        ? []
-        : [
-            `${identityBridgeCount} current projection identities are conservatively bridged to a unique historical suffix-insensitive name; those canonical records still need a durable merge.`,
-          ]),
     ],
     methodology:
       'Each completed season is predicted from earlier seasons only. Models are compared on drafted-player mean absolute error; current projected value is shown separately from the selected model’s expected league price.',

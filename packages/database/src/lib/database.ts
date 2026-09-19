@@ -5,6 +5,22 @@ import { attachDatabasePool } from '@vercel/functions';
 import { Context, Data, Effect, Layer, Redacted } from 'effect';
 import { Pool } from 'pg';
 
+import {
+  makePlayerIdentityMergePreview,
+  planPlayerIdentityMergeCommit,
+  PLAYER_IDENTITY_MERGE_REFERENCE_TABLES,
+  resolvePlayerIdentityMergePlayers,
+  validatePlayerIdentityMergeInput,
+  type PlayerIdentityMergeInput,
+  type PlayerIdentityMergePreview,
+} from './player-identity-reconciliation';
+
+export type {
+  PlayerIdentityMergeConflict,
+  PlayerIdentityMergeInput,
+  PlayerIdentityMergePreview,
+} from './player-identity-reconciliation';
+
 export interface DatabaseConfig {
   readonly applicationUrl: Redacted.Redacted<string>;
   readonly migrationUrl: Redacted.Redacted<string>;
@@ -30,12 +46,14 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'league_roster_activity'
     | 'league_roster_snapshot'
     | 'pre_draft_workspace'
+    | 'preview_player_identity_merge'
     | 'reconcile_league_team_identity'
     | 'league_team_history'
     | 'replace_historical_auctions'
     | 'player_production_history'
     | 'replace_historical_scoring'
     | 'replace_player_production'
+    | 'merge_player_identities'
     | 'save_fantrax_adp_snapshot'
     | 'save_league_performance'
     | 'save_league_roster_history'
@@ -601,6 +619,11 @@ export interface CanonicalPlayer {
   readonly playerId: string;
 }
 
+export interface PlayerIdentityMergeResult {
+  readonly auditId: string;
+  readonly movedReferenceCounts: Readonly<Record<string, number>>;
+}
+
 export interface PlayerProductionBatch {
   readonly fingerprint: string;
   readonly gameStatCount: number;
@@ -876,6 +899,13 @@ export interface DatabaseService {
     ownerCanonicalKey: string,
     seasonKey?: string,
   ) => Effect.Effect<PreDraftWorkspace, DatabaseUnavailable>;
+  readonly previewPlayerIdentityMerge: (
+    input: PlayerIdentityMergeInput,
+  ) => Effect.Effect<PlayerIdentityMergePreview, DatabaseUnavailable>;
+  readonly mergePlayerIdentities: (
+    input: PlayerIdentityMergeInput,
+    expectedFingerprint: string,
+  ) => Effect.Effect<PlayerIdentityMergeResult, DatabaseUnavailable>;
   readonly reconcileLeagueTeamIdentity: (
     input: LeagueTeamReconciliationInput,
   ) => Effect.Effect<LeagueTeamReconciliationResult, DatabaseUnavailable>;
@@ -2748,6 +2778,259 @@ const databaseServiceLayer = Layer.effect(
       );
     };
 
+    const previewPlayerIdentityMergeInternal = (
+      input: PlayerIdentityMergeInput,
+      lockPlayers: boolean,
+    ) =>
+      Effect.gen(function* () {
+        validatePlayerIdentityMergeInput(input);
+        const playerRows = lockPlayers
+          ? yield* sql<{
+              canonical_name: string;
+              id: string;
+              normalized_name: string;
+            }>`
+              select id, canonical_name, normalized_name
+              from fantasy.players
+              where id in ${sql.in([input.sourcePlayerId, input.targetPlayerId])}
+              order by id
+              for update
+            `
+          : yield* sql<{
+              canonical_name: string;
+              id: string;
+              normalized_name: string;
+            }>`
+              select id, canonical_name, normalized_name
+              from fantasy.players
+              where id in ${sql.in([input.sourcePlayerId, input.targetPlayerId])}
+              order by id
+            `;
+        const { source, target } = resolvePlayerIdentityMergePlayers(
+          input,
+          playerRows.map((player) => ({
+            canonicalName: player.canonical_name,
+            normalizedName: player.normalized_name,
+            playerId: player.id,
+          })),
+        );
+
+        const referenceRows = yield* sql<{
+          reference_count: number;
+          table_name: string;
+        }>`
+          select 'player_identities' as table_name, count(*)::integer as reference_count
+          from fantasy.player_identities where player_id = ${input.sourcePlayerId}
+          union all
+          select 'roster_period_entries', count(*)::integer
+          from fantasy.roster_period_entries where player_id = ${input.sourcePlayerId}
+          union all
+          select 'inferred_roster_changes', count(*)::integer
+          from fantasy.inferred_roster_changes where player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_projections', count(*)::integer
+          from fantasy.player_projections where player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_adp', count(*)::integer
+          from fantasy.player_adp where player_id = ${input.sourcePlayerId}
+          union all
+          select 'pre_draft_targets', count(*)::integer
+          from fantasy.pre_draft_targets where player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_season_stats', count(*)::integer
+          from fantasy.player_season_stats where player_id = ${input.sourcePlayerId}
+          union all
+          select 'auction_results', count(*)::integer
+          from fantasy.auction_results where player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_rankings', count(*)::integer
+          from fantasy.player_rankings where player_id = ${input.sourcePlayerId}
+        `;
+        const referenceCounts = Object.fromEntries(
+          referenceRows.map((row) => [row.table_name, row.reference_count]),
+        );
+        if (
+          PLAYER_IDENTITY_MERGE_REFERENCE_TABLES.some(
+            (table) => !(table in referenceCounts),
+          )
+        ) {
+          throw new Error('The player reference registry is incomplete');
+        }
+
+        const conflicts = yield* sql<{ key: string; table_name: string }>`
+          select 'roster_period_entries' as table_name, source.snapshot_id::text as key
+          from fantasy.roster_period_entries source
+          join fantasy.roster_period_entries target
+            on target.snapshot_id = source.snapshot_id
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+          union all
+          select 'inferred_roster_changes',
+            concat_ws('|', source.league_season_id::text, source.roster_period::text)
+          from fantasy.inferred_roster_changes source
+          join fantasy.inferred_roster_changes target
+            on target.league_season_id = source.league_season_id
+            and target.roster_period = source.roster_period
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_projections', source.snapshot_id::text
+          from fantasy.player_projections source
+          join fantasy.player_projections target
+            on target.snapshot_id = source.snapshot_id
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_adp', source.snapshot_id::text
+          from fantasy.player_adp source
+          join fantasy.player_adp target
+            on target.snapshot_id = source.snapshot_id
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+          union all
+          select 'pre_draft_targets', source.plan_id::text
+          from fantasy.pre_draft_targets source
+          join fantasy.pre_draft_targets target
+            on target.plan_id = source.plan_id
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_season_stats',
+            concat_ws('|', source.source, source.season_key, source.period)
+          from fantasy.player_season_stats source
+          join fantasy.player_season_stats target
+            on target.source = source.source
+            and target.season_key = source.season_key
+            and target.period = source.period
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+          union all
+          select 'auction_results', source.league_season_id::text
+          from fantasy.auction_results source
+          join fantasy.auction_results target
+            on target.league_season_id = source.league_season_id
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+          union all
+          select 'player_rankings', source.ranking_run_id::text
+          from fantasy.player_rankings source
+          join fantasy.player_rankings target
+            on target.ranking_run_id = source.ranking_run_id
+            and target.player_id = ${input.targetPlayerId}
+          where source.player_id = ${input.sourcePlayerId}
+        `;
+
+        return makePlayerIdentityMergePreview({
+          conflicts: conflicts.map((conflict) => ({
+            key: conflict.key,
+            table: conflict.table_name,
+          })),
+          referenceCounts,
+          source: {
+            canonicalName: source.canonicalName,
+            normalizedName: source.normalizedName,
+            playerId: source.playerId,
+          },
+          target: {
+            canonicalName: target.canonicalName,
+            normalizedName: target.normalizedName,
+            playerId: target.playerId,
+          },
+        });
+      });
+
+    const previewPlayerIdentityMerge = (
+      input: PlayerIdentityMergeInput,
+    ): Effect.Effect<PlayerIdentityMergePreview, DatabaseUnavailable> =>
+      previewPlayerIdentityMergeInternal(input, false).pipe(
+        Effect.mapError(() =>
+          databaseUnavailable(
+            'preview_player_identity_merge',
+            'The player identity merge could not be previewed',
+          ),
+        ),
+      );
+
+    const mergePlayerIdentities = (
+      input: PlayerIdentityMergeInput,
+      expectedFingerprint: string,
+    ): Effect.Effect<PlayerIdentityMergeResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const preview = yield* previewPlayerIdentityMergeInternal(input, true);
+        const commitPlan = planPlayerIdentityMergeCommit(preview, expectedFingerprint);
+
+        yield* sql`update fantasy.player_identities set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.roster_period_entries set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.inferred_roster_changes set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.player_projections set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.player_adp set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.pre_draft_targets set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.player_season_stats set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.auction_results set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+        yield* sql`update fantasy.player_rankings set player_id = ${input.targetPlayerId} where player_id = ${input.sourcePlayerId}`;
+
+        const [audit] = yield* sql<{ id: string }>`
+          insert into fantasy.player_identity_merges
+            (
+              source_player_id,
+              target_player_id,
+              source_canonical_name,
+              target_canonical_name,
+              preview_fingerprint,
+              reason,
+              resolved_by_user_id,
+              reference_counts
+            )
+          values
+            (
+              ${input.sourcePlayerId},
+              ${input.targetPlayerId},
+              ${preview.source.canonicalName},
+              ${preview.target.canonicalName},
+              ${preview.fingerprint},
+              ${input.reason.trim()},
+              ${input.resolvedByUserId.trim()},
+              ${JSON.stringify(preview.referenceCounts)}::jsonb
+            )
+          returning id
+        `;
+        if (audit === undefined) throw new Error('The player merge audit could not be created');
+
+        yield* sql`delete from fantasy.players where id = ${input.sourcePlayerId}`;
+        const [remaining] = yield* sql<{ reference_count: number }>`
+          select count(*)::integer as reference_count
+          from (
+            select player_id from fantasy.player_identities where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.roster_period_entries where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.inferred_roster_changes where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.player_projections where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.player_adp where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.pre_draft_targets where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.player_season_stats where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.auction_results where player_id = ${input.sourcePlayerId}
+            union all select player_id from fantasy.player_rankings where player_id = ${input.sourcePlayerId}
+          ) source_references
+        `;
+        if (remaining?.reference_count !== 0) {
+          throw new Error('The player merge left source references behind');
+        }
+
+        return {
+          auditId: audit.id,
+          movedReferenceCounts: commitPlan.movedReferenceCounts,
+        } satisfies PlayerIdentityMergeResult;
+      });
+
+      return sql.withTransaction(operation).pipe(
+        Effect.mapError(() =>
+          databaseUnavailable(
+            'merge_player_identities',
+            'The player identities could not be merged',
+          ),
+        ),
+      );
+    };
+
     const reconcileLeagueTeamIdentity = (
       input: LeagueTeamReconciliationInput,
     ): Effect.Effect<LeagueTeamReconciliationResult, DatabaseUnavailable> => {
@@ -4535,8 +4818,10 @@ const databaseServiceLayer = Layer.effect(
       leagueRosterActivity,
       leagueRosterSnapshot,
       leagueTeamHistory,
+      mergePlayerIdentities,
       playerProductionHistory,
       preDraftWorkspace,
+      previewPlayerIdentityMerge,
       reconcileLeagueTeamIdentity,
       replaceHistoricalAuctions,
       replaceHistoricalScoring,

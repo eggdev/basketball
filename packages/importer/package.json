@@ -103,6 +103,15 @@
           "cwd": ".",
           "forwardAllArgs": true
         }
+      },
+      "player-reconcile": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/reconcile-player-identities.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
       }
     }
   }

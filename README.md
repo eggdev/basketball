@@ -162,6 +162,34 @@ name guesses. The signed-in League History view groups unresolved exact team
 names across seasons and can assign them to an existing or new canonical
 manager. Those Neon-backed overrides survive future imports.
 
+## Player identity reconciliation
+
+Canonical player identities are reconciled only through a reviewed, transactional
+operator workflow. First run a dry preview with the source UUID, target UUID,
+reason, and the Better Auth user ID of the human resolver:
+
+```bash
+bun run players:reconcile -- --source <source-player-uuid> --target <target-player-uuid> \
+  --reason "<reviewed reason>" --resolved-by <better-auth-user-id>
+```
+
+Review the canonical names, every source reference count, and every reported
+logical-key conflict. A conflict blocks the merge; never delete or choose among
+conflicting rows to force it through. After a human has approved the exact
+identity move and verified a current database restore archive, commit the same
+reviewed input:
+
+```bash
+bun run players:reconcile:commit -- --source <source-player-uuid> --target <target-player-uuid> \
+  --reason "<reviewed reason>" --resolved-by <better-auth-user-id>
+```
+
+The commit re-previews while locking both players, refuses stale fingerprints,
+moves every known player reference in one transaction, writes an immutable audit
+row, and deletes the source record. It is irreversible without a database
+restore. Similar names, including suffix-only variants, are evidence for a
+human review and never authorization to merge.
+
 The draft room reads that history through one Postgres market snapshot. Its
 expected cost is a linear recency-weighted estimate from observed prices; newer
 seasons receive larger weights. After a player's first observed purchase, a
