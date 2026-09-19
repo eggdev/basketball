@@ -1,12 +1,15 @@
 import { Effect, Exit, Redacted } from 'effect';
 
 import {
+  buildSeasonCalendarReadModel,
   loadDatabaseConfig,
   planAuctionValuationPromotion,
   serializeAuctionValuationJson,
   validateAuctionValuationArtifact,
   validateAuctionValuationProjectionLink,
+  validateSeasonCalendarBatch,
   type AuctionValuationArtifactInput,
+  type SeasonCalendarBatch,
 } from './database';
 
 const pooledUrl =
@@ -217,5 +220,93 @@ describe('planAuctionValuationPromotion', () => {
     expect(() =>
       planAuctionValuationPromotion({ ...valid, projectionSeasonKey: '2025-26' }),
     ).toThrow('does not match');
+  });
+});
+
+const calendarBatch = (): SeasonCalendarBatch => ({
+  fantraxCapturedAt: '2026-09-19T12:00:00.000Z',
+  fantasyPeriods: [
+    {
+      endAt: '2027-03-21T23:59:59.000Z',
+      phase: 'playoffs',
+      playoffRound: 'quarterfinal',
+      scoringPeriod: 20,
+      startAt: '2027-03-15T00:00:00.000Z',
+    },
+    {
+      endAt: '2027-03-28T23:59:59.000Z',
+      phase: 'playoffs',
+      playoffRound: 'final',
+      scoringPeriod: 21,
+      startAt: '2027-03-22T00:00:00.000Z',
+    },
+  ],
+  fingerprint: 'c'.repeat(64),
+  games: [
+    {
+      awayTeam: 'OKC',
+      date: '2027-03-15',
+      homeTeam: 'DEN',
+      postponed: false,
+      providerGameId: 'game-1',
+      scheduledAt: '2027-03-15T23:00:00.000Z',
+      seasonStartYear: 2026,
+      seasonType: 'regular',
+      sourcePayload: { id: 1 },
+      status: 'Scheduled',
+    },
+    {
+      awayTeam: 'DEN',
+      date: '2027-03-22',
+      homeTeam: 'BOS',
+      postponed: false,
+      providerGameId: 'game-2',
+      scheduledAt: '2027-03-22T23:00:00.000Z',
+      seasonStartYear: 2026,
+      seasonType: 'regular',
+      sourcePayload: { id: 2 },
+      status: 'Scheduled',
+    },
+  ],
+  leagueId: 'league-1',
+  nbaSourceId: 'balldontlie:/v1/games',
+  seasonKey: '2026-27',
+});
+
+describe('season calendar persistence model', () => {
+  it('validates immutable IDs and constructs dated per-team schedules', () => {
+    const batch = calendarBatch();
+    expect(() => validateSeasonCalendarBatch(batch)).not.toThrow();
+    const readModel = buildSeasonCalendarReadModel({
+      fantraxCapturedAt: batch.fantraxCapturedAt,
+      fantasyPeriods: batch.fantasyPeriods,
+      fingerprint: batch.fingerprint,
+      games: batch.games.map(({ sourcePayload: _sourcePayload, ...game }) => game),
+      leagueId: batch.leagueId,
+      nbaScheduleSnapshotId: 'snapshot-1',
+      seasonKey: batch.seasonKey,
+    });
+
+    expect(readModel.schedulesByTeam['DEN']).toMatchObject({
+      fantasyPlayoffWeeks: [
+        { scheduledGames: 1, scoringPeriod: 20 },
+        { scheduledGames: 1, scoringPeriod: 21 },
+      ],
+      regularSeasonScheduledGames: 2,
+    });
+    expect(readModel.games[0]?.scheduledAt).toBe('2027-03-15T23:00:00.000Z');
+  });
+
+  it('rejects duplicate game and period identities', () => {
+    const batch = calendarBatch();
+    expect(() =>
+      validateSeasonCalendarBatch({ ...batch, games: [...batch.games, batch.games[0]!] }),
+    ).toThrow('game IDs');
+    expect(() =>
+      validateSeasonCalendarBatch({
+        ...batch,
+        fantasyPeriods: [...batch.fantasyPeriods, batch.fantasyPeriods[0]!],
+      }),
+    ).toThrow('scoring periods');
   });
 });

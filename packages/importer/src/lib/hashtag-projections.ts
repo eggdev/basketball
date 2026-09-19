@@ -40,14 +40,19 @@ export interface HashtagProjectionRecord {
 
 export interface HashtagProjectionIssue {
   readonly candidatePlayerIds: ReadonlyArray<string>;
-  readonly kind: 'ambiguous_player' | 'unresolved_abbreviation';
+  readonly kind: 'ambiguous_player' | 'unresolved_abbreviation' | 'unresolved_team_schedule';
   readonly sourceName: string;
 }
 
 export interface HashtagProjectionImportPlan {
   readonly asOf: string;
+  readonly calendar: {
+    readonly fingerprint: string;
+    readonly snapshotId: string;
+  } | null;
   readonly fingerprint: string;
   readonly issues: ReadonlyArray<HashtagProjectionIssue>;
+  readonly limitations: ReadonlyArray<string>;
   readonly modelVersion: string;
   readonly records: ReadonlyArray<HashtagProjectionRecord>;
   readonly seasonKey: string;
@@ -63,7 +68,14 @@ export interface HashtagProjectionImportPlan {
 
 export type HashtagProjectionCommitBatch = Pick<
   HashtagProjectionImportPlan,
-  'asOf' | 'fingerprint' | 'modelVersion' | 'records' | 'seasonKey' | 'source'
+  | 'asOf'
+  | 'calendar'
+  | 'fingerprint'
+  | 'limitations'
+  | 'modelVersion'
+  | 'records'
+  | 'seasonKey'
+  | 'source'
 >;
 
 export interface ProjectionSnapshotCommitResult {
@@ -274,12 +286,16 @@ export const loadHashtagProjectionCsv = (
 
 export const planHashtagProjectionImport = (input: {
   readonly asOf: string;
+  readonly calendar?: {
+    readonly fingerprint: string;
+    readonly schedulesByTeam: Readonly<Record<string, PlayerSeasonSchedule>>;
+    readonly snapshotId: string;
+  };
   readonly canonicalPlayers: ReadonlyArray<ProjectionCanonicalPlayer>;
   readonly csv: string;
   readonly history: ReadonlyArray<ProjectionHistoryRecord>;
   readonly modelVersion: string;
   readonly rules: ScoringRules;
-  readonly schedulesByTeam?: Readonly<Record<string, PlayerSeasonSchedule>>;
   readonly seasonKey: string;
   readonly settings?: ProjectionModelSettings;
 }): Effect.Effect<HashtagProjectionImportPlan, HashtagProjectionValidationError> =>
@@ -384,6 +400,16 @@ export const planHashtagProjectionImport = (input: {
           'free throw',
         );
         const teamAbbreviation = field(row, ['team'], 'team').toUpperCase();
+        if (
+          input.calendar !== undefined &&
+          input.calendar.schedulesByTeam[teamAbbreviation] === undefined
+        ) {
+          issues.push({
+            candidatePlayerIds: [],
+            kind: 'unresolved_team_schedule',
+            sourceName: `${sourceName} (${teamAbbreviation})`,
+          });
+        }
         const explicitExternalId = optionalField(row, ['player_id', 'id']);
         sourceRows.push({
           canonicalName,
@@ -428,7 +454,7 @@ export const planHashtagProjectionImport = (input: {
           playerName: row.canonicalName,
           positions: row.positions,
           projectedBonusRates: row.projectedBonusRates,
-          schedule: input.schedulesByTeam?.[row.teamAbbreviation],
+          schedule: input.calendar?.schedulesByTeam[row.teamAbbreviation],
           statsPerGame: row.statLine,
           teamAbbreviation: row.teamAbbreviation,
         })),
@@ -472,6 +498,13 @@ export const planHashtagProjectionImport = (input: {
         .update(
           JSON.stringify({
             asOf: asOf.toISOString(),
+            calendar:
+              input.calendar === undefined
+                ? null
+                : {
+                    fingerprint: input.calendar.fingerprint,
+                    snapshotId: input.calendar.snapshotId,
+                  },
             issues,
             modelVersion: input.modelVersion,
             records: fingerprintRecords,
@@ -486,8 +519,16 @@ export const planHashtagProjectionImport = (input: {
 
       return {
         asOf: asOf.toISOString(),
+        calendar:
+          input.calendar === undefined
+            ? null
+            : {
+                fingerprint: input.calendar.fingerprint,
+                snapshotId: input.calendar.snapshotId,
+              },
         fingerprint,
         issues,
+        limitations: input.calendar === undefined ? ['missing-season-calendar'] : [],
         modelVersion: input.modelVersion,
         records,
         seasonKey: input.seasonKey,
@@ -511,6 +552,7 @@ export const planHashtagProjectionImport = (input: {
 export const commitHashtagProjectionImport = <Error>(
   plan: HashtagProjectionImportPlan,
   committer: ProjectionSnapshotCommitter<Error>,
+  options: { readonly allowMissingSchedule?: boolean } = {},
 ): Effect.Effect<ProjectionSnapshotCommitResult, Error | HashtagProjectionValidationError> => {
   if (!plan.summary.valid) {
     return Effect.fail(
@@ -520,9 +562,19 @@ export const commitHashtagProjectionImport = <Error>(
       }),
     );
   }
+  if (plan.calendar === null && options.allowMissingSchedule !== true) {
+    return Effect.fail(
+      new HashtagProjectionValidationError({
+        message: 'Hashtag projections are missing a season calendar',
+        reason: 'pass --allow-missing-schedule to record a schedule-null projection snapshot',
+      }),
+    );
+  }
   return committer.saveProjectionSnapshot({
     asOf: plan.asOf,
+    calendar: plan.calendar,
     fingerprint: plan.fingerprint,
+    limitations: plan.limitations,
     modelVersion: plan.modelVersion,
     records: plan.records,
     seasonKey: plan.seasonKey,

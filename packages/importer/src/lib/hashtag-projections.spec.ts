@@ -15,6 +15,24 @@ Rookie Example,PG SG,BKN,70,"0.450 (7.2/16.0)","0.800 (4.0/5.0)",2.2,20.6,4.2,6.
 
 const input = {
   asOf: '2026-09-18',
+  calendar: {
+    fingerprint: 'a'.repeat(64),
+    schedulesByTeam: {
+      BKN: {
+        fantasyPlayoffWeeks: [
+          { label: 'Championship', scheduledGames: 4, weight: 1.5, weekKey: 'period-22' },
+        ],
+        regularSeasonScheduledGames: 82,
+      },
+      DEN: {
+        fantasyPlayoffWeeks: [
+          { label: 'Championship', scheduledGames: 3, weight: 1.5, weekKey: 'period-22' },
+        ],
+        regularSeasonScheduledGames: 82,
+      },
+    },
+    snapshotId: 'calendar-1',
+  },
   canonicalPlayers: [
     {
       canonicalName: 'Nikola Jokic',
@@ -48,6 +66,7 @@ describe('planHashtagProjectionImport', () => {
       valid: true,
     });
     expect(plan.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(plan.calendar).toEqual({ fingerprint: 'a'.repeat(64), snapshotId: 'calendar-1' });
     expect(plan.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -66,6 +85,9 @@ describe('planHashtagProjectionImport', () => {
               expectedTripleDoubles: 36,
               tripleDoubleRate: 0.5,
             },
+            schedule: expect.objectContaining({
+              fantasyPlayoffWeeks: [expect.objectContaining({ scheduledGames: 3 })],
+            }),
           }),
         }),
         expect.objectContaining({
@@ -127,6 +149,22 @@ describe('planHashtagProjectionImport', () => {
     ]);
   });
 
+  it('blocks a projection team that is absent from the exact calendar snapshot', async () => {
+    const plan = await Effect.runPromise(
+      planHashtagProjectionImport({
+        ...input,
+        csv: csv.replace('BKN', 'SEA'),
+      }),
+    );
+
+    expect(plan.summary.valid).toBe(false);
+    expect(plan.issues).toContainEqual({
+      candidatePlayerIds: [],
+      kind: 'unresolved_team_schedule',
+      sourceName: 'Rookie Example (SEA)',
+    });
+  });
+
   it('commits only a fully reconciled projection snapshot', async () => {
     const plan = await Effect.runPromise(planHashtagProjectionImport(input));
     const saveProjectionSnapshot = vi.fn<
@@ -157,5 +195,38 @@ describe('planHashtagProjectionImport', () => {
 
     expect(Exit.isFailure(exit)).toBe(true);
     expect(String(exit)).toContain('field goal percentage must include projected makes/attempts');
+  });
+
+  it('requires an explicit escape hatch to commit without schedule provenance', async () => {
+    const plan = await Effect.runPromise(
+      planHashtagProjectionImport({ ...input, calendar: undefined }),
+    );
+    const saveProjectionSnapshot = vi.fn<
+      ProjectionSnapshotCommitter<never>['saveProjectionSnapshot']
+    >(() =>
+      Effect.succeed({
+        ingestionRunId: 'run-1',
+        newPlayerCount: 1,
+        playerProjectionCount: 2,
+        snapshotId: 'snapshot-1',
+      }),
+    );
+
+    const refused = await Effect.runPromiseExit(
+      commitHashtagProjectionImport(plan, { saveProjectionSnapshot }),
+    );
+    expect(Exit.isFailure(refused)).toBe(true);
+    expect(String(refused)).toContain('allow-missing-schedule');
+
+    await Effect.runPromise(
+      commitHashtagProjectionImport(
+        plan,
+        { saveProjectionSnapshot },
+        { allowMissingSchedule: true },
+      ),
+    );
+    expect(saveProjectionSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ calendar: null, limitations: ['missing-season-calendar'] }),
+    );
   });
 });

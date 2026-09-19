@@ -425,6 +425,83 @@ export const inferredRosterChanges = fantasySchema.table(
   ],
 );
 
+export const nbaScheduleSnapshots = fantasySchema.table(
+  'nba_schedule_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    leagueSeasonId: uuid('league_season_id')
+      .notNull()
+      .references(() => leagueSeasons.id, { onDelete: 'restrict' }),
+    source: text('source').notNull(),
+    seasonKey: text('season_key').notNull(),
+    asOf: timestamp('as_of', { withTimezone: true }).notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    sourceId: text('source_id').notNull(),
+    gameCount: integer('game_count').notNull(),
+    postponedGameCount: integer('postponed_game_count').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('nba_schedule_snapshots_fingerprint_unique').on(table.fingerprint),
+    index('nba_schedule_snapshots_season_as_of_idx').on(table.seasonKey, table.asOf),
+    index('nba_schedule_snapshots_league_season_idx').on(table.leagueSeasonId),
+  ],
+);
+
+export const nbaScheduleGames = fantasySchema.table(
+  'nba_schedule_games',
+  {
+    snapshotId: uuid('snapshot_id')
+      .notNull()
+      .references(() => nbaScheduleSnapshots.id, { onDelete: 'cascade' }),
+    providerGameId: text('provider_game_id').notNull(),
+    gameDate: text('game_date').notNull(),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+    homeTeam: text('home_team').notNull(),
+    awayTeam: text('away_team').notNull(),
+    seasonType: text('season_type').notNull(),
+    status: text('status').notNull(),
+    postponed: boolean('postponed').notNull().default(false),
+    sourceRecord: jsonb('source_record').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.snapshotId, table.providerGameId] }),
+    index('nba_schedule_games_snapshot_date_idx').on(table.snapshotId, table.scheduledAt),
+    index('nba_schedule_games_snapshot_home_team_idx').on(table.snapshotId, table.homeTeam),
+    index('nba_schedule_games_snapshot_away_team_idx').on(table.snapshotId, table.awayTeam),
+  ],
+);
+
+export const leagueScoringPeriods = fantasySchema.table(
+  'league_scoring_periods',
+  {
+    snapshotId: uuid('snapshot_id')
+      .notNull()
+      .references(() => nbaScheduleSnapshots.id, { onDelete: 'cascade' }),
+    leagueSeasonId: uuid('league_season_id')
+      .notNull()
+      .references(() => leagueSeasons.id, { onDelete: 'restrict' }),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    scoringPeriod: integer('scoring_period').notNull(),
+    startAt: timestamp('start_at', { withTimezone: true }).notNull(),
+    endAt: timestamp('end_at', { withTimezone: true }).notNull(),
+    phase: text('phase').notNull(),
+    playoffRound: text('playoff_round'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.snapshotId, table.scoringPeriod] }),
+    index('league_scoring_periods_league_season_idx').on(table.leagueSeasonId, table.scoringPeriod),
+    index('league_scoring_periods_ingestion_run_idx').on(table.ingestionRunId),
+  ],
+);
+
 export const projectionSnapshots = fantasySchema.table(
   'projection_snapshots',
   {

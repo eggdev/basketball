@@ -33,6 +33,8 @@
     "valuation:promote": "nx run importer:valuation-calibrate",
     "scoring:import": "nx run importer:scoring-import -- --commit",
     "scoring:validate": "nx run importer:scoring-import",
+    "season-calendar:import": "nx run importer:season-calendar-import -- --commit",
+    "season-calendar:validate": "nx run importer:season-calendar-import",
     "test": "nx run-many -t test -- --run",
     "test:python": "PYTHONPATH=src python3 -m unittest discover -s tests -v",
     "typecheck": "nx run-many -t typecheck"

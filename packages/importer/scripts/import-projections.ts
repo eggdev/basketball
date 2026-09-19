@@ -20,6 +20,7 @@ const argument = (name: string): string | null =>
   process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3) ?? null;
 
 const shouldCommit = process.argv.includes('--commit');
+const allowMissingSchedule = process.argv.includes('--allow-missing-schedule');
 const seasonKey = argument('season') ?? '2026-27';
 const asOf = argument('as-of') ?? new Date().toISOString().slice(0, 10);
 const sourcePath = argument('file') ?? `data/raw/hashtag/${seasonKey}.csv`;
@@ -31,7 +32,7 @@ const runWithDatabase = <Value, Error>(
 
 const run = async () => {
   const databaseConfig = await Effect.runPromise(loadDatabaseConfig());
-  const [csv, scoringSource, canonicalPlayers, history] = await Promise.all([
+  const [csv, scoringSource, canonicalPlayers, history, calendar] = await Promise.all([
     Effect.runPromise(loadHashtagProjectionCsv(sourcePath)),
     Effect.runPromise(loadHistoricalScoringSource(process.cwd())),
     runWithDatabase(
@@ -48,6 +49,13 @@ const run = async () => {
         return yield* database.playerProductionHistory;
       }),
     ),
+    runWithDatabase(
+      databaseConfig,
+      Effect.gen(function* () {
+        const database = yield* Database;
+        return yield* database.latestSeasonCalendar(seasonKey);
+      }),
+    ),
   ]);
   const scoring = await Effect.runPromise(parseLeagueScoringConfiguration(scoringSource));
   const modelVersion =
@@ -55,6 +63,15 @@ const run = async () => {
   const plan = await Effect.runPromise(
     planHashtagProjectionImport({
       asOf,
+      ...(calendar === null
+        ? {}
+        : {
+            calendar: {
+              fingerprint: calendar.fingerprint,
+              schedulesByTeam: calendar.schedulesByTeam,
+              snapshotId: calendar.nbaScheduleSnapshotId,
+            },
+          }),
       canonicalPlayers,
       csv,
       history,
@@ -78,6 +95,8 @@ const run = async () => {
           mode: 'validate',
           asOf: plan.asOf,
           fingerprint: plan.fingerprint,
+          calendar: plan.calendar,
+          limitations: plan.limitations,
           scoring: `${scoring.name} v${scoring.version}`,
           seasonKey: plan.seasonKey,
           ...plan.summary,
@@ -96,7 +115,7 @@ const run = async () => {
     databaseConfig,
     Effect.gen(function* () {
       const database = yield* Database;
-      return yield* commitHashtagProjectionImport(plan, database);
+      return yield* commitHashtagProjectionImport(plan, database, { allowMissingSchedule });
     }).pipe(
       Effect.tapError((error) =>
         Effect.sync(() => {
@@ -113,6 +132,8 @@ const run = async () => {
         mode: 'commit',
         asOf: plan.asOf,
         fingerprint: plan.fingerprint,
+        calendar: plan.calendar,
+        limitations: plan.limitations,
         scoring: `${scoring.name} v${scoring.version}`,
         seasonKey: plan.seasonKey,
         ...result,

@@ -6,4 +6,5 @@ export * from './lib/fantrax-roster-history';
 export * from './lib/hashtag-projections';
 export * from './lib/historical-scoring';
 export * from './lib/league-identity';
+export * from './lib/nba-season-calendar';
 export * from './lib/player-production';

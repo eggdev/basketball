@@ -28,6 +28,19 @@ export interface ProductionGameStat {
   readonly stats: Readonly<Record<ProductionStatKey, number>>;
 }
 
+export interface BallDontLieRegularSeasonGame {
+  readonly awayTeam: string;
+  readonly date: string;
+  readonly homeTeam: string;
+  readonly postponed: boolean;
+  readonly providerGameId: string;
+  readonly scheduledAt: string;
+  readonly seasonStartYear: number;
+  readonly seasonType: 'regular';
+  readonly sourcePayload: Readonly<Record<string, unknown>>;
+  readonly status: string;
+}
+
 export const productionStatKeys = [
   'minutes',
   'fgm',
@@ -124,7 +137,13 @@ export interface BallDontLieProgress {
   readonly cacheHit: boolean;
   readonly page: number;
   readonly recordCount: number;
-  readonly resource: 'players' | 'stats';
+  readonly resource: 'games' | 'players' | 'stats';
+}
+
+export interface BallDontLieScheduleProvider<Error> {
+  readonly listRegularSeasonGames: (
+    seasonStartYear: number,
+  ) => Effect.Effect<ReadonlyArray<BallDontLieRegularSeasonGame>, Error>;
 }
 
 export interface BallDontLieProviderConfig {
@@ -341,6 +360,38 @@ const parseGameStat = (value: unknown): ProductionGameStat => {
   };
 };
 
+const parseRegularSeasonGame = (value: unknown): BallDontLieRegularSeasonGame => {
+  const record = requiredObject(value, 'game');
+  const homeTeam = requiredObject(record['home_team'], 'game.home_team');
+  const awayTeam = requiredObject(record['visitor_team'], 'game.visitor_team');
+  const season = finiteNumber(record['season'], 'game.season');
+  if (!Number.isSafeInteger(season)) throw new Error('game.season must be an integer');
+  const date = requiredString(record['date'], 'game.date');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+    throw new Error('game.date must use YYYY-MM-DD');
+  }
+  const scheduledAt = requiredString(record['datetime'], 'game.datetime');
+  const parsedScheduledAt = new Date(scheduledAt);
+  if (Number.isNaN(parsedScheduledAt.getTime()))
+    throw new Error('game.datetime must be a timestamp');
+  const status = requiredString(record['status'], 'game.status');
+  const statusState =
+    typeof record['status_state'] === 'string' ? record['status_state'].toLowerCase() : '';
+
+  return {
+    awayTeam: requiredString(awayTeam['abbreviation'], 'game.visitor_team.abbreviation'),
+    date,
+    homeTeam: requiredString(homeTeam['abbreviation'], 'game.home_team.abbreviation'),
+    postponed: record['postponed'] === true || statusState === 'postponed',
+    providerGameId: requiredIdentifier(record['id'], 'game.id'),
+    scheduledAt: parsedScheduledAt.toISOString(),
+    seasonStartYear: season,
+    seasonType: 'regular',
+    sourcePayload: record,
+    status,
+  };
+};
+
 const nextCursor = (value: unknown): string | null => {
   const meta = requiredObject(value, 'response.meta');
   const cursor = meta['next_cursor'];
@@ -360,7 +411,8 @@ const chunks = <Value>(values: ReadonlyArray<Value>, size: number): ReadonlyArra
 
 export const makeBallDontLieProvider = (
   config: BallDontLieProviderConfig,
-): PlayerProductionProvider<PlayerProductionProviderError> => {
+): PlayerProductionProvider<PlayerProductionProviderError> &
+  BallDontLieScheduleProvider<PlayerProductionProviderError> => {
   const fetchImplementation = config.fetch ?? globalThis.fetch;
   let requestsPerMinute = config.initialRequestsPerMinute;
   let nextRequestAt = 0;
@@ -498,6 +550,27 @@ export const makeBallDontLieProvider = (
     });
 
   return {
+    listRegularSeasonGames: (seasonStartYear) => {
+      if (!Number.isSafeInteger(seasonStartYear) || seasonStartYear < 1946) {
+        return Effect.fail(
+          new PlayerProductionProviderError({
+            message: 'BALLDONTLIE season must be a valid NBA season start year',
+            reason: 'invalid season start year',
+            status: null,
+          }),
+        );
+      }
+      return fetchAllPages(
+        'games',
+        '/v1/games',
+        [
+          ['per_page', '100'],
+          ['season_type', 'regular'],
+          ['seasons[]', String(seasonStartYear)],
+        ],
+        parseRegularSeasonGame,
+      );
+    },
     listPlayers: fetchAllPages(
       'players',
       '/v1/players',

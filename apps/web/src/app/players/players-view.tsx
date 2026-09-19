@@ -132,7 +132,20 @@ export function PlayersView({
         <div className={styles.notice}>
           <strong>{projections.seasonKey} forecast</strong>
           {projections.source} source · as of {projections.asOf.slice(0, 10)} · expected games drive
-          availability-adjusted totals. Bonus rates are estimated from historical game results.
+          availability-adjusted totals. Bonus rates are estimated from historical game results.{' '}
+          {projections.calendar == null ? (
+            <span className={styles.neutral}>Calendar Pending</span>
+          ) : (
+            <span
+              className={
+                projections.calendar.status === 'current' ? styles.positive : styles.negative
+              }
+            >
+              Calendar {projections.calendar.status === 'current' ? 'Current' : 'Stale'} · as of{' '}
+              {projections.calendar.asOf.slice(0, 10)} ·{' '}
+              {projections.calendar.fingerprint.slice(0, 8)}
+            </span>
+          )}
         </div>
       ) : (
         <div className={styles.warning}>
@@ -188,8 +201,15 @@ export function PlayersView({
             <div>
               <h2>Season projection board</h2>
               <p>
-                {projections.modelVersion} · playoff value appears after the league playoff window
-                and NBA schedule are configured.
+                {projections.modelVersion} ·{' '}
+                {projections.calendar == null
+                  ? 'playoff schedule pending'
+                  : projections.calendar.playoffPeriods
+                      .map(
+                        (period) =>
+                          `${period.label} P${period.scoringPeriod} (${period.startAt.slice(0, 10)}–${period.endAt.slice(0, 10)})`,
+                      )
+                      .join(' · ')}
               </p>
             </div>
             <div className={styles.toolbar}>
@@ -274,7 +294,9 @@ export function PlayersView({
                       </td>
                       <td>
                         {player.schedule
-                          ? formatFantasyPoints(player.schedule.weightedExpectedPoints)
+                          ? `${formatFantasyPoints(player.schedule.weightedExpectedPoints)} · ${player.schedule.fantasyPlayoffWeeks
+                              .map((period) => period.scheduledGames)
+                              .join('/')} games`
                           : 'Pending'}
                       </td>
                       <td>{marketPlayer ? formatPrice(marketPlayer.expectedPriceCents) : '—'}</td>

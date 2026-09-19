@@ -41,6 +41,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'historical_auction_market'
     | 'historical_rankings'
     | 'latest_adp_snapshot'
+    | 'latest_season_calendar'
     | 'latest_projection_snapshot'
     | 'auction_valuation_run'
     | 'promoted_auction_valuation_run'
@@ -62,6 +63,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'save_pre_draft_plan'
     | 'save_pre_draft_target'
     | 'save_projection_snapshot'
+    | 'save_season_calendar'
     | 'save_auction_valuation_run'
     | 'promote_auction_valuation_run';
   readonly reason?: string;
@@ -219,8 +221,12 @@ export interface PlayerProjectionReadModel {
     readonly fantasyPlayoffWeeks: ReadonlyArray<{
       readonly expectedActiveGames: number;
       readonly expectedFantasyPoints: number;
+      readonly endAt?: string;
       readonly label: string;
+      readonly playoffRound?: 'final' | 'quarterfinal' | 'semifinal';
       readonly scheduledGames: number;
+      readonly scoringPeriod?: number;
+      readonly startAt?: string;
       readonly weight: number;
       readonly weekKey: string;
     }>;
@@ -232,6 +238,18 @@ export interface PlayerProjectionReadModel {
 
 export interface LatestProjectionSnapshot {
   readonly asOf: string;
+  readonly calendar?: {
+    readonly asOf: string;
+    readonly fingerprint: string;
+    readonly playoffPeriods: ReadonlyArray<{
+      readonly endAt: string;
+      readonly label: string;
+      readonly scoringPeriod: number;
+      readonly startAt: string;
+    }>;
+    readonly snapshotId: string;
+    readonly status: 'current' | 'stale';
+  } | null;
   readonly createdAt: string;
   readonly modelVersion: string;
   readonly players: ReadonlyArray<PlayerProjectionReadModel>;
@@ -664,6 +682,141 @@ export interface PlayerProductionHistoryRecord {
   readonly stats: Readonly<Record<string, number | null>>;
 }
 
+export interface SeasonCalendarBatch {
+  readonly fantraxCapturedAt: string;
+  readonly fantasyPeriods: ReadonlyArray<{
+    readonly endAt: string;
+    readonly phase: 'playoffs' | 'regular-season';
+    readonly playoffRound: 'final' | 'quarterfinal' | 'semifinal' | null;
+    readonly scoringPeriod: number;
+    readonly startAt: string;
+  }>;
+  readonly fingerprint: string;
+  readonly games: ReadonlyArray<{
+    readonly awayTeam: string;
+    readonly date: string;
+    readonly homeTeam: string;
+    readonly postponed: boolean;
+    readonly providerGameId: string;
+    readonly scheduledAt: string;
+    readonly seasonStartYear: number;
+    readonly seasonType: 'regular';
+    readonly sourcePayload: Readonly<Record<string, unknown>>;
+    readonly status: string;
+  }>;
+  readonly leagueId: string;
+  readonly nbaSourceId: string;
+  readonly seasonKey: string;
+}
+
+export interface SeasonCalendarImportResult {
+  readonly alreadyImported: boolean;
+  readonly gameCount: number;
+  readonly ingestionRunId: string;
+  readonly periodCount: number;
+  readonly snapshotId: string;
+}
+
+export interface SeasonCalendarReadModel {
+  readonly fantraxCapturedAt: string;
+  readonly fantasyPeriods: SeasonCalendarBatch['fantasyPeriods'];
+  readonly fingerprint: string;
+  readonly games: ReadonlyArray<Omit<SeasonCalendarBatch['games'][number], 'sourcePayload'>>;
+  readonly leagueId: string;
+  readonly nbaScheduleSnapshotId: string;
+  readonly schedulesByTeam: Readonly<
+    Record<
+      string,
+      {
+        readonly fantasyPlayoffWeeks: ReadonlyArray<{
+          readonly endAt: string;
+          readonly label: string;
+          readonly playoffRound: 'final' | 'quarterfinal' | 'semifinal';
+          readonly scheduledGames: number;
+          readonly scoringPeriod: number;
+          readonly startAt: string;
+          readonly weight: number;
+          readonly weekKey: string;
+        }>;
+        readonly regularSeasonScheduledGames: number;
+      }
+    >
+  >;
+  readonly seasonKey: string;
+}
+
+const playoffPeriodLabel = (
+  round: NonNullable<SeasonCalendarBatch['fantasyPeriods'][number]['playoffRound']>,
+) => (round === 'final' ? 'Championship' : round === 'semifinal' ? 'Semifinal' : 'Quarterfinal');
+
+const playoffPeriodWeight = (
+  round: NonNullable<SeasonCalendarBatch['fantasyPeriods'][number]['playoffRound']>,
+) => (round === 'final' ? 1.5 : round === 'semifinal' ? 1 : 0.75);
+
+export const validateSeasonCalendarBatch = (batch: SeasonCalendarBatch): void => {
+  if (!/^[a-f0-9]{64}$/.test(batch.fingerprint)) {
+    throw new Error('season calendar fingerprint must be SHA-256');
+  }
+  if (!/^\d{4}-\d{2}$/.test(batch.seasonKey)) throw new Error('invalid season calendar season');
+  if (batch.games.length === 0) throw new Error('season calendar requires games');
+  if (batch.fantasyPeriods.length === 0)
+    throw new Error('season calendar requires scoring periods');
+  if (new Set(batch.games.map((game) => game.providerGameId)).size !== batch.games.length) {
+    throw new Error('season calendar game IDs must be unique');
+  }
+  if (
+    new Set(batch.fantasyPeriods.map((period) => period.scoringPeriod)).size !==
+    batch.fantasyPeriods.length
+  ) {
+    throw new Error('season calendar scoring periods must be unique');
+  }
+};
+
+export const buildSeasonCalendarReadModel = (input: {
+  readonly fantraxCapturedAt: string;
+  readonly fantasyPeriods: SeasonCalendarBatch['fantasyPeriods'];
+  readonly fingerprint: string;
+  readonly games: SeasonCalendarReadModel['games'];
+  readonly leagueId: string;
+  readonly nbaScheduleSnapshotId: string;
+  readonly seasonKey: string;
+}): SeasonCalendarReadModel => {
+  const teams = new Set(input.games.flatMap((game) => [game.homeTeam, game.awayTeam]));
+  const schedulesByTeam = Object.fromEntries(
+    [...teams].sort().map((team) => {
+      const games = input.games.filter((game) => game.homeTeam === team || game.awayTeam === team);
+      return [
+        team,
+        {
+          fantasyPlayoffWeeks: input.fantasyPeriods.flatMap((period) => {
+            if (period.phase !== 'playoffs' || period.playoffRound === null) return [];
+            return [
+              {
+                endAt: period.endAt,
+                label: playoffPeriodLabel(period.playoffRound),
+                playoffRound: period.playoffRound,
+                scheduledGames: games.filter((game) => {
+                  const scheduledAt = Date.parse(game.scheduledAt);
+                  return (
+                    scheduledAt >= Date.parse(period.startAt) &&
+                    scheduledAt <= Date.parse(period.endAt)
+                  );
+                }).length,
+                scoringPeriod: period.scoringPeriod,
+                startAt: period.startAt,
+                weight: playoffPeriodWeight(period.playoffRound),
+                weekKey: `period-${period.scoringPeriod}`,
+              },
+            ];
+          }),
+          regularSeasonScheduledGames: games.length,
+        },
+      ] as const;
+    }),
+  );
+  return { ...input, schedulesByTeam };
+};
+
 export interface HistoricalScoringBatch {
   readonly fingerprint: string;
   readonly name: string;
@@ -696,7 +849,12 @@ export interface HistoricalScoringImportResult {
 
 export interface ProjectionSnapshotBatch {
   readonly asOf: string;
+  readonly calendar: {
+    readonly fingerprint: string;
+    readonly snapshotId: string;
+  } | null;
   readonly fingerprint: string;
+  readonly limitations: ReadonlyArray<string>;
   readonly modelVersion: string;
   readonly records: ReadonlyArray<{
     readonly canonicalName: string;
@@ -1062,6 +1220,9 @@ export interface DatabaseService {
   readonly historicalAuctionMarket: Effect.Effect<HistoricalAuctionMarket, DatabaseUnavailable>;
   readonly historicalRankings: Effect.Effect<HistoricalRankingSnapshot, DatabaseUnavailable>;
   readonly latestAdpSnapshot: Effect.Effect<LatestAdpSnapshot | null, DatabaseUnavailable>;
+  readonly latestSeasonCalendar: (
+    seasonKey: string,
+  ) => Effect.Effect<SeasonCalendarReadModel | null, DatabaseUnavailable>;
   readonly latestProjectionSnapshot: Effect.Effect<
     LatestProjectionSnapshot | null,
     DatabaseUnavailable
@@ -1107,6 +1268,9 @@ export interface DatabaseService {
   readonly saveProjectionSnapshot: (
     batch: ProjectionSnapshotBatch,
   ) => Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable>;
+  readonly saveSeasonCalendar: (
+    batch: SeasonCalendarBatch,
+  ) => Effect.Effect<SeasonCalendarImportResult, DatabaseUnavailable>;
   readonly saveAuctionValuationRun: (
     artifact: AuctionValuationArtifactInput,
   ) => Effect.Effect<SaveAuctionValuationRunResult, DatabaseUnavailable>;
@@ -1504,12 +1668,112 @@ const databaseServiceLayer = Layer.effect(
       ),
     );
 
+    const latestSeasonCalendar = (seasonKey: string) =>
+      Effect.gen(function* () {
+        const [snapshot] = yield* sql<{
+          as_of: string;
+          fingerprint: string;
+          id: string;
+          league_id: string;
+          season_key: string;
+        }>`
+          select
+            nss.id,
+            nss.season_key,
+            nss.as_of::text,
+            nss.fingerprint,
+            ls.source_league_id as league_id
+          from fantasy.nba_schedule_snapshots nss
+          join fantasy.league_seasons ls on ls.id = nss.league_season_id
+          where nss.season_key = ${seasonKey}
+          order by nss.as_of desc, nss.created_at desc
+          limit 1
+        `;
+        if (snapshot === undefined) return null;
+
+        const games = yield* sql<{
+          away_team: string;
+          game_date: string;
+          home_team: string;
+          postponed: boolean;
+          provider_game_id: string;
+          scheduled_at: string;
+          season_type: 'regular';
+          status: string;
+        }>`
+          select
+            provider_game_id,
+            game_date,
+            scheduled_at::text,
+            home_team,
+            away_team,
+            season_type,
+            status,
+            postponed
+          from fantasy.nba_schedule_games
+          where snapshot_id = ${snapshot.id}
+          order by scheduled_at, provider_game_id
+        `;
+        const periods = yield* sql<{
+          end_at: string;
+          phase: 'playoffs' | 'regular-season';
+          playoff_round: 'final' | 'quarterfinal' | 'semifinal' | null;
+          scoring_period: number;
+          start_at: string;
+        }>`
+          select
+            scoring_period,
+            start_at::text,
+            end_at::text,
+            phase,
+            playoff_round
+          from fantasy.league_scoring_periods
+          where snapshot_id = ${snapshot.id}
+          order by scoring_period
+        `;
+        const startYear = Number(snapshot.season_key.slice(0, 4));
+        return buildSeasonCalendarReadModel({
+          fantraxCapturedAt: snapshot.as_of,
+          fantasyPeriods: periods.map((period) => ({
+            endAt: new Date(period.end_at).toISOString(),
+            phase: period.phase,
+            playoffRound: period.playoff_round,
+            scoringPeriod: period.scoring_period,
+            startAt: new Date(period.start_at).toISOString(),
+          })),
+          fingerprint: snapshot.fingerprint,
+          games: games.map((game) => ({
+            awayTeam: game.away_team,
+            date: game.game_date,
+            homeTeam: game.home_team,
+            postponed: game.postponed,
+            providerGameId: game.provider_game_id,
+            scheduledAt: new Date(game.scheduled_at).toISOString(),
+            seasonStartYear: startYear,
+            seasonType: game.season_type,
+            status: game.status,
+          })),
+          leagueId: snapshot.league_id,
+          nbaScheduleSnapshotId: snapshot.id,
+          seasonKey: snapshot.season_key,
+        });
+      }).pipe(
+        Effect.mapError((cause) =>
+          databaseUnavailable(
+            'latest_season_calendar',
+            'The latest season calendar could not be loaded',
+            cause,
+          ),
+        ),
+      );
+
     const latestProjectionSnapshot = Effect.gen(function* () {
       const [snapshot] = yield* sql<{
         as_of: string;
         created_at: string;
         id: string;
         model_version: string;
+        parameters: Record<string, unknown>;
         season_key: string;
         source: string;
       }>`
@@ -1519,6 +1783,7 @@ const databaseServiceLayer = Layer.effect(
           season_key,
           as_of::text,
           model_version,
+          parameters,
           created_at::text
         from fantasy.projection_snapshots
         order by season_key desc, as_of desc, created_at desc
@@ -1574,8 +1839,64 @@ const databaseServiceLayer = Layer.effect(
         }),
       );
 
+      const calendarSnapshotId = snapshot.parameters['calendarSnapshotId'];
+      let calendar: LatestProjectionSnapshot['calendar'] = null;
+      if (typeof calendarSnapshotId === 'string' && calendarSnapshotId !== '') {
+        const [referencedCalendar] = yield* sql<{
+          as_of: string;
+          fingerprint: string;
+          id: string;
+          is_latest: boolean;
+          season_key: string;
+        }>`
+          select
+            nss.id,
+            nss.season_key,
+            nss.as_of::text,
+            nss.fingerprint,
+            nss.id = (
+              select latest.id
+              from fantasy.nba_schedule_snapshots latest
+              where latest.season_key = ${snapshot.season_key}
+              order by latest.as_of desc, latest.created_at desc
+              limit 1
+            ) as is_latest
+          from fantasy.nba_schedule_snapshots nss
+          where nss.id = ${calendarSnapshotId}
+        `;
+        if (referencedCalendar !== undefined) {
+          const playoffPeriods = yield* sql<{
+            end_at: string;
+            playoff_round: 'final' | 'quarterfinal' | 'semifinal';
+            scoring_period: number;
+            start_at: string;
+          }>`
+            select scoring_period, start_at::text, end_at::text, playoff_round
+            from fantasy.league_scoring_periods
+            where snapshot_id = ${referencedCalendar.id} and phase = 'playoffs'
+            order by scoring_period
+          `;
+          calendar = {
+            asOf: referencedCalendar.as_of,
+            fingerprint: referencedCalendar.fingerprint,
+            playoffPeriods: playoffPeriods.map((period) => ({
+              endAt: new Date(period.end_at).toISOString(),
+              label: playoffPeriodLabel(period.playoff_round),
+              scoringPeriod: period.scoring_period,
+              startAt: new Date(period.start_at).toISOString(),
+            })),
+            snapshotId: referencedCalendar.id,
+            status:
+              referencedCalendar.season_key === snapshot.season_key && referencedCalendar.is_latest
+                ? 'current'
+                : 'stale',
+          };
+        }
+      }
+
       return {
         asOf: snapshot.as_of,
+        calendar,
         createdAt: snapshot.created_at,
         modelVersion: snapshot.model_version,
         players,
@@ -4903,6 +5224,166 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const saveSeasonCalendar = (
+      batch: SeasonCalendarBatch,
+    ): Effect.Effect<SeasonCalendarImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        validateSeasonCalendarBatch(batch);
+        const [existing] = yield* sql<{
+          game_count: number;
+          ingestion_run_id: string;
+          period_count: number;
+          snapshot_id: string;
+        }>`
+          select
+            nss.id as snapshot_id,
+            nss.ingestion_run_id,
+            count(distinct nsg.provider_game_id)::integer as game_count,
+            count(distinct lsp.scoring_period)::integer as period_count
+          from fantasy.nba_schedule_snapshots nss
+          left join fantasy.nba_schedule_games nsg on nsg.snapshot_id = nss.id
+          left join fantasy.league_scoring_periods lsp on lsp.snapshot_id = nss.id
+          where nss.fingerprint = ${batch.fingerprint}
+          group by nss.id
+        `;
+        if (existing !== undefined) {
+          return {
+            alreadyImported: true,
+            gameCount: existing.game_count,
+            ingestionRunId: existing.ingestion_run_id,
+            periodCount: existing.period_count,
+            snapshotId: existing.snapshot_id,
+          };
+        }
+
+        const [leagueSeason] = yield* sql<{ id: string }>`
+          select id
+          from fantasy.league_seasons
+          where source = 'fantrax'
+            and source_league_id = ${batch.leagueId}
+            and season_key = ${batch.seasonKey}
+        `;
+        if (leagueSeason === undefined) {
+          throw new Error(
+            `Season calendar references unknown Fantrax league ${batch.leagueId} for ${batch.seasonKey}`,
+          );
+        }
+
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, season_key, status, record_count, details)
+          values
+            (
+              'season-calendar',
+              'nba-schedule-and-fantrax-periods',
+              ${batch.seasonKey},
+              'running',
+              ${batch.games.length + batch.fantasyPeriods.length},
+              ${sql.json({
+                asOf: batch.fantraxCapturedAt,
+                fingerprint: batch.fingerprint,
+                leagueId: batch.leagueId,
+                nbaSourceId: batch.nbaSourceId,
+              })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) throw new Error('Calendar ingestion run was not created');
+
+        const [snapshot] = yield* sql<{ id: string }>`
+          insert into fantasy.nba_schedule_snapshots
+            (
+              ingestion_run_id,
+              league_season_id,
+              source,
+              season_key,
+              as_of,
+              fingerprint,
+              source_id,
+              game_count,
+              postponed_game_count
+            )
+          values
+            (
+              ${ingestionRun.id},
+              ${leagueSeason.id},
+              'balldontlie',
+              ${batch.seasonKey},
+              ${new Date(batch.fantraxCapturedAt)},
+              ${batch.fingerprint},
+              ${batch.nbaSourceId},
+              ${batch.games.length},
+              ${batch.games.filter((game) => game.postponed).length}
+            )
+          returning id
+        `;
+        if (snapshot === undefined) throw new Error('Calendar snapshot was not created');
+
+        if (batch.games.length > 0) {
+          yield* sql`
+            insert into fantasy.nba_schedule_games ${sql.insert(
+              batch.games.map((game) => ({
+                away_team: game.awayTeam,
+                game_date: game.date,
+                home_team: game.homeTeam,
+                postponed: game.postponed,
+                provider_game_id: game.providerGameId,
+                scheduled_at: new Date(game.scheduledAt),
+                season_type: game.seasonType,
+                snapshot_id: snapshot.id,
+                source_record: game.sourcePayload,
+                status: game.status,
+              })),
+            )}
+          `;
+        }
+        if (batch.fantasyPeriods.length > 0) {
+          yield* sql`
+            insert into fantasy.league_scoring_periods ${sql.insert(
+              batch.fantasyPeriods.map((period) => ({
+                end_at: new Date(period.endAt),
+                ingestion_run_id: ingestionRun.id,
+                league_season_id: leagueSeason.id,
+                phase: period.phase,
+                playoff_round: period.playoffRound,
+                scoring_period: period.scoringPeriod,
+                snapshot_id: snapshot.id,
+                start_at: new Date(period.startAt),
+              })),
+            )}
+          `;
+        }
+
+        yield* sql`
+          update fantasy.ingestion_runs
+          set
+            status = 'completed',
+            finished_at = now(),
+            details = details || ${sql.json({ snapshotId: snapshot.id })}
+          where id = ${ingestionRun.id}
+        `;
+        return {
+          alreadyImported: false,
+          gameCount: batch.games.length,
+          ingestionRunId: ingestionRun.id,
+          periodCount: batch.fantasyPeriods.length,
+          snapshotId: snapshot.id,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError((cause) =>
+            databaseUnavailable(
+              'save_season_calendar',
+              'The season calendar could not be saved',
+              cause,
+            ),
+          ),
+        );
+    };
+
     const saveProjectionSnapshot = (
       batch: ProjectionSnapshotBatch,
     ): Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable> => {
@@ -4944,7 +5425,10 @@ const databaseServiceLayer = Layer.effect(
               ${batch.records.length},
               ${sql.json({
                 asOf: batch.asOf,
+                calendarFingerprint: batch.calendar?.fingerprint ?? null,
+                calendarSnapshotId: batch.calendar?.snapshotId ?? null,
                 fingerprint: batch.fingerprint,
+                limitations: batch.limitations,
                 modelVersion: batch.modelVersion,
               })}
             )
@@ -5037,7 +5521,12 @@ const databaseServiceLayer = Layer.effect(
               ${new Date(batch.asOf)},
               ${batch.modelVersion},
               ${batch.fingerprint},
-              ${sql.json({ newPlayerCount })}
+              ${sql.json({
+                calendarFingerprint: batch.calendar?.fingerprint ?? null,
+                calendarSnapshotId: batch.calendar?.snapshotId ?? null,
+                limitations: batch.limitations,
+                newPlayerCount,
+              })}
             )
           returning id
         `;
@@ -5312,6 +5801,7 @@ const databaseServiceLayer = Layer.effect(
       historicalRankings,
       latestAdpSnapshot,
       latestProjectionSnapshot,
+      latestSeasonCalendar,
       leaguePerformanceHistory,
       leagueRosterActivity,
       leagueRosterSnapshot,
@@ -5333,6 +5823,7 @@ const databaseServiceLayer = Layer.effect(
       savePreDraftPlan,
       savePreDraftTarget,
       saveProjectionSnapshot,
+      saveSeasonCalendar,
     });
   }),
 );

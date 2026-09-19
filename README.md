@@ -258,6 +258,32 @@ changed daily, so later valuation runs must account for schedule density and
 usable bench games rather than treating the ten active slots as a fixed weekly
 lineup.
 
+## Versioned season calendars
+
+The calendar importer joins the official BALLDONTLIE regular-season schedule to
+the active Fantrax league's dated scoring periods. It selects the sole `live`
+season from the ignored `config/seasons.json` by default; use `--season=YYYY-YY`
+only for an explicit override.
+
+```bash
+bun run season-calendar:validate
+bun run season-calendar:import
+```
+
+Validation is read-only and prints the provider timestamp, scoring-period
+boundaries, per-team regular-season and playoff counts, postponed games, and a
+deterministic fingerprint. Import reruns the same validation and saves a new
+immutable snapshot. BALLDONTLIE pages retain the existing rate-limit, retry, and
+local-cache behavior; Fantrax league info is fetched once and cached under
+`data/cache/fantrax/<season>/league-info.json`. Refreshing after a postponement
+creates a new snapshot rather than modifying history.
+
+Projection imports record the exact calendar snapshot and fingerprint. A normal
+commit refuses missing or unmapped team schedules; `--allow-missing-schedule` is
+an explicit compatibility escape hatch and records that limitation in the
+projection snapshot. The player board labels current, stale, and genuinely
+missing calendar data separately.
+
 ## Auction valuation promotion
 
 Auction calibration is an explicit two-stage workflow. `bun run valuation:validate`
@@ -305,7 +331,7 @@ cost and the weighted historical market while labeling them as actuals, not
 forecasts. Historical auction cost remains an observed market signal rather
 than a ranking. The projection importer now converts a locally supplied
 Hashtag snapshot into availability-adjusted league points, including estimated
-double-/triple-double bonuses and optional playoff-week schedule weighting. The
+double-/triple-double bonuses and versioned playoff-week schedule weighting. The
 valuation lab compares four fixed price models through walk-forward tests: each
 season is predicted only from earlier auctions and lagged production. It selects
 the lowest drafted-player mean absolute error, derives price-tier ranges from

@@ -111,3 +111,17 @@ are fetched at a conservative one request per second with retry backoff; pass
 records cannot reveal waiver priority, FAAB, multi-player trade packages, or Fantrax's
 official transaction label, so the UI and Eve consistently call them inferred roster
 activity.
+
+## NBA season calendars
+
+BALLDONTLIE game pages are cached under `cache/balldontlie/`; the active Fantrax
+league-info response is cached under `cache/fantrax/<season>/league-info.json`.
+Both directories are ignored source evidence, not repository fixtures. Run
+`bun run season-calendar:validate` to inspect dated games, playoff periods,
+postponements, per-team counts, and the fingerprint without writing. Run
+`bun run season-calendar:import` only after reviewing that output.
+
+Calendar refreshes are immutable. A postponed or rescheduled game produces a new
+snapshot and projection imports retain the exact snapshot ID and fingerprint they
+used. The persisted read model keeps individual game timestamps as well as team
+counts so later lineup optimization does not have to reconstruct dates from totals.

@@ -23,8 +23,12 @@ export interface HistoricalBonusSeason {
 }
 
 export interface FantasyPlayoffWeek {
+  readonly endAt?: string;
   readonly label: string;
+  readonly playoffRound?: 'final' | 'quarterfinal' | 'semifinal';
   readonly scheduledGames: number;
+  readonly scoringPeriod?: number;
+  readonly startAt?: string;
   readonly weight: number;
   readonly weekKey: string;
 }
@@ -71,8 +75,12 @@ export interface PlayerSeasonProjection {
     readonly fantasyPlayoffWeeks: ReadonlyArray<{
       readonly expectedActiveGames: number;
       readonly expectedFantasyPoints: number;
+      readonly endAt?: string;
       readonly label: string;
+      readonly playoffRound?: 'final' | 'quarterfinal' | 'semifinal';
       readonly scheduledGames: number;
+      readonly scoringPeriod?: number;
+      readonly startAt?: string;
       readonly weight: number;
       readonly weekKey: string;
     }>;
@@ -265,10 +273,14 @@ export function buildProjectionRun(input: {
               }
               const expectedActiveGames = week.scheduledGames * availabilityRate;
               return {
+                ...(week.endAt === undefined ? {} : { endAt: week.endAt }),
                 expectedActiveGames: round(expectedActiveGames),
                 expectedFantasyPoints: round(expectedActiveGames * scored.pointsPerGame),
                 label: week.label,
+                ...(week.playoffRound === undefined ? {} : { playoffRound: week.playoffRound }),
                 scheduledGames: week.scheduledGames,
+                ...(week.scoringPeriod === undefined ? {} : { scoringPeriod: week.scoringPeriod }),
+                ...(week.startAt === undefined ? {} : { startAt: week.startAt }),
                 weight: finiteNonNegative(week.weight, `${week.weekKey} weight`),
                 weekKey: week.weekKey,
               };

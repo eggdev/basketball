@@ -95,6 +95,15 @@
           "forwardAllArgs": true
         }
       },
+      "season-calendar-import": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/import-season-calendar.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
+      },
       "valuation-calibrate": {
         "executor": "nx:run-commands",
         "cache": false,
