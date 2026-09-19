@@ -1,19 +1,17 @@
 'use client';
 
-import { useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 
-import type { LiveBidDecision } from '../../lib/live-bid-evaluator';
 import { formatPrice } from '../../lib/format';
+import {
+  evaluateLiveBidBoard,
+  markJevUnavailable,
+  type LiveBidBoard,
+  type LiveBidDecision,
+  type LiveBidRequest,
+} from '../../lib/live-bid-board';
 import { AskEveButton } from '../app-shell';
 import styles from '../workspace.module.css';
-
-interface DraftPlayerOption {
-  readonly fantasyPointsPerGame: number;
-  readonly id: string;
-  readonly name: string;
-  readonly positions: ReadonlyArray<string>;
-  readonly rank: number;
-}
 
 interface DraftedPlayer {
   readonly playerId: string;
@@ -87,23 +85,16 @@ const saveSession = (session: DraftSession): void => {
   window.dispatchEvent(new Event(storageKey));
 };
 
-export function LiveBidPanel({
-  baseBudgetCents,
-  players,
-  rosterSize,
-}: {
-  readonly baseBudgetCents: number;
-  readonly players: ReadonlyArray<DraftPlayerOption>;
-  readonly rosterSize: number;
-}) {
+export function LiveBidPanel({ board }: { readonly board: LiveBidBoard }) {
+  const { players } = board;
   const initialSession = useMemo<DraftSession>(
     () => ({
       history: [],
       ownedPlayers: [],
-      remainingBudgetCents: baseBudgetCents,
-      remainingRosterSpots: rosterSize,
+      remainingBudgetCents: board.baseBudgetCents,
+      remainingRosterSpots: board.rosterSize,
     }),
-    [baseBudgetCents, rosterSize],
+    [board.baseBudgetCents, board.rosterSize],
   );
   const serializedSession = useSyncExternalStore(
     subscribeToSession,
@@ -114,24 +105,43 @@ export function LiveBidPanel({
     () => parseSession(serializedSession, initialSession),
     [initialSession, serializedSession],
   );
-  const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '');
+  const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.playerId ?? '');
   const [currentPrice, setCurrentPrice] = useState('0');
   const [evaluation, setEvaluation] = useState<LiveBidDecision | null>(null);
+  const [evaluationLatencyMs, setEvaluationLatencyMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const version = useRef(0);
+  const jevRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => () => jevRequest.current?.abort(), []);
 
   const ownedIds = useMemo(
     () => new Set(session.ownedPlayers.map((player) => player.playerId)),
     [session.ownedPlayers],
   );
-  const availablePlayers = players.filter((player) => !ownedIds.has(player.id));
+  const availablePlayers = players.filter((player) => !ownedIds.has(player.playerId));
   const activePlayerId = ownedIds.has(selectedPlayerId)
-    ? (availablePlayers[0]?.id ?? '')
+    ? (availablePlayers[0]?.playerId ?? '')
     : selectedPlayerId;
-  const selectedPlayer = players.find((player) => player.id === activePlayerId) ?? null;
+  const selectedPlayer = players.find((player) => player.playerId === activePlayerId) ?? null;
 
-  const evaluate = async (event: FormEvent<HTMLFormElement>) => {
+  const replaceHistoryDecision = (decision: LiveBidDecision): void => {
+    const latest = parseSession(readSession(), initialSession);
+    const exists = latest.history.some(
+      (item) => item.draftStateVersion === decision.draftStateVersion,
+    );
+    saveSession({
+      ...latest,
+      history: (exists
+        ? latest.history.map((item) =>
+            item.draftStateVersion === decision.draftStateVersion ? decision : item,
+          )
+        : [decision, ...latest.history]
+      ).slice(0, 20),
+    });
+  };
+
+  const evaluate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const currentPriceCents = Math.round(Number(currentPrice) * 100);
     if (!Number.isSafeInteger(currentPriceCents) || currentPriceCents < 0) {
@@ -143,43 +153,60 @@ export function LiveBidPanel({
       return;
     }
 
-    setPending(true);
     setError(null);
-    version.current += 1;
+    jevRequest.current?.abort();
+    const requestVersion = version.current + 1;
+    version.current = requestVersion;
+    const request = {
+      currentPriceCents,
+      draftStateVersion: `manual-${requestVersion}-${Date.now()}`,
+      ownedPlayerIds: session.ownedPlayers.map((player) => player.playerId),
+      playerId: activePlayerId,
+      remainingBudgetCents: session.remainingBudgetCents,
+      remainingRosterSpots: session.remainingRosterSpots,
+    } satisfies LiveBidRequest;
+    const startedAt = performance.now();
     try {
-      const response = await fetch('/api/draft/evaluate', {
-        body: JSON.stringify({
-          currentPriceCents,
-          draftStateVersion: `manual-${version.current}-${Date.now()}`,
-          ownedPlayerIds: session.ownedPlayers.map((player) => player.playerId),
-          playerId: activePlayerId,
-          remainingBudgetCents: session.remainingBudgetCents,
-          remainingRosterSpots: session.remainingRosterSpots,
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      });
-      const responseBody = (await response.json()) as unknown;
-      if (!response.ok) {
-        const message =
-          typeof responseBody === 'object' &&
-          responseBody !== null &&
-          'error' in responseBody &&
-          typeof responseBody.error === 'string'
-            ? responseBody.error
-            : 'The bid could not be evaluated.';
-        throw new Error(message);
-      }
-      const result = responseBody as LiveBidDecision;
+      const result = evaluateLiveBidBoard(board, request);
+      setEvaluationLatencyMs(Math.max(1, Math.round(performance.now() - startedAt)));
       setEvaluation(result);
-      saveSession({
-        ...session,
-        history: [result, ...session.history].slice(0, 20),
-      });
+      replaceHistoryDecision(result);
+
+      const controller = new AbortController();
+      jevRequest.current = controller;
+      void (async () => {
+        try {
+          const response = await fetch('/api/draft/evaluate', {
+            body: JSON.stringify(request),
+            headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            signal: controller.signal,
+          });
+          const responseBody = (await response.json()) as unknown;
+          if (!response.ok) {
+            const message =
+              typeof responseBody === 'object' &&
+              responseBody !== null &&
+              'error' in responseBody &&
+              typeof responseBody.error === 'string'
+                ? responseBody.error
+                : 'The Jev review could not be completed.';
+            throw new Error(message);
+          }
+          const enriched = responseBody as LiveBidDecision;
+          replaceHistoryDecision(enriched);
+          if (version.current === requestVersion) setEvaluation(enriched);
+        } catch {
+          if (controller.signal.aborted) return;
+          const fallback = markJevUnavailable(result);
+          replaceHistoryDecision(fallback);
+          if (version.current === requestVersion) setEvaluation(fallback);
+        } finally {
+          if (jevRequest.current === controller) jevRequest.current = null;
+        }
+      })();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The bid could not be evaluated.');
-    } finally {
-      setPending(false);
     }
   };
 
@@ -214,7 +241,7 @@ export function LiveBidPanel({
       ...session,
       ownedPlayers: session.ownedPlayers.filter((candidate) => candidate.playerId !== playerId),
       remainingBudgetCents: session.remainingBudgetCents + player.priceCents,
-      remainingRosterSpots: Math.min(rosterSize, session.remainingRosterSpots + 1),
+      remainingRosterSpots: Math.min(board.rosterSize, session.remainingRosterSpots + 1),
     });
   };
 
@@ -228,7 +255,7 @@ export function LiveBidPanel({
       <header className={styles.panelHeader}>
         <div>
           <h2>Live bid copilot</h2>
-          <p>Manual shadow mode · deterministic cap · Jev fit check · no Fantrax actions</p>
+          <p>Manual shadow mode · instant deterministic cap · asynchronous Jev fit check</p>
         </div>
         <span className={`${styles.statusBadge} ${styles.statusReady}`}>Read only</span>
       </header>
@@ -239,14 +266,17 @@ export function LiveBidPanel({
               <span>Player up for auction</span>
               <select
                 onChange={(event) => {
+                  jevRequest.current?.abort();
+                  version.current += 1;
                   setSelectedPlayerId(event.target.value);
                   setEvaluation(null);
+                  setEvaluationLatencyMs(null);
                 }}
                 value={activePlayerId}
               >
                 {availablePlayers.map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.rank}. {player.name} · {player.positions.join('/')} ·{' '}
+                  <option key={player.playerId} value={player.playerId}>
+                    {player.rank}. {player.playerName} · {player.positions.join('/')} ·{' '}
                     {player.fantasyPointsPerGame.toFixed(1)} FPPG
                   </option>
                 ))}
@@ -280,14 +310,14 @@ export function LiveBidPanel({
             <label className={styles.field}>
               <span>Roster spots left</span>
               <input
-                max={rosterSize}
+                max={board.rosterSize}
                 min="0"
                 onChange={(event) =>
                   saveSession({
                     ...session,
                     remainingRosterSpots: Math.max(
                       0,
-                      Math.min(rosterSize, Math.round(Number(event.target.value))),
+                      Math.min(board.rosterSize, Math.round(Number(event.target.value))),
                     ),
                   })
                 }
@@ -296,8 +326,8 @@ export function LiveBidPanel({
                 value={session.remainingRosterSpots}
               />
             </label>
-            <button className={styles.primaryButton} disabled={pending} type="submit">
-              {pending ? 'Evaluating…' : 'Evaluate live bid'}
+            <button className={styles.primaryButton} type="submit">
+              Evaluate live bid
             </button>
           </form>
 
@@ -305,7 +335,7 @@ export function LiveBidPanel({
 
           {evaluation === null ? (
             <div className={styles.liveBidEmpty}>
-              <strong>{selectedPlayer?.name ?? 'No player selected'}</strong>
+              <strong>{selectedPlayer?.playerName ?? 'No player selected'}</strong>
               Enter the current bid to compare league market price, projected value, and your
               roster-specific cap.
             </div>
@@ -355,9 +385,16 @@ export function LiveBidPanel({
               </ul>
               <div className={styles.liveJudgment}>
                 <span>
-                  {evaluation.judgment.source === 'jev' ? 'Jev checked' : 'Guardrails only'}
+                  {evaluation.judgment.source === 'jev'
+                    ? 'Jev checked'
+                    : evaluation.judgment.source === 'pending'
+                      ? 'Jev reviewing'
+                      : 'Guardrails only'}
                 </span>
                 {evaluation.judgment.note}
+                {evaluationLatencyMs === null
+                  ? null
+                  : ` Guardrails returned in ${evaluationLatencyMs} ms.`}
               </div>
               <div className={styles.liveActions}>
                 <button className={styles.secondaryButton} onClick={recordWin} type="button">
@@ -385,8 +422,11 @@ export function LiveBidPanel({
               <strong>My draft room</strong>
               <button
                 onClick={() => {
+                  jevRequest.current?.abort();
+                  version.current += 1;
                   saveSession(initialSession);
                   setEvaluation(null);
+                  setEvaluationLatencyMs(null);
                 }}
                 type="button"
               >

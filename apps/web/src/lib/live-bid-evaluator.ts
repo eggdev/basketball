@@ -1,44 +1,17 @@
-import {
-  evaluateLiveBid,
-  type LiveBidAction,
-  type LiveBidEvaluation,
-  type LiveBidPlayer,
-} from '@fantasy-basketball/fantasy';
+import type { LiveBidAction, LiveBidEvaluation, LiveBidPlayer } from '@fantasy-basketball/fantasy';
 import { createGateway, experimental_evaluate } from 'ai';
 
+import { createLiveBidBoard } from './create-live-bid-board';
 import { loadHistoricalAuctionMarket } from './historical-auction-market';
 import { loadHistoricalRankings } from './historical-rankings';
+import {
+  evaluateLiveBidBoard,
+  type LiveBidDecision,
+  type LiveBidJudgment,
+  type LiveBidRequest,
+} from './live-bid-board';
 import { loadLatestProjectionSnapshot } from './latest-projections';
 import { loadPreDraftWorkspace } from './pre-draft-workspace';
-import { createAuctionValuationLab } from './valuation-lab';
-
-export interface LiveBidRequest {
-  readonly currentPriceCents: number;
-  readonly draftStateVersion: string;
-  readonly ownedPlayerIds: ReadonlyArray<string>;
-  readonly playerId: string;
-  readonly remainingBudgetCents: number;
-  readonly remainingRosterSpots: number;
-}
-
-export interface LiveBidJudgment {
-  readonly action: LiveBidAction;
-  readonly fragilityConcernProbability: number | null;
-  readonly note: string;
-  readonly planAlignment: 'aligned' | 'neutral' | 'weak' | null;
-  readonly rosterFit: 'neutral' | 'poor' | 'strong' | 'useful' | null;
-  readonly source: 'deterministic-fallback' | 'jev';
-}
-
-export interface LiveBidDecision extends LiveBidEvaluation {
-  readonly judgment: LiveBidJudgment;
-  readonly projection: {
-    readonly asOf: string;
-    readonly modelVersion: string;
-    readonly seasonKey: string;
-    readonly source: string;
-  };
-}
 
 const jevGateway = () => {
   const apiKey =
@@ -68,13 +41,18 @@ const fallbackJudgment = (baseline: LiveBidEvaluation): LiveBidJudgment => ({
 });
 
 async function judgeWithJev(input: {
+  readonly abortSignal?: AbortSignal;
   readonly baseline: LiveBidEvaluation;
   readonly ownedPlayers: ReadonlyArray<LiveBidPlayer>;
   readonly plan: Awaited<ReturnType<typeof loadPreDraftWorkspace>>['plan'];
 }): Promise<LiveBidJudgment> {
   try {
+    const timeoutSignal = AbortSignal.timeout(4_000);
     const result = await experimental_evaluate({
-      abortSignal: AbortSignal.timeout(4_000),
+      abortSignal:
+        input.abortSignal === undefined
+          ? timeoutSignal
+          : AbortSignal.any([input.abortSignal, timeoutSignal]),
       maxRetries: 1,
       model: jevGateway().evaluationModel('typesafe-ai/jev'),
       questions: {
@@ -153,7 +131,10 @@ async function judgeWithJev(input: {
   }
 }
 
-export async function evaluateLiveBidRequest(request: LiveBidRequest): Promise<LiveBidDecision> {
+export async function evaluateLiveBidRequest(
+  request: LiveBidRequest,
+  abortSignal?: AbortSignal,
+): Promise<LiveBidDecision> {
   const [projection, market, workspace, rankings] = await Promise.all([
     loadLatestProjectionSnapshot(),
     loadHistoricalAuctionMarket(),
@@ -163,78 +144,30 @@ export async function evaluateLiveBidRequest(request: LiveBidRequest): Promise<L
   if (projection === null) throw new Error('No projection snapshot is available');
   if (workspace.league === null) throw new Error('No current league season is available');
 
-  const players: ReadonlyArray<LiveBidPlayer> = projection.players.map((player) => ({
-    availabilityTier: player.availability.tier,
-    fantasyPoints: player.fantasyPoints,
-    fantasyPointsPerGame: player.fantasyPointsPerGame,
-    playerId: player.playerId,
-    playerName: player.playerName,
-    positions: player.positions,
-    rank: player.rank,
-  }));
-  const marketPlayer = market.players.find((player) => player.playerId === request.playerId);
-  const valuationLab = createAuctionValuationLab({
+  const board = createLiveBidBoard({
     league: workspace.league,
+    market,
+    plan: workspace.plan,
     projection,
     rankings,
   });
-  const calibratedPlayer = valuationLab.current?.players.find(
-    (player) => player.playerId === request.playerId,
-  );
-  const selectedModel = valuationLab.models.find(
-    (model) => model.id === valuationLab.selectedModelId,
-  );
-  const target = workspace.plan?.targets.find(
-    (candidate) => candidate.playerId === request.playerId,
-  );
-  const baseline = evaluateLiveBid({
-    baseBudgetCents: workspace.league.baseBudgetCents,
-    calibratedMarket:
-      calibratedPlayer === undefined || !calibratedPlayer.isModeled
-        ? null
-        : {
-            expectedPriceCents: calibratedPlayer.marketEstimateCents,
-            fairHighCents: calibratedPlayer.fairHighCents,
-            fairLowCents: calibratedPlayer.fairLowCents,
-            modelId: valuationLab.selectedModelId,
-            seasonsBacktested: selectedModel?.seasons.length ?? 0,
-          },
-    currentPriceCents: request.currentPriceCents,
-    draftStateVersion: request.draftStateVersion,
-    historicalMarket:
-      marketPlayer === undefined
-        ? null
-        : {
-            expectedPriceCents: marketPlayer.expectedPriceCents,
-            maximumPriceCents: marketPlayer.maximumPriceCents,
-            minimumPriceCents: marketPlayer.minimumPriceCents,
-            seasonsDrafted: marketPlayer.seasonsDrafted,
-          },
-    ownedPlayerIds: request.ownedPlayerIds,
-    playerId: request.playerId,
-    players,
-    remainingBudgetCents: request.remainingBudgetCents,
-    remainingRosterSpots: request.remainingRosterSpots,
-    rosterSize: workspace.league.rosterSize,
-    target:
-      target === undefined ? null : { maxBidCents: target.maxBidCents, stance: target.stance },
-    teamCount: workspace.league.teamCount,
-  });
+  const baseline = evaluateLiveBidBoard(board, request);
   const ownedPlayers = request.ownedPlayerIds.flatMap((playerId) => {
-    const ownedPlayer = players.find((player) => player.playerId === playerId);
+    const ownedPlayer = board.players.find((player) => player.playerId === playerId);
     return ownedPlayer === undefined ? [] : [ownedPlayer];
   });
-  const judgment = await judgeWithJev({ baseline, ownedPlayers, plan: workspace.plan });
+  const judgment = await judgeWithJev({
+    abortSignal,
+    baseline,
+    ownedPlayers,
+    plan: workspace.plan,
+  });
 
   return {
     ...baseline,
     action: judgment.action,
     judgment,
-    projection: {
-      asOf: projection.asOf,
-      modelVersion: projection.modelVersion,
-      seasonKey: projection.seasonKey,
-      source: projection.source,
-    },
   };
 }
+
+export type { LiveBidDecision, LiveBidJudgment, LiveBidRequest } from './live-bid-board';

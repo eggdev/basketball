@@ -2,7 +2,9 @@ import { leagueOwnerProfile } from '@fantasy-basketball/fantasy';
 import Link from 'next/link';
 
 import { formatPrice, formatSignedPrice } from '../../lib/format';
+import { createLiveBidBoard } from '../../lib/create-live-bid-board';
 import { loadHistoricalAuctionMarket } from '../../lib/historical-auction-market';
+import { loadHistoricalRankings } from '../../lib/historical-rankings';
 import { loadLatestAdpSnapshot } from '../../lib/latest-adp';
 import { loadLeagueRosters } from '../../lib/league-rosters';
 import { loadLatestProjectionSnapshot } from '../../lib/latest-projections';
@@ -20,12 +22,13 @@ const dollars = (cents: number): number => cents / 100;
 
 export default async function DraftPage() {
   const viewer = await loadViewer().catch(() => null);
-  const [market, rosterSnapshot, adp, workspace, projection] = await Promise.all([
+  const [market, rosterSnapshot, adp, workspace, projection, rankings] = await Promise.all([
     loadHistoricalAuctionMarket().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadLeagueRosters().catch(() => null),
     loadLatestAdpSnapshot().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadPreDraftWorkspace().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadLatestProjectionSnapshot().catch(() => null),
+    viewer === null ? Promise.resolve(null) : loadHistoricalRankings().catch(() => null),
   ]);
   const liveSeason = rosterSnapshot?.seasons[0] ?? null;
   const seasonKey = workspace?.league?.seasonKey ?? liveSeason?.seasonKey ?? '2026-27';
@@ -34,6 +37,16 @@ export default async function DraftPage() {
   const priceBoard = market?.players.slice(0, 14) ?? [];
   const adpBoard = adp?.players.slice(0, 75) ?? [];
   const targetIds = new Set(plan?.targets.map((target) => target.playerId) ?? []);
+  const liveBidBoard =
+    workspace?.league == null || projection === null
+      ? null
+      : createLiveBidBoard({
+          league: workspace.league,
+          market,
+          plan: workspace.plan,
+          projection,
+          rankings,
+        });
   const evePrompt = [
     `Help me, ${leagueOwnerProfile.displayName} (${leagueOwnerProfile.nickname}), refine my ${seasonKey} auction plan.`,
     `My minimum outcome is to ${leagueOwnerProfile.goals.minimumOutcome.toLocaleLowerCase()}, with ${leagueOwnerProfile.goals.primaryOutcome.toLocaleLowerCase()} as the real goal.`,
@@ -115,19 +128,7 @@ export default async function DraftPage() {
         </article>
       </section>
 
-      {viewer !== null && workspace?.league != null && projection !== null ? (
-        <LiveBidPanel
-          baseBudgetCents={workspace.league.baseBudgetCents}
-          players={projection.players.map((player) => ({
-            fantasyPointsPerGame: player.fantasyPointsPerGame,
-            id: player.playerId,
-            name: player.playerName,
-            positions: player.positions,
-            rank: player.rank,
-          }))}
-          rosterSize={workspace.league.rosterSize}
-        />
-      ) : null}
+      {viewer !== null && liveBidBoard !== null ? <LiveBidPanel board={liveBidBoard} /> : null}
 
       {viewer === null || workspace?.league == null ? (
         <DataUnavailable

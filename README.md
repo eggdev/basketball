@@ -268,11 +268,14 @@ current selection feeds both the draft UI and Eve's live-bid tool.
 The live draft room reserves $1 minimum bids, then allocates the remaining
 league auction pool by projected points above the 156-player replacement line.
 It keeps calibrated market price separate from projected production value and
-the owner's personal cap, and asks Jev only for qualitative roster and plan
-fit. Players without a defensible historical signal fall back to projection
-value during live evaluation rather than presenting a false calibrated price.
-Manual draft-room state and the last 20 evaluations survive refresh in the
-browser; the feature is read-only and cannot place a Fantrax bid.
+the owner's personal cap. The authenticated draft page prepares the complete
+bid board once, then evaluates deterministic guardrails synchronously in the
+browser while Jev reviews qualitative roster and plan fit in the background.
+Jev latency therefore cannot delay the actionable bid signal. Players without
+a defensible historical signal fall back to projection value during live
+evaluation rather than presenting a false calibrated price. Manual draft-room
+state and the last 20 evaluations survive refresh in the browser; the feature
+is read-only and cannot place a Fantrax bid.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be

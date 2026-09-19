@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const evaluation = await evaluateLiveBidRequest(input);
+    const evaluation = await evaluateLiveBidRequest(input, request.signal);
     return NextResponse.json(evaluation, {
       headers: { 'Cache-Control': 'no-store' },
     });
