@@ -1,4 +1,5 @@
 export * from './lib/importer';
+export * from './lib/auction-valuation-run';
 export * from './lib/fantrax-adp';
 export * from './lib/fantrax-league-performance';
 export * from './lib/fantrax-roster-history';

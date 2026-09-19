@@ -258,6 +258,25 @@ changed daily, so later valuation runs must account for schedule density and
 usable bench games rather than treating the ten active slots as a fixed weekly
 lineup.
 
+## Auction valuation promotion
+
+Auction calibration is an explicit two-stage workflow. `bun run valuation:validate`
+builds a deterministic preview and prints its projection snapshot, historical-input
+fingerprint, candidate metrics, selected model, and estimate count without writing.
+`bun run valuation:import` saves the same artifact as an immutable candidate and is
+idempotent by fingerprint. Saving never makes a candidate live.
+
+Promote a reviewed candidate with
+`bun run valuation:promote -- --promote=<run-id> --actor=<user-id>`. Promotion records
+the actor and time, supersedes the prior promoted run for that season, and leaves all
+candidate inputs and player estimates unchanged. Roll back by promoting an older run
+whose season and projection snapshot are still compatible.
+
+The draft room consumes only the promoted run linked to the exact current projection
+snapshot. A missing or stale promotion is shown visibly and falls back to deterministic
+projection and historical-market values. Promotion governs live price estimates only;
+it never changes source projections or historical records.
+
 ## Current implementation status
 
 The application can score a stat line with the league's custom rules through
@@ -290,8 +309,9 @@ double-/triple-double bonuses and optional playoff-week schedule weighting. The
 valuation lab compares four fixed price models through walk-forward tests: each
 season is predicted only from earlier auctions and lagged production. It selects
 the lowest drafted-player mean absolute error, derives price-tier ranges from
-historical errors, and keeps hindsight realized value visibly separate. The
-current selection feeds both the draft UI and Eve's live-bid tool.
+historical errors, and keeps hindsight realized value visibly separate. Only an
+explicitly promoted, snapshot-compatible selection feeds the draft UI and Eve's
+live-bid tool.
 
 The live draft room reserves $1 minimum bids, then allocates the remaining
 league auction pool by projected points above the 156-player replacement line.

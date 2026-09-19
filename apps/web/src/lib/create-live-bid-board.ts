@@ -1,11 +1,10 @@
 import type {
   HistoricalAuctionMarket,
-  HistoricalRankingSnapshot,
+  AuctionValuationRun,
   LatestProjectionSnapshot,
   PreDraftWorkspace,
 } from '@fantasy-basketball/database/runtime';
 
-import { createAuctionValuationLab } from './valuation-lab';
 import type { LiveBidBoard } from './live-bid-board';
 
 export function createLiveBidBoard(input: {
@@ -13,26 +12,20 @@ export function createLiveBidBoard(input: {
   readonly market: HistoricalAuctionMarket | null;
   readonly plan: PreDraftWorkspace['plan'];
   readonly projection: LatestProjectionSnapshot;
-  readonly rankings: HistoricalRankingSnapshot | null;
+  readonly valuation: AuctionValuationRun | null;
 }): LiveBidBoard {
-  const valuationLab =
-    input.rankings === null
-      ? null
-      : createAuctionValuationLab({
-          league: input.league,
-          projection: input.projection,
-          rankings: input.rankings,
-        });
+  const valuationRun =
+    input.valuation?.seasonKey === input.projection.seasonKey &&
+    input.valuation.projection.snapshotId === input.projection.snapshotId
+      ? input.valuation
+      : null;
   const calibratedPlayers = new Map(
-    valuationLab?.current?.players.map((player) => [player.playerId, player]) ?? [],
+    valuationRun?.current.players.map((player) => [player.playerId, player]) ?? [],
   );
   const historicalPlayers = new Map(
     input.market?.players.map((player) => [player.playerId, player]) ?? [],
   );
   const targets = new Map(input.plan?.targets.map((target) => [target.playerId, target]) ?? []);
-  const selectedModel = valuationLab?.models.find(
-    (model) => model.id === valuationLab.selectedModelId,
-  );
 
   return {
     baseBudgetCents: input.league.baseBudgetCents,
@@ -43,14 +36,14 @@ export function createLiveBidBoard(input: {
       return {
         availabilityTier: player.availability.tier,
         calibratedMarket:
-          calibrated === undefined || !calibrated.isModeled || valuationLab === null
+          calibrated === undefined || !calibrated.isModeled || valuationRun === null
             ? null
             : {
                 expectedPriceCents: calibrated.marketEstimateCents,
                 fairHighCents: calibrated.fairHighCents,
                 fairLowCents: calibrated.fairLowCents,
-                modelId: valuationLab.selectedModelId,
-                seasonsBacktested: selectedModel?.seasons.length ?? 0,
+                modelId: valuationRun.selectedModelId,
+                seasonsBacktested: valuationRun.historicalInputs.seasonKeys.length,
               },
         fantasyPoints: player.fantasyPoints,
         fantasyPointsPerGame: player.fantasyPointsPerGame,

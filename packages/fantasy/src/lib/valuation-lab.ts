@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export type AuctionValuationModelId =
   | 'last-price-v1'
   | 'market-production-50-v1'
@@ -119,6 +121,33 @@ export interface AuctionValuationLab {
   readonly models: ReadonlyArray<AuctionValuationModelResult>;
   readonly selectedModelId: AuctionValuationModelId;
   readonly version: 'walk-forward-v1';
+}
+
+export interface AuctionValuationArtifact {
+  readonly artifactVersion: 'auction-valuation-artifact-v1';
+  readonly candidateResults: ReadonlyArray<AuctionValuationModelResult>;
+  readonly current: NonNullable<AuctionValuationLab['current']>;
+  readonly fingerprint: string;
+  readonly historicalInputs: {
+    readonly fingerprint: string;
+    readonly seasonKeys: ReadonlyArray<string>;
+  };
+  readonly leagueSettings: {
+    readonly baseBudgetCents: number;
+    readonly rosterSize: number;
+    readonly teamCount: number;
+  };
+  readonly limitations: ReadonlyArray<string>;
+  readonly methodology: string;
+  readonly modelVersion: AuctionValuationLab['version'];
+  readonly projection: {
+    readonly asOf: string;
+    readonly modelVersion: string;
+    readonly snapshotId: string;
+  };
+  readonly seasonKey: string;
+  readonly selectedModelId: AuctionValuationModelId;
+  readonly selectionRule: 'lowest-drafted-player-mae-then-model-id';
 }
 
 interface ModelDefinition {
@@ -623,4 +652,90 @@ export function buildAuctionValuationLab(input: {
     selectedModelId: selectedModel.id,
     version: 'walk-forward-v1',
   };
+}
+
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value as Readonly<Record<string, unknown>>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const sha256 = (value: unknown): string =>
+  createHash('sha256').update(canonicalJson(value)).digest('hex');
+
+const orderedSeason = (season: AuctionValuationSeason): AuctionValuationSeason => ({
+  ...season,
+  auctionPrices: [...(season.auctionPrices ?? [])].sort((left, right) =>
+    left.playerId.localeCompare(right.playerId),
+  ),
+  players: [...season.players].sort((left, right) => left.playerId.localeCompare(right.playerId)),
+});
+
+/** Builds the immutable, fingerprinted artifact consumed by storage and live draft callers. */
+export function buildAuctionValuationArtifact(input: {
+  readonly current: CurrentAuctionProjection;
+  readonly historicalSeasons: ReadonlyArray<AuctionValuationSeason>;
+  readonly projection: {
+    readonly asOf: string;
+    readonly modelVersion: string;
+    readonly snapshotId: string;
+  };
+}): AuctionValuationArtifact {
+  if (input.projection.snapshotId.trim() === '')
+    throw new Error('projection snapshot id is required');
+  if (input.projection.modelVersion.trim() === '')
+    throw new Error('projection model version is required');
+  if (!Number.isFinite(Date.parse(input.projection.asOf)))
+    throw new Error('projection as-of timestamp is invalid');
+
+  const historicalSeasons = input.historicalSeasons
+    .map(orderedSeason)
+    .sort((left, right) => left.seasonKey.localeCompare(right.seasonKey));
+  const current = {
+    ...input.current,
+    players: [...input.current.players].sort((left, right) =>
+      left.playerId.localeCompare(right.playerId),
+    ),
+  };
+  const lab = buildAuctionValuationLab({ current, historicalSeasons });
+  if (lab.current === null) throw new Error('valuation artifact requires current estimates');
+  const historicalInputs = {
+    fingerprint: sha256(historicalSeasons),
+    seasonKeys: historicalSeasons.map((season) => season.seasonKey),
+  };
+  const candidateResults = lab.models.map((model) => ({
+    ...model,
+    predictions: [...model.predictions].sort(
+      (left, right) =>
+        left.seasonKey.localeCompare(right.seasonKey) ||
+        left.playerId.localeCompare(right.playerId),
+    ),
+    seasons: [...model.seasons].sort((left, right) =>
+      left.seasonKey.localeCompare(right.seasonKey),
+    ),
+  }));
+  const artifactBody = {
+    artifactVersion: 'auction-valuation-artifact-v1' as const,
+    candidateResults,
+    current: lab.current,
+    historicalInputs,
+    leagueSettings: {
+      baseBudgetCents: current.baseBudgetCents,
+      rosterSize: current.rosterSize,
+      teamCount: current.teamCount,
+    },
+    limitations: lab.limitations,
+    methodology: lab.methodology,
+    modelVersion: lab.version,
+    projection: input.projection,
+    seasonKey: current.seasonKey,
+    selectedModelId: lab.selectedModelId,
+    selectionRule: 'lowest-drafted-player-mae-then-model-id' as const,
+  };
+  return { ...artifactBody, fingerprint: sha256(artifactBody) };
 }

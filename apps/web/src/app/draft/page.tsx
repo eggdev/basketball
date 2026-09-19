@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { formatPrice, formatSignedPrice } from '../../lib/format';
 import { createLiveBidBoard } from '../../lib/create-live-bid-board';
 import { loadHistoricalAuctionMarket } from '../../lib/historical-auction-market';
-import { loadHistoricalRankings } from '../../lib/historical-rankings';
 import { loadLatestAdpSnapshot } from '../../lib/latest-adp';
 import { loadLeagueRosters } from '../../lib/league-rosters';
 import { loadLatestProjectionSnapshot } from '../../lib/latest-projections';
 import { loadPreDraftWorkspace } from '../../lib/pre-draft-workspace';
 import { loadViewer } from '../../lib/viewer';
+import { loadPromotedAuctionValuationRun } from '../../lib/valuation-lab';
 import { savePreDraftPlanAction, savePreDraftTargetAction } from '../actions';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
@@ -22,14 +22,17 @@ const dollars = (cents: number): number => cents / 100;
 
 export default async function DraftPage() {
   const viewer = await loadViewer().catch(() => null);
-  const [market, rosterSnapshot, adp, workspace, projection, rankings] = await Promise.all([
+  const [market, rosterSnapshot, adp, workspace, projection] = await Promise.all([
     loadHistoricalAuctionMarket().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadLeagueRosters().catch(() => null),
     loadLatestAdpSnapshot().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadPreDraftWorkspace().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadLatestProjectionSnapshot().catch(() => null),
-    viewer === null ? Promise.resolve(null) : loadHistoricalRankings().catch(() => null),
   ]);
+  const valuation =
+    viewer === null || projection === null
+      ? null
+      : await loadPromotedAuctionValuationRun(projection.seasonKey).catch(() => null);
   const liveSeason = rosterSnapshot?.seasons[0] ?? null;
   const seasonKey = workspace?.league?.seasonKey ?? liveSeason?.seasonKey ?? '2026-27';
   const plan = workspace?.plan;
@@ -45,8 +48,12 @@ export default async function DraftPage() {
           market,
           plan: workspace.plan,
           projection,
-          rankings,
+          valuation,
         });
+  const calibrationStale =
+    valuation !== null &&
+    (valuation.seasonKey !== projection?.seasonKey ||
+      valuation.projection.snapshotId !== projection?.snapshotId);
   const evePrompt = [
     `Help me, ${leagueOwnerProfile.displayName} (${leagueOwnerProfile.nickname}), refine my ${seasonKey} auction plan.`,
     `My minimum outcome is to ${leagueOwnerProfile.goals.minimumOutcome.toLocaleLowerCase()}, with ${leagueOwnerProfile.goals.primaryOutcome.toLocaleLowerCase()} as the real goal.`,
@@ -84,6 +91,14 @@ export default async function DraftPage() {
         floor at the start of every turn. Historical team names remain evidence, not your current
         identity.
       </div>
+
+      {projection !== null && (valuation === null || calibrationStale) ? (
+        <div className={styles.warning}>
+          <strong>{calibrationStale ? 'Stale calibration' : 'No promoted calibration'}</strong>
+          Live advice is using deterministic projection and historical-market fallback values until
+          a valuation run linked to projection {projection.snapshotId.slice(0, 8)} is promoted.
+        </div>
+      ) : null}
 
       <section aria-label="Draft readiness" className={styles.readinessGrid}>
         <article className={styles.readinessCard}>

@@ -95,6 +95,15 @@
           "forwardAllArgs": true
         }
       },
+      "valuation-calibrate": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/calibrate-auction-values.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
+      },
       "scoring-import": {
         "executor": "nx:run-commands",
         "cache": false,

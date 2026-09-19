@@ -4,7 +4,10 @@ import { formatPrice, formatSignedPrice } from '../../../lib/format';
 import { loadHistoricalRankings } from '../../../lib/historical-rankings';
 import { loadLatestProjectionSnapshot } from '../../../lib/latest-projections';
 import { loadPreDraftWorkspace } from '../../../lib/pre-draft-workspace';
-import { createAuctionValuationLab } from '../../../lib/valuation-lab';
+import {
+  createAuctionValuationArtifact,
+  loadPromotedAuctionValuationRun,
+} from '../../../lib/valuation-lab';
 import { loadViewer } from '../../../lib/viewer';
 import { AskEveButton } from '../../app-shell';
 import { DataUnavailable, PageHeader } from '../../page-header';
@@ -38,10 +41,31 @@ export default async function ValuationLabPage() {
     loadLatestProjectionSnapshot().catch(() => null),
     loadPreDraftWorkspace().catch(() => null),
   ]);
-  const lab =
+  const preview =
     rankings === null || projection === null || workspace === null || workspace.league === null
       ? null
-      : createAuctionValuationLab({ league: workspace.league, projection, rankings });
+      : createAuctionValuationArtifact({ league: workspace.league, projection, rankings });
+  const promoted =
+    projection === null
+      ? null
+      : await loadPromotedAuctionValuationRun(projection.seasonKey).catch(() => null);
+  const promotionState =
+    promoted === null
+      ? 'Preview'
+      : promoted.projection.snapshotId === projection?.snapshotId
+        ? 'Promoted'
+        : 'Stale';
+  const lab =
+    preview === null
+      ? null
+      : {
+          current: preview.current,
+          limitations: preview.limitations,
+          methodology: preview.methodology,
+          models: preview.candidateResults,
+          selectedModelId: preview.selectedModelId,
+          version: preview.modelVersion,
+        };
   const selectedModel = lab?.models.find((model) => model.id === lab.selectedModelId) ?? null;
   const currentPlayers = lab?.current?.players.slice(0, 75) ?? [];
   const hindsightBargains =
@@ -99,8 +123,11 @@ export default async function ValuationLabPage() {
       ) : (
         <>
           <div className={styles.notice}>
-            <strong>No future leakage</strong>
-            {lab.methodology}
+            <strong>{promotionState}</strong>
+            {lab.methodology} Preview fingerprint {preview?.fingerprint.slice(0, 12)}.{' '}
+            {promoted === null
+              ? 'This preview does not power live advice.'
+              : `Run ${promoted.runId} was promoted ${promoted.promotedAt ?? 'at an unknown time'} against projection ${promoted.projection.asOf}.`}
           </div>
 
           <div className={styles.sectionStack}>

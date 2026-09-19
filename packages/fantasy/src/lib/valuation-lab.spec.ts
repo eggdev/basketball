@@ -2,9 +2,34 @@ import { describe, expect, it } from 'vitest';
 
 import {
   allocateAuctionValues,
+  buildAuctionValuationArtifact,
   buildAuctionValuationLab,
   type AuctionValuationSeason,
 } from './valuation-lab';
+
+const artifactInput = () => ({
+  current: {
+    baseBudgetCents: 10_000,
+    players: season('2025-26', [null, null, null], [45, 21, 20]).players.map(
+      ({ auctionCostCents: _auctionCostCents, ...player }, index) => ({
+        ...player,
+        rank: index + 1,
+      }),
+    ),
+    rosterSize: 2,
+    seasonKey: '2025-26',
+    teamCount: 2,
+  },
+  historicalSeasons: [
+    season('2022-23', [1_000, 2_000, null], [30, 25, 20]),
+    season('2023-24', [2_000, 3_000, 500], [32, 24, 22]),
+  ],
+  projection: {
+    asOf: '2025-09-01T00:00:00.000Z',
+    modelVersion: 'projection-v1',
+    snapshotId: 'snapshot-1',
+  },
+});
 
 const season = (
   seasonKey: string,
@@ -185,5 +210,40 @@ describe('buildAuctionValuationLab', () => {
     expect(estimate?.historyPlayerId).toBe('player-1');
     expect(estimate?.historicalSeasonCount).toBe(2);
     expect(estimate?.marketEstimateCents).toBeGreaterThan(0);
+  });
+});
+
+describe('buildAuctionValuationArtifact', () => {
+  it('is deterministic and insensitive to input ordering', () => {
+    const input = artifactInput();
+    const first = buildAuctionValuationArtifact(input);
+    const reordered = buildAuctionValuationArtifact({
+      ...input,
+      current: { ...input.current, players: [...input.current.players].reverse() },
+      historicalSeasons: [...input.historicalSeasons]
+        .reverse()
+        .map((value) => ({ ...value, players: [...value.players].reverse() })),
+    });
+
+    expect(first).toEqual(buildAuctionValuationArtifact(input));
+    expect(first.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(reordered.fingerprint).toBe(first.fingerprint);
+  });
+
+  it('fingerprints projection and league-setting changes', () => {
+    const input = artifactInput();
+    const first = buildAuctionValuationArtifact(input);
+    const changedProjection = buildAuctionValuationArtifact({
+      ...input,
+      projection: { ...input.projection, snapshotId: 'snapshot-2' },
+    });
+    const changedLeague = buildAuctionValuationArtifact({
+      ...input,
+      current: { ...input.current, baseBudgetCents: 20_000 },
+    });
+
+    expect(changedProjection.fingerprint).not.toBe(first.fingerprint);
+    expect(changedLeague.fingerprint).not.toBe(first.fingerprint);
+    expect(first.candidateResults.every((model) => model.predictions.length > 0)).toBe(true);
   });
 });

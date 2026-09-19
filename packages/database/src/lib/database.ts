@@ -42,6 +42,8 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'historical_rankings'
     | 'latest_adp_snapshot'
     | 'latest_projection_snapshot'
+    | 'auction_valuation_run'
+    | 'promoted_auction_valuation_run'
     | 'league_performance_history'
     | 'league_roster_activity'
     | 'league_roster_snapshot'
@@ -59,7 +61,9 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'save_league_roster_history'
     | 'save_pre_draft_plan'
     | 'save_pre_draft_target'
-    | 'save_projection_snapshot';
+    | 'save_projection_snapshot'
+    | 'save_auction_valuation_run'
+    | 'promote_auction_valuation_run';
   readonly reason?: string;
 }> {}
 
@@ -877,7 +881,122 @@ export interface SavePreDraftTargetInput {
   readonly stance: PreDraftTargetStance;
 }
 
+export interface AuctionValuationArtifactInput {
+  readonly artifactVersion: string;
+  readonly candidateResults: ReadonlyArray<unknown>;
+  readonly current: {
+    readonly players: ReadonlyArray<{
+      readonly fairHighCents: number;
+      readonly fairLowCents: number;
+      readonly historicalSeasonCount: number;
+      readonly historyPlayerId: string | null;
+      readonly isModeled: boolean;
+      readonly marketEstimateCents: number;
+      readonly playerId: string;
+      readonly playerName: string;
+      readonly projectedEdgeCents: number;
+      readonly projectedValueCents: number;
+      readonly projectionRank: number;
+    }>;
+    readonly seasonKey: string;
+  };
+  readonly fingerprint: string;
+  readonly historicalInputs: {
+    readonly fingerprint: string;
+    readonly seasonKeys: ReadonlyArray<string>;
+  };
+  readonly leagueSettings: {
+    readonly baseBudgetCents: number;
+    readonly rosterSize: number;
+    readonly teamCount: number;
+  };
+  readonly limitations: ReadonlyArray<string>;
+  readonly methodology: string;
+  readonly modelVersion: string;
+  readonly projection: {
+    readonly asOf: string;
+    readonly modelVersion: string;
+    readonly snapshotId: string;
+  };
+  readonly seasonKey: string;
+  readonly selectedModelId: string;
+  readonly selectionRule: string;
+}
+
+export interface AuctionValuationRun extends AuctionValuationArtifactInput {
+  readonly createdAt: string;
+  readonly promotedAt: string | null;
+  readonly promotedByUserId: string | null;
+  readonly runId: string;
+  readonly status: 'candidate' | 'promoted' | 'superseded';
+}
+
+export interface SaveAuctionValuationRunResult {
+  readonly alreadySaved: boolean;
+  readonly runId: string;
+}
+
+export interface PromoteAuctionValuationRunResult {
+  readonly displacedRunId: string | null;
+  readonly runId: string;
+}
+
+const moneyFields = [
+  'fairHighCents',
+  'fairLowCents',
+  'marketEstimateCents',
+  'projectedEdgeCents',
+  'projectedValueCents',
+] as const;
+
+/** Validates the invariants shared by the SQL adapter and its pure tests. */
+export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtifactInput): void => {
+  if (!/^[a-f0-9]{64}$/.test(artifact.fingerprint))
+    throw new Error('valuation fingerprint must be SHA-256');
+  if (artifact.current.seasonKey !== artifact.seasonKey)
+    throw new Error('valuation current season does not match artifact season');
+  if (artifact.current.players.length === 0) throw new Error('valuation run is incomplete');
+  const players = new Set<string>();
+  const ranks = new Set<number>();
+  artifact.current.players.forEach((player) => {
+    if (players.has(player.playerId))
+      throw new Error(`duplicate valuation player ${player.playerId}`);
+    if (ranks.has(player.projectionRank))
+      throw new Error(`duplicate valuation rank ${player.projectionRank}`);
+    players.add(player.playerId);
+    ranks.add(player.projectionRank);
+    moneyFields.forEach((field) => {
+      if (!Number.isSafeInteger(player[field])) throw new Error(`${field} must be integer cents`);
+    });
+  });
+};
+
+export const planAuctionValuationPromotion = (input: {
+  readonly actorId: string;
+  readonly currentPromotedRunId: string | null;
+  readonly playerCount: number;
+  readonly projectionSeasonKey: string;
+  readonly runId: string;
+  readonly seasonKey: string;
+  readonly status: AuctionValuationRun['status'];
+}): PromoteAuctionValuationRunResult => {
+  if (input.actorId.trim() === '') throw new Error('Promotion requires an actor ID');
+  if (input.playerCount === 0) throw new Error('Incomplete valuation run');
+  if (input.seasonKey !== input.projectionSeasonKey)
+    throw new Error('Valuation season does not match projection snapshot');
+  return {
+    displacedRunId:
+      input.status === 'promoted' || input.currentPromotedRunId === input.runId
+        ? null
+        : input.currentPromotedRunId,
+    runId: input.runId,
+  };
+};
+
 export interface DatabaseService {
+  readonly auctionValuationRun: (
+    runId: string,
+  ) => Effect.Effect<AuctionValuationRun | null, DatabaseUnavailable>;
   readonly canonicalPlayers: Effect.Effect<ReadonlyArray<CanonicalPlayer>, DatabaseUnavailable>;
   readonly canonicalPlayerIdentities: Effect.Effect<
     ReadonlyArray<CanonicalPlayerIdentity>,
@@ -899,6 +1018,13 @@ export interface DatabaseService {
     ownerCanonicalKey: string,
     seasonKey?: string,
   ) => Effect.Effect<PreDraftWorkspace, DatabaseUnavailable>;
+  readonly promotedAuctionValuationRun: (
+    seasonKey: string,
+  ) => Effect.Effect<AuctionValuationRun | null, DatabaseUnavailable>;
+  readonly promoteAuctionValuationRun: (
+    runId: string,
+    promotedByUserId: string,
+  ) => Effect.Effect<PromoteAuctionValuationRunResult, DatabaseUnavailable>;
   readonly previewPlayerIdentityMerge: (
     input: PlayerIdentityMergeInput,
   ) => Effect.Effect<PlayerIdentityMergePreview, DatabaseUnavailable>;
@@ -925,6 +1051,9 @@ export interface DatabaseService {
   readonly saveProjectionSnapshot: (
     batch: ProjectionSnapshotBatch,
   ) => Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable>;
+  readonly saveAuctionValuationRun: (
+    artifact: AuctionValuationArtifactInput,
+  ) => Effect.Effect<SaveAuctionValuationRunResult, DatabaseUnavailable>;
   readonly saveFantraxAdpSnapshot: (
     batch: FantraxAdpSnapshotBatch,
   ) => Effect.Effect<FantraxAdpSnapshotImportResult, DatabaseUnavailable>;
@@ -1413,6 +1542,143 @@ const databaseServiceLayer = Layer.effect(
         ),
       ),
     );
+
+    type AuctionValuationRunRow = {
+      artifact_version: string;
+      candidate_results: ReadonlyArray<unknown>;
+      created_at: string;
+      fingerprint: string;
+      historical_input_fingerprint: string;
+      historical_season_keys: ReadonlyArray<string>;
+      id: string;
+      league_settings: AuctionValuationArtifactInput['leagueSettings'];
+      limitations: ReadonlyArray<string>;
+      methodology: string;
+      model_version: string;
+      projected_as_of: string;
+      projection_model_version: string;
+      projection_snapshot_id: string;
+      promoted_at: string | null;
+      promoted_by_user_id: string | null;
+      season_key: string;
+      selected_model_id: string;
+      selection_rule: string;
+      status: AuctionValuationRun['status'];
+    };
+
+    const hydrateAuctionValuationRun = (
+      row: AuctionValuationRunRow,
+    ): Effect.Effect<AuctionValuationRun, unknown> =>
+      sql<{
+        fair_high_cents: number;
+        fair_low_cents: number;
+        historical_season_count: number;
+        history_player_id: string | null;
+        is_modeled: boolean;
+        market_estimate_cents: number;
+        player_id: string;
+        player_name: string;
+        projected_edge_cents: number;
+        projected_value_cents: number;
+        projection_rank: number;
+      }>`
+        select *
+        from fantasy.auction_valuation_players
+        where run_id = ${row.id}
+        order by projection_rank, player_id
+      `.pipe(
+        Effect.map((players) => ({
+          artifactVersion: row.artifact_version,
+          candidateResults: row.candidate_results,
+          createdAt: row.created_at,
+          current: {
+            players: players.map((player) => ({
+              fairHighCents: player.fair_high_cents,
+              fairLowCents: player.fair_low_cents,
+              historicalSeasonCount: player.historical_season_count,
+              historyPlayerId: player.history_player_id,
+              isModeled: player.is_modeled,
+              marketEstimateCents: player.market_estimate_cents,
+              playerId: player.player_id,
+              playerName: player.player_name,
+              projectedEdgeCents: player.projected_edge_cents,
+              projectedValueCents: player.projected_value_cents,
+              projectionRank: player.projection_rank,
+            })),
+            seasonKey: row.season_key,
+          },
+          fingerprint: row.fingerprint,
+          historicalInputs: {
+            fingerprint: row.historical_input_fingerprint,
+            seasonKeys: row.historical_season_keys,
+          },
+          leagueSettings: row.league_settings,
+          limitations: row.limitations,
+          methodology: row.methodology,
+          modelVersion: row.model_version,
+          projection: {
+            asOf: row.projected_as_of,
+            modelVersion: row.projection_model_version,
+            snapshotId: row.projection_snapshot_id,
+          },
+          promotedAt: row.promoted_at,
+          promotedByUserId: row.promoted_by_user_id,
+          runId: row.id,
+          seasonKey: row.season_key,
+          selectedModelId: row.selected_model_id,
+          selectionRule: row.selection_rule,
+          status: row.status,
+        })),
+      );
+
+    const valuationRunSelect = (filter: 'id' | 'promoted', value: string) =>
+      Effect.gen(function* () {
+        const rows =
+          filter === 'id'
+            ? yield* sql<AuctionValuationRunRow>`
+                select
+                  avr.*,
+                  avr.projection_as_of::text as projected_as_of,
+                  avr.created_at::text as created_at,
+                  avr.promoted_at::text as promoted_at
+                from fantasy.auction_valuation_runs avr
+                where avr.id = ${value}
+                limit 1
+              `
+            : yield* sql<AuctionValuationRunRow>`
+                select
+                  avr.*,
+                  avr.projection_as_of::text as projected_as_of,
+                  avr.created_at::text as created_at,
+                  avr.promoted_at::text as promoted_at
+                from fantasy.auction_valuation_runs avr
+                where avr.season_key = ${value} and avr.status = 'promoted'
+                limit 1
+              `;
+        return rows[0] === undefined ? null : yield* hydrateAuctionValuationRun(rows[0]);
+      });
+
+    const auctionValuationRun = (runId: string) =>
+      valuationRunSelect('id', runId).pipe(
+        Effect.mapError((cause) =>
+          databaseUnavailable(
+            'auction_valuation_run',
+            'The valuation run could not be loaded',
+            cause,
+          ),
+        ),
+      );
+
+    const promotedAuctionValuationRun = (seasonKey: string) =>
+      valuationRunSelect('promoted', seasonKey).pipe(
+        Effect.mapError((cause) =>
+          databaseUnavailable(
+            'promoted_auction_valuation_run',
+            'The promoted valuation run could not be loaded',
+            cause,
+          ),
+        ),
+      );
 
     const latestAdpSnapshot = Effect.gen(function* () {
       const snapshots = yield* sql<{
@@ -2849,11 +3115,7 @@ const databaseServiceLayer = Layer.effect(
         const referenceCounts = Object.fromEntries(
           referenceRows.map((row) => [row.table_name, row.reference_count]),
         );
-        if (
-          PLAYER_IDENTITY_MERGE_REFERENCE_TABLES.some(
-            (table) => !(table in referenceCounts),
-          )
-        ) {
+        if (PLAYER_IDENTITY_MERGE_REFERENCE_TABLES.some((table) => !(table in referenceCounts))) {
           throw new Error('The player reference registry is incomplete');
         }
 
@@ -3021,14 +3283,16 @@ const databaseServiceLayer = Layer.effect(
         } satisfies PlayerIdentityMergeResult;
       });
 
-      return sql.withTransaction(operation).pipe(
-        Effect.mapError(() =>
-          databaseUnavailable(
-            'merge_player_identities',
-            'The player identities could not be merged',
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError(() =>
+            databaseUnavailable(
+              'merge_player_identities',
+              'The player identities could not be merged',
+            ),
           ),
-        ),
-      );
+        );
     };
 
     const reconcileLeagueTeamIdentity = (
@@ -4794,7 +5058,168 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const saveAuctionValuationRun = (
+      artifact: AuctionValuationArtifactInput,
+    ): Effect.Effect<SaveAuctionValuationRunResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        yield* Effect.try(() => validateAuctionValuationArtifact(artifact));
+        const [existing] = yield* sql<{ id: string }>`
+          select id from fantasy.auction_valuation_runs
+          where fingerprint = ${artifact.fingerprint}
+        `;
+        if (existing !== undefined) return { alreadySaved: true, runId: existing.id };
+
+        const [projection] = yield* sql<{
+          as_of: string;
+          model_version: string;
+          season_key: string;
+        }>`
+          select season_key, model_version, as_of::text
+          from fantasy.projection_snapshots
+          where id = ${artifact.projection.snapshotId}
+        `;
+        if (projection === undefined) throw new Error('Projection snapshot does not exist');
+        if (projection.season_key !== artifact.seasonKey)
+          throw new Error('Valuation season does not match projection snapshot');
+        if (projection.model_version !== artifact.projection.modelVersion)
+          throw new Error('Valuation projection model does not match projection snapshot');
+
+        const playerIds = artifact.current.players.flatMap((player) => [
+          player.playerId,
+          ...(player.historyPlayerId === null ? [] : [player.historyPlayerId]),
+        ]);
+        const existingPlayers =
+          playerIds.length === 0
+            ? []
+            : yield* sql<{
+                id: string;
+              }>`select id from fantasy.players where id in ${sql.in(playerIds)}`;
+        if (new Set(existingPlayers.map((player) => player.id)).size !== new Set(playerIds).size)
+          throw new Error('Valuation references an unknown player');
+
+        const [run] = yield* sql<{ id: string }>`
+          insert into fantasy.auction_valuation_runs
+            (
+              projection_snapshot_id, season_key, artifact_version, model_version,
+              projection_model_version, projection_as_of, historical_input_fingerprint,
+              historical_season_keys, league_settings, fingerprint, candidate_results,
+              selected_model_id, selection_rule, methodology, limitations
+            )
+          values
+            (
+              ${artifact.projection.snapshotId}, ${artifact.seasonKey}, ${artifact.artifactVersion},
+              ${artifact.modelVersion}, ${artifact.projection.modelVersion},
+              ${new Date(artifact.projection.asOf)}, ${artifact.historicalInputs.fingerprint},
+              ${sql.json(artifact.historicalInputs.seasonKeys)}, ${sql.json(artifact.leagueSettings)},
+              ${artifact.fingerprint}, ${sql.json(artifact.candidateResults)},
+              ${artifact.selectedModelId}, ${artifact.selectionRule}, ${artifact.methodology},
+              ${sql.json(artifact.limitations)}
+            )
+          returning id
+        `;
+        if (run === undefined) throw new Error('Valuation run was not created');
+        yield* sql`
+          insert into fantasy.auction_valuation_players ${sql.insert(
+            artifact.current.players.map((player) => ({
+              fair_high_cents: player.fairHighCents,
+              fair_low_cents: player.fairLowCents,
+              historical_season_count: player.historicalSeasonCount,
+              history_player_id: player.historyPlayerId,
+              is_modeled: player.isModeled,
+              market_estimate_cents: player.marketEstimateCents,
+              player_id: player.playerId,
+              player_name: player.playerName,
+              projected_edge_cents: player.projectedEdgeCents,
+              projected_value_cents: player.projectedValueCents,
+              projection_rank: player.projectionRank,
+              run_id: run.id,
+            })),
+          )}
+        `;
+        return { alreadySaved: false, runId: run.id };
+      });
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError((cause) =>
+            databaseUnavailable(
+              'save_auction_valuation_run',
+              'The valuation run could not be saved',
+              cause,
+            ),
+          ),
+        );
+    };
+
+    const promoteAuctionValuationRun = (
+      runId: string,
+      promotedByUserId: string,
+    ): Effect.Effect<PromoteAuctionValuationRunResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const actor = promotedByUserId.trim();
+        const [run] = yield* sql<{
+          player_count: number;
+          projection_season_key: string;
+          season_key: string;
+          status: AuctionValuationRun['status'];
+        }>`
+          select
+            avr.season_key,
+            avr.status,
+            ps.season_key as projection_season_key,
+            count(avp.player_id)::integer as player_count
+          from fantasy.auction_valuation_runs avr
+          join fantasy.projection_snapshots ps on ps.id = avr.projection_snapshot_id
+          left join fantasy.auction_valuation_players avp on avp.run_id = avr.id
+          where avr.id = ${runId}
+          group by avr.id, ps.season_key
+        `;
+        if (run === undefined) throw new Error('Unknown valuation run');
+        const [currentPromoted] = yield* sql<{ id: string }>`
+          select id from fantasy.auction_valuation_runs
+          where season_key = ${run.season_key} and status = 'promoted'
+        `;
+        const plan = planAuctionValuationPromotion({
+          actorId: actor,
+          currentPromotedRunId: currentPromoted?.id ?? null,
+          playerCount: run.player_count,
+          projectionSeasonKey: run.projection_season_key,
+          runId,
+          seasonKey: run.season_key,
+          status: run.status,
+        });
+        if (run.status === 'promoted') return plan;
+
+        const [displaced] = yield* sql<{ id: string }>`
+          update fantasy.auction_valuation_runs
+          set status = 'superseded'
+          where season_key = ${run.season_key} and status = 'promoted'
+          returning id
+        `;
+        const [promoted] = yield* sql<{ id: string }>`
+          update fantasy.auction_valuation_runs
+          set status = 'promoted', promoted_at = now(), promoted_by_user_id = ${actor}
+          where id = ${runId} and status in ('candidate', 'superseded')
+          returning id
+        `;
+        if (promoted === undefined) throw new Error('Valuation run cannot be promoted');
+        return { displacedRunId: displaced?.id ?? plan.displacedRunId, runId: promoted.id };
+      });
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError((cause) =>
+            databaseUnavailable(
+              'promote_auction_valuation_run',
+              'The valuation run could not be promoted',
+              cause,
+            ),
+          ),
+        );
+    };
+
     return Database.of({
+      auctionValuationRun,
       canonicalPlayers,
       canonicalPlayerIdentities,
       health: sql<{ database_time: string }>`select now()::text as database_time`.pipe(
@@ -4821,12 +5246,15 @@ const databaseServiceLayer = Layer.effect(
       mergePlayerIdentities,
       playerProductionHistory,
       preDraftWorkspace,
+      promoteAuctionValuationRun,
+      promotedAuctionValuationRun,
       previewPlayerIdentityMerge,
       reconcileLeagueTeamIdentity,
       replaceHistoricalAuctions,
       replaceHistoricalScoring,
       replacePlayerProduction,
       saveFantraxAdpSnapshot,
+      saveAuctionValuationRun,
       saveLeaguePerformance,
       saveLeagueRosterHistory,
       savePreDraftPlan,

@@ -683,3 +683,72 @@ export const playerRankings = fantasySchema.table(
     uniqueIndex('player_rankings_run_rank_unique').on(table.rankingRunId, table.rank),
   ],
 );
+
+export const auctionValuationRuns = fantasySchema.table(
+  'auction_valuation_runs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectionSnapshotId: uuid('projection_snapshot_id')
+      .notNull()
+      .references(() => projectionSnapshots.id, { onDelete: 'restrict' }),
+    seasonKey: text('season_key').notNull(),
+    artifactVersion: text('artifact_version').notNull(),
+    modelVersion: text('model_version').notNull(),
+    projectionModelVersion: text('projection_model_version').notNull(),
+    projectionAsOf: timestamp('projection_as_of', { withTimezone: true }).notNull(),
+    historicalInputFingerprint: text('historical_input_fingerprint').notNull(),
+    historicalSeasonKeys: jsonb('historical_season_keys').$type<ReadonlyArray<string>>().notNull(),
+    leagueSettings: jsonb('league_settings')
+      .$type<{ baseBudgetCents: number; rosterSize: number; teamCount: number }>()
+      .notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    candidateResults: jsonb('candidate_results')
+      .$type<ReadonlyArray<Record<string, unknown>>>()
+      .notNull(),
+    selectedModelId: text('selected_model_id').notNull(),
+    selectionRule: text('selection_rule').notNull(),
+    methodology: text('methodology').notNull(),
+    limitations: jsonb('limitations').$type<ReadonlyArray<string>>().notNull(),
+    status: text('status').notNull().default('candidate'),
+    promotedAt: timestamp('promoted_at', { withTimezone: true }),
+    promotedByUserId: text('promoted_by_user_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('auction_valuation_runs_fingerprint_unique').on(table.fingerprint),
+    uniqueIndex('auction_valuation_runs_promoted_season_unique')
+      .on(table.seasonKey)
+      .where(sql`${table.status} = 'promoted'`),
+    index('auction_valuation_runs_projection_snapshot_idx').on(table.projectionSnapshotId),
+  ],
+);
+
+export const auctionValuationPlayers = fantasySchema.table(
+  'auction_valuation_players',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => auctionValuationRuns.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'restrict' }),
+    playerName: text('player_name').notNull(),
+    projectionRank: integer('projection_rank').notNull(),
+    historicalSeasonCount: integer('historical_season_count').notNull(),
+    historyPlayerId: uuid('history_player_id').references(() => players.id, {
+      onDelete: 'restrict',
+    }),
+    isModeled: boolean('is_modeled').notNull(),
+    marketEstimateCents: integer('market_estimate_cents').notNull(),
+    fairLowCents: integer('fair_low_cents').notNull(),
+    fairHighCents: integer('fair_high_cents').notNull(),
+    projectedValueCents: integer('projected_value_cents').notNull(),
+    projectedEdgeCents: integer('projected_edge_cents').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.runId, table.playerId] }),
+    uniqueIndex('auction_valuation_players_run_rank_unique').on(table.runId, table.projectionRank),
+    index('auction_valuation_players_player_idx').on(table.playerId),
+  ],
+);

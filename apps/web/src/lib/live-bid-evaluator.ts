@@ -3,7 +3,6 @@ import { createGateway, experimental_evaluate } from 'ai';
 
 import { createLiveBidBoard } from './create-live-bid-board';
 import { loadHistoricalAuctionMarket } from './historical-auction-market';
-import { loadHistoricalRankings } from './historical-rankings';
 import {
   evaluateLiveBidBoard,
   type LiveBidDecision,
@@ -12,6 +11,7 @@ import {
 } from './live-bid-board';
 import { loadLatestProjectionSnapshot } from './latest-projections';
 import { loadPreDraftWorkspace } from './pre-draft-workspace';
+import { loadPromotedAuctionValuationRun } from './valuation-lab';
 
 const jevGateway = () => {
   const apiKey =
@@ -135,21 +135,21 @@ export async function evaluateLiveBidRequest(
   request: LiveBidRequest,
   abortSignal?: AbortSignal,
 ): Promise<LiveBidDecision> {
-  const [projection, market, workspace, rankings] = await Promise.all([
+  const [projection, market, workspace] = await Promise.all([
     loadLatestProjectionSnapshot(),
     loadHistoricalAuctionMarket(),
     loadPreDraftWorkspace(),
-    loadHistoricalRankings(),
   ]);
   if (projection === null) throw new Error('No projection snapshot is available');
   if (workspace.league === null) throw new Error('No current league season is available');
 
+  const valuation = await loadPromotedAuctionValuationRun(projection.seasonKey);
   const board = createLiveBidBoard({
     league: workspace.league,
     market,
     plan: workspace.plan,
     projection,
-    rankings,
+    valuation,
   });
   const baseline = evaluateLiveBidBoard(board, request);
   const ownedPlayers = request.ownedPlayerIds.flatMap((playerId) => {
