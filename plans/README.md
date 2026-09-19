@@ -11,7 +11,7 @@ conditions, and update its row when done.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |---|---|---:|---:|---|---|
 | 001 | Reconcile canonical player identities transactionally | P1 | M | — | DONE — reviewed at `da6932d`; 12 live merges audited |
-| 002 | Persist and promote immutable auction valuation runs | P1 | M | 001 | TODO |
+| 002 | Persist and promote immutable auction valuation runs | P1 | M | 001 | DONE — approved at `6b87f3d`; SQL adapter lacks an integration harness |
 | 003 | Import versioned NBA schedules and Fantrax playoff periods | P1 | M | 001 | TODO |
 | 004 | Value usable daily-lineup production | P1 | L | 002, 003 | TODO |
 | 005 | Make pre-draft scenarios selectable and comparable | P2 | M | — | TODO |

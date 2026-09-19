@@ -19,6 +19,10 @@
 - **Depends on**: `plans/001-reconcile-player-identities.md`
 - **Category**: direction / model governance
 - **Planned at**: commit `009198a`, 2026-09-18
+- **Result**: DONE — approved at `6b87f3d`; migration 0010 is additive and
+  syntax-checked against disposable PostgreSQL 18, but transaction behavior is
+  covered by pure tests because the repository has no disposable integration
+  harness. Production was not migrated.
 
 ## Why this matters
 
