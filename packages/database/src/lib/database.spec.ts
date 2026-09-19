@@ -3,6 +3,7 @@ import { Effect, Exit, Redacted } from 'effect';
 import {
   loadDatabaseConfig,
   planAuctionValuationPromotion,
+  serializeAuctionValuationJson,
   validateAuctionValuationArtifact,
   validateAuctionValuationProjectionLink,
   type AuctionValuationArtifactInput,
@@ -143,6 +144,15 @@ describe('validateAuctionValuationArtifact', () => {
         historicalInputs: { ...artifact().historicalInputs, fingerprint: 'invalid' },
       }),
     ).toThrow('historical input fingerprint');
+  });
+});
+
+describe('serializeAuctionValuationJson', () => {
+  it('serializes top-level arrays as JSON rather than PostgreSQL array literals', () => {
+    const serialized = serializeAuctionValuationJson(['2024-25', '2025-26']);
+
+    expect(serialized).toBe('["2024-25","2025-26"]');
+    expect(JSON.parse(serialized)).toEqual(['2024-25', '2025-26']);
   });
 });
 

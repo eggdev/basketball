@@ -987,6 +987,13 @@ export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtif
   });
 };
 
+/** Produces JSON text for explicit `::jsonb` casts, including top-level arrays. */
+export const serializeAuctionValuationJson = (value: unknown): string => {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error('auction valuation JSON could not be serialized');
+  return serialized;
+};
+
 /** Confirms that a candidate contains the complete, exact projection snapshot input. */
 export const validateAuctionValuationProjectionLink = (
   artifact: AuctionValuationArtifactInput,
@@ -5166,10 +5173,12 @@ const databaseServiceLayer = Layer.effect(
               ${artifact.projection.snapshotId}, ${artifact.seasonKey}, ${artifact.artifactVersion},
               ${artifact.modelVersion}, ${artifact.projection.modelVersion},
               ${new Date(artifact.projection.asOf)}, ${artifact.historicalInputs.fingerprint},
-              ${sql.json(artifact.historicalInputs.seasonKeys)}, ${sql.json(artifact.leagueSettings)},
-              ${artifact.fingerprint}, ${sql.json(artifact.candidateResults)},
+              ${serializeAuctionValuationJson(artifact.historicalInputs.seasonKeys)}::jsonb,
+              ${serializeAuctionValuationJson(artifact.leagueSettings)}::jsonb,
+              ${artifact.fingerprint},
+              ${serializeAuctionValuationJson(artifact.candidateResults)}::jsonb,
               ${artifact.selectedModelId}, ${artifact.selectionRule}, ${artifact.methodology},
-              ${sql.json(artifact.limitations)}
+              ${serializeAuctionValuationJson(artifact.limitations)}::jsonb
             )
           on conflict (fingerprint) do nothing
           returning id
