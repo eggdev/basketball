@@ -190,6 +190,23 @@ const optionalProjectedBonusRates = (
   return { doubleDoubleRate, tripleDoubleRate };
 };
 
+const hashtagTeamAbbreviationAliases = {
+  GS: 'GSW',
+  NO: 'NOP',
+  NY: 'NYK',
+  PHO: 'PHX',
+  SA: 'SAS',
+} as const;
+
+const normalizeHashtagTeamAbbreviation = (value: string): string => {
+  const abbreviation = value.trim().toUpperCase();
+  return (
+    hashtagTeamAbbreviationAliases[
+      abbreviation as keyof typeof hashtagTeamAbbreviationAliases
+    ] ?? abbreviation
+  );
+};
+
 const shootingVolume = (
   row: Readonly<Record<string, string>>,
   makeHeaders: ReadonlyArray<string>,
@@ -399,7 +416,7 @@ export const planHashtagProjectionImport = (input: {
           ['ft%', 'ft_pct'],
           'free throw',
         );
-        const teamAbbreviation = field(row, ['team'], 'team').toUpperCase();
+        const teamAbbreviation = normalizeHashtagTeamAbbreviation(field(row, ['team'], 'team'));
         if (
           input.calendar !== undefined &&
           input.calendar.schedulesByTeam[teamAbbreviation] === undefined

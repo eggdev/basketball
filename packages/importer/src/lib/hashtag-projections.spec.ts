@@ -165,6 +165,39 @@ describe('planHashtagProjectionImport', () => {
     });
   });
 
+  it.each([
+    ['GS', 'GSW'],
+    ['NO', 'NOP'],
+    ['NY', 'NYK'],
+    ['PHO', 'PHX'],
+    ['SA', 'SAS'],
+  ])('maps the Hashtag %s team code to the NBA %s schedule', async (sourceTeam, nbaTeam) => {
+    const schedule = {
+      fantasyPlayoffWeeks: [
+        { label: 'Championship', scheduledGames: 3, weight: 1.5, weekKey: 'period-22' },
+      ],
+      regularSeasonScheduledGames: 82,
+    };
+    const plan = await Effect.runPromise(
+      planHashtagProjectionImport({
+        ...input,
+        calendar: {
+          ...input.calendar,
+          schedulesByTeam: { ...input.calendar.schedulesByTeam, [nbaTeam]: schedule },
+        },
+        csv: csv.replace('Rookie Example,PG SG,BKN', `Rookie Example,PG SG,${sourceTeam}`),
+      }),
+    );
+
+    expect(plan.summary.valid).toBe(true);
+    expect(
+      plan.records.find((record) => record.canonicalName === 'Rookie Example')?.projection,
+    ).toMatchObject({
+      schedule: { fantasyPlayoffWeeks: [{ scheduledGames: 3 }] },
+      teamAbbreviation: nbaTeam,
+    });
+  });
+
   it('commits only a fully reconciled projection snapshot', async () => {
     const plan = await Effect.runPromise(planHashtagProjectionImport(input));
     const saveProjectionSnapshot = vi.fn<
