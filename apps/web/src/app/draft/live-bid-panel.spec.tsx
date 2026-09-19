@@ -15,6 +15,7 @@ const board: LiveBidBoard = {
   baseBudgetCents: 20_000,
   players: [
     {
+      availabilityRate: 0.9,
       availabilityTier: 'durable',
       calibratedMarket: {
         expectedPriceCents: 6_000,
@@ -31,8 +32,23 @@ const board: LiveBidBoard = {
       positions: ['PG'],
       rank: 1,
       target: null,
+      teamAbbreviation: 'AAA',
+      usableValue: {
+        diagnostics: {
+          capturedPlayoffWeightedPoints: 120,
+          congestionLoss: 300,
+          estimatedCapturedRegularSeasonPoints: 2_220,
+          expectedScheduledPoints: 2_520,
+          playoffWeightedGames: 10,
+          usablePoints: 2_340,
+        },
+        modelVersion: 'usable-lineup-v1',
+        scheduleAsOf: '2026-09-19T00:00:00.000Z',
+        valueCents: 10_000,
+      },
     },
     {
+      availabilityRate: 0.8,
       availabilityTier: 'managed',
       calibratedMarket: null,
       fantasyPoints: 1_440,
@@ -43,6 +59,8 @@ const board: LiveBidBoard = {
       positions: ['SG'],
       rank: 2,
       target: null,
+      teamAbbreviation: 'BBB',
+      usableValue: null,
     },
   ],
   projection: {
@@ -53,6 +71,34 @@ const board: LiveBidBoard = {
   },
   rosterSize: 1,
   teamCount: 2,
+  usableContext: {
+    lineupSlots: [
+      {
+        code: 'PG',
+        eligiblePositions: ['PG'],
+        label: 'Point Guard',
+        maxActive: 1,
+        minActive: 0,
+      },
+    ],
+    modelVersion: 'usable-lineup-v1',
+    scheduleAsOf: '2026-09-19T00:00:00.000Z',
+    seasonCalendar: {
+      asOf: '2026-09-19T00:00:00.000Z',
+      fingerprint: 'calendar-1',
+      games: [
+        {
+          awayTeam: 'BBB',
+          date: '2026-10-20',
+          homeTeam: 'AAA',
+          postponed: false,
+          scheduledAt: '2026-10-20T23:00:00.000Z',
+        },
+      ],
+      playoffPeriods: [],
+      snapshotId: 'snapshot-1',
+    },
+  },
 };
 
 describe('LiveBidPanel', () => {
@@ -77,5 +123,8 @@ describe('LiveBidPanel', () => {
     expect(screen.getAllByText('Keep bidding')).toHaveLength(2);
     expect(screen.getByText(/Jev is reviewing qualitative roster fit/)).toBeTruthy();
     expect(screen.getByText(/Guardrails returned in \d+ ms/)).toBeTruthy();
+    expect(screen.getByText('Usable value')).toBeTruthy();
+    expect(screen.getByText('Roster marginal')).toBeTruthy();
+    expect(screen.getAllByText(/usable-lineup-v1/)).toHaveLength(2);
   });
 });

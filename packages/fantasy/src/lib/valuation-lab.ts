@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
 
+import {
+  buildUsablePointsBoard,
+  type UsablePointsBoardInput,
+  type UsablePointsBoardPlayer,
+} from './usable-points';
+
 export type AuctionValuationModelId =
   | 'last-price-v1'
   | 'market-production-50-v1'
@@ -111,6 +117,23 @@ export interface CurrentAuctionEstimate {
   readonly projectionRank: number;
 }
 
+export interface CurrentAuctionUsableEstimate extends CurrentAuctionEstimate {
+  readonly usableDiagnostics: Pick<
+    UsablePointsBoardPlayer,
+    | 'availabilityExposure'
+    | 'capturedPlayoffWeightedPoints'
+    | 'congestionLoss'
+    | 'estimatedCapturedRegularSeasonPoints'
+    | 'expectedScheduledPoints'
+    | 'playoffWeightedGames'
+    | 'positionalReplacementDelta'
+    | 'rawProjectedPoints'
+    | 'usablePoints'
+  >;
+  readonly usableEdgeCents: number;
+  readonly usableValueCents: number;
+}
+
 export interface AuctionValuationLab {
   readonly current: {
     readonly players: ReadonlyArray<CurrentAuctionEstimate>;
@@ -124,9 +147,12 @@ export interface AuctionValuationLab {
 }
 
 export interface AuctionValuationArtifact {
-  readonly artifactVersion: 'auction-valuation-artifact-v1';
+  readonly artifactVersion: 'auction-valuation-artifact-v2';
   readonly candidateResults: ReadonlyArray<AuctionValuationModelResult>;
-  readonly current: NonNullable<AuctionValuationLab['current']>;
+  readonly current: {
+    readonly players: ReadonlyArray<CurrentAuctionUsableEstimate>;
+    readonly seasonKey: string;
+  };
   readonly fingerprint: string;
   readonly historicalInputs: {
     readonly fingerprint: string;
@@ -148,6 +174,24 @@ export interface AuctionValuationArtifact {
   readonly seasonKey: string;
   readonly selectedModelId: AuctionValuationModelId;
   readonly selectionRule: 'lowest-drafted-player-mae-then-model-id';
+  readonly productionValue: {
+    readonly auctionPoolCents: number;
+    readonly draftablePlayerCount: number;
+    readonly leagueFormat: {
+      readonly fingerprint: string;
+      readonly lineupSlots: UsablePointsBoardInput['lineupSlots'];
+      readonly version: number;
+    };
+    readonly longTermPlayerCount: number;
+    readonly modelVersion: 'usable-lineup-v1';
+    readonly schedule: {
+      readonly asOf: string;
+      readonly fingerprint: string;
+      readonly snapshotId: string;
+    };
+    readonly seasonCalendar: UsablePointsBoardInput['seasonCalendar'];
+    readonly streamingSlotsPerTeam: number;
+  };
 }
 
 interface ModelDefinition {
@@ -685,6 +729,16 @@ export function buildAuctionValuationArtifact(input: {
     readonly modelVersion: string;
     readonly snapshotId: string;
   };
+  readonly productionValue: {
+    readonly leagueFormat: {
+      readonly fingerprint: string;
+      readonly lineupSlots: UsablePointsBoardInput['lineupSlots'];
+      readonly version: number;
+    };
+    readonly players: UsablePointsBoardInput['players'];
+    readonly seasonCalendar: UsablePointsBoardInput['seasonCalendar'];
+    readonly streamingSlotsPerTeam: number;
+  };
 }): AuctionValuationArtifact {
   if (input.projection.snapshotId.trim() === '')
     throw new Error('projection snapshot id is required');
@@ -704,6 +758,65 @@ export function buildAuctionValuationArtifact(input: {
   };
   const lab = buildAuctionValuationLab({ current, historicalSeasons });
   if (lab.current === null) throw new Error('valuation artifact requires current estimates');
+  const projectionPlayerIds = new Set(current.players.map((player) => player.playerId));
+  const productionPlayerIds = new Set(
+    input.productionValue.players.map((player) => player.playerId),
+  );
+  if (
+    projectionPlayerIds.size !== productionPlayerIds.size ||
+    [...projectionPlayerIds].some((playerId) => !productionPlayerIds.has(playerId))
+  ) {
+    throw new Error('usable-points players must exactly match current projections');
+  }
+  const orderedSeasonCalendar = {
+    ...input.productionValue.seasonCalendar,
+    games: [...input.productionValue.seasonCalendar.games].sort(
+      (left, right) =>
+        left.scheduledAt.localeCompare(right.scheduledAt) ||
+        left.homeTeam.localeCompare(right.homeTeam) ||
+        left.awayTeam.localeCompare(right.awayTeam),
+    ),
+    playoffPeriods: [...input.productionValue.seasonCalendar.playoffPeriods].sort(
+      (left, right) => left.scoringPeriod - right.scoringPeriod,
+    ),
+  };
+  const usableBoard = buildUsablePointsBoard({
+    baseBudgetCents: current.baseBudgetCents,
+    leagueFormatFingerprint: input.productionValue.leagueFormat.fingerprint,
+    leagueFormatVersion: input.productionValue.leagueFormat.version,
+    lineupSlots: input.productionValue.leagueFormat.lineupSlots,
+    players: [...input.productionValue.players].sort((left, right) =>
+      left.playerId.localeCompare(right.playerId),
+    ),
+    rosterSize: current.rosterSize,
+    seasonCalendar: orderedSeasonCalendar,
+    streamingSlotsPerTeam: input.productionValue.streamingSlotsPerTeam,
+    teamCount: current.teamCount,
+  });
+  const usablePlayers = new Map(usableBoard.players.map((player) => [player.playerId, player]));
+  const currentWithUsable = {
+    players: lab.current.players.map((player): CurrentAuctionUsableEstimate => {
+      const usable = usablePlayers.get(player.playerId);
+      if (usable === undefined) throw new Error(`usable value missing for ${player.playerId}`);
+      return {
+        ...player,
+        usableDiagnostics: {
+          availabilityExposure: usable.availabilityExposure,
+          capturedPlayoffWeightedPoints: usable.capturedPlayoffWeightedPoints,
+          congestionLoss: usable.congestionLoss,
+          estimatedCapturedRegularSeasonPoints: usable.estimatedCapturedRegularSeasonPoints,
+          expectedScheduledPoints: usable.expectedScheduledPoints,
+          playoffWeightedGames: usable.playoffWeightedGames,
+          positionalReplacementDelta: usable.positionalReplacementDelta,
+          rawProjectedPoints: usable.rawProjectedPoints,
+          usablePoints: usable.usablePoints,
+        },
+        usableEdgeCents: usable.valueCents - player.marketEstimateCents,
+        usableValueCents: usable.valueCents,
+      };
+    }),
+    seasonKey: lab.current.seasonKey,
+  };
   const historicalInputs = {
     fingerprint: sha256(historicalSeasons),
     seasonKeys: historicalSeasons.map((season) => season.seasonKey),
@@ -720,22 +833,38 @@ export function buildAuctionValuationArtifact(input: {
     ),
   }));
   const artifactBody = {
-    artifactVersion: 'auction-valuation-artifact-v1' as const,
+    artifactVersion: 'auction-valuation-artifact-v2' as const,
     candidateResults,
-    current: lab.current,
+    current: currentWithUsable,
     historicalInputs,
     leagueSettings: {
       baseBudgetCents: current.baseBudgetCents,
       rosterSize: current.rosterSize,
       teamCount: current.teamCount,
     },
-    limitations: lab.limitations,
-    methodology: lab.methodology,
+    limitations: [
+      ...lab.limitations,
+      'Usable-lineup value is a current-season production experiment; historical daily availability is not preserved, so it is not an injury backtest or playoff probability.',
+    ],
+    methodology: `${lab.methodology} Expected league price predicts this league's market behavior; usable-lineup value separately estimates production this roster can capture under daily lineup constraints.`,
     modelVersion: lab.version,
     projection: input.projection,
     seasonKey: current.seasonKey,
     selectedModelId: lab.selectedModelId,
     selectionRule: 'lowest-drafted-player-mae-then-model-id' as const,
+    productionValue: {
+      auctionPoolCents: usableBoard.auctionPoolCents,
+      draftablePlayerCount: usableBoard.draftablePlayerCount,
+      leagueFormat: {
+        ...usableBoard.leagueFormat,
+        lineupSlots: input.productionValue.leagueFormat.lineupSlots,
+      },
+      longTermPlayerCount: usableBoard.longTermPlayerCount,
+      modelVersion: usableBoard.modelVersion,
+      schedule: usableBoard.schedule,
+      seasonCalendar: orderedSeasonCalendar,
+      streamingSlotsPerTeam: input.productionValue.streamingSlotsPerTeam,
+    },
   };
   return { ...artifactBody, fingerprint: sha256(artifactBody) };
 }

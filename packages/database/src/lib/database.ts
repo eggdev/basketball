@@ -234,6 +234,14 @@ export interface PlayerProjectionReadModel {
     readonly weightedExpectedPoints: number;
   } | null;
   readonly teamAbbreviation: string;
+  readonly usableValue?: {
+    readonly diagnostics: NonNullable<
+      AuctionValuationArtifactInput['current']['players'][number]['usableDiagnostics']
+    >;
+    readonly modelVersion: string;
+    readonly schedule: NonNullable<AuctionValuationArtifactInput['productionValue']>['schedule'];
+    readonly valueCents: number;
+  } | null;
 }
 
 export interface LatestProjectionSnapshot {
@@ -1055,6 +1063,19 @@ export interface AuctionValuationArtifactInput {
       readonly projectedEdgeCents: number;
       readonly projectedValueCents: number;
       readonly projectionRank: number;
+      readonly usableDiagnostics: {
+        readonly availabilityExposure: number;
+        readonly capturedPlayoffWeightedPoints: number;
+        readonly congestionLoss: number;
+        readonly estimatedCapturedRegularSeasonPoints: number;
+        readonly expectedScheduledPoints: number;
+        readonly playoffWeightedGames: number;
+        readonly positionalReplacementDelta: number;
+        readonly rawProjectedPoints: number;
+        readonly usablePoints: number;
+      } | null;
+      readonly usableEdgeCents: number | null;
+      readonly usableValueCents: number | null;
     }>;
     readonly seasonKey: string;
   };
@@ -1076,6 +1097,48 @@ export interface AuctionValuationArtifactInput {
     readonly modelVersion: string;
     readonly snapshotId: string;
   };
+  readonly productionValue: {
+    readonly auctionPoolCents: number;
+    readonly draftablePlayerCount: number;
+    readonly leagueFormat: {
+      readonly fingerprint: string;
+      readonly lineupSlots: ReadonlyArray<{
+        readonly code: string;
+        readonly eligiblePositions: ReadonlyArray<string>;
+        readonly label: string;
+        readonly maxActive: number;
+        readonly minActive: number;
+      }>;
+      readonly version: number;
+    };
+    readonly longTermPlayerCount: number;
+    readonly modelVersion: string;
+    readonly schedule: {
+      readonly asOf: string;
+      readonly fingerprint: string;
+      readonly snapshotId: string;
+    };
+    readonly seasonCalendar: {
+      readonly asOf: string;
+      readonly fingerprint: string;
+      readonly games: ReadonlyArray<{
+        readonly awayTeam: string;
+        readonly date: string;
+        readonly homeTeam: string;
+        readonly postponed: boolean;
+        readonly scheduledAt: string;
+      }>;
+      readonly playoffPeriods: ReadonlyArray<{
+        readonly endAt: string;
+        readonly label: string;
+        readonly scoringPeriod: number;
+        readonly startAt: string;
+        readonly weight: number;
+      }>;
+      readonly snapshotId: string;
+    };
+    readonly streamingSlotsPerTeam: number;
+  } | null;
   readonly seasonKey: string;
   readonly selectedModelId: string;
   readonly selectionRule: string;
@@ -1142,7 +1205,38 @@ export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtif
     moneyFields.forEach((field) => {
       if (!Number.isSafeInteger(player[field])) throw new Error(`${field} must be integer cents`);
     });
+    if (artifact.artifactVersion === 'auction-valuation-artifact-v2') {
+      if (
+        player.usableDiagnostics === null ||
+        player.usableValueCents === null ||
+        player.usableEdgeCents === null
+      ) {
+        throw new Error('usable valuation diagnostics are required');
+      }
+      if (!Number.isSafeInteger(player.usableValueCents))
+        throw new Error('usableValueCents must be integer cents');
+      if (!Number.isSafeInteger(player.usableEdgeCents))
+        throw new Error('usableEdgeCents must be integer cents');
+      Object.entries(player.usableDiagnostics).forEach(([field, value]) => {
+        if (!Number.isFinite(value) || value < 0)
+          throw new Error(`${field} must be a non-negative finite number`);
+      });
+    }
   });
+  if (artifact.artifactVersion === 'auction-valuation-artifact-v2') {
+    if (artifact.productionValue === null)
+      throw new Error('usable production-value provenance is required');
+    if (!/^[a-f0-9]{64}$/.test(artifact.productionValue.schedule.fingerprint))
+      throw new Error('schedule fingerprint must be SHA-256');
+    if (!/^[a-f0-9]{64}$/.test(artifact.productionValue.leagueFormat.fingerprint))
+      throw new Error('league format fingerprint must be SHA-256');
+    const usablePool = artifact.current.players.reduce(
+      (total, player) => total + (player.usableValueCents ?? 0),
+      0,
+    );
+    if (usablePool !== artifact.productionValue.auctionPoolCents)
+      throw new Error('usable values must conserve the auction pool');
+  }
 };
 
 /** Produces JSON text for explicit `::jsonb` casts, including top-level arrays. */
@@ -1182,6 +1276,28 @@ export const validateAuctionValuationProjectionLink = (
     [...artifactPlayers].some((playerId) => !projectionPlayers.has(playerId))
   ) {
     throw new Error('Valuation players do not exactly match projection snapshot');
+  }
+};
+
+/** Confirms the usable model references the exact persisted season calendar. */
+export const validateAuctionValuationScheduleLink = (
+  artifact: AuctionValuationArtifactInput,
+  schedule: {
+    readonly asOf: string;
+    readonly fingerprint: string;
+    readonly seasonKey: string;
+  },
+): void => {
+  if (artifact.productionValue === null) return;
+  if (schedule.seasonKey !== artifact.seasonKey)
+    throw new Error('Valuation season does not match season calendar');
+  if (schedule.fingerprint !== artifact.productionValue.schedule.fingerprint)
+    throw new Error('Valuation schedule fingerprint does not match season calendar');
+  if (
+    Date.parse(schedule.asOf) !== Date.parse(artifact.productionValue.schedule.asOf) ||
+    !Number.isFinite(Date.parse(schedule.asOf))
+  ) {
+    throw new Error('Valuation schedule timestamp does not match season calendar');
   }
 };
 
@@ -1802,6 +1918,11 @@ const databaseServiceLayer = Layer.effect(
         rank: number;
         schedule: PlayerProjectionReadModel['schedule'];
         team_abbreviation: string;
+        usable_diagnostics: NonNullable<
+          AuctionValuationArtifactInput['current']['players'][number]['usableDiagnostics']
+        > | null;
+        usable_value_cents: number | null;
+        valuation_production_value: AuctionValuationArtifactInput['productionValue'];
       }>`
         select
           pp.player_id,
@@ -1813,6 +1934,9 @@ const databaseServiceLayer = Layer.effect(
           pp.bonuses,
           pp.availability,
           pp.schedule,
+          avp.usable_value_cents,
+          avp.usable_diagnostics,
+          avr.production_value as valuation_production_value,
           row_number() over (
             order by
               pp.expected_fantasy_points desc,
@@ -1821,6 +1945,10 @@ const databaseServiceLayer = Layer.effect(
           )::integer as rank
         from fantasy.player_projections pp
         join fantasy.players p on p.id = pp.player_id
+        left join fantasy.auction_valuation_runs avr
+          on avr.projection_snapshot_id = pp.snapshot_id and avr.status = 'promoted'
+        left join fantasy.auction_valuation_players avp
+          on avp.run_id = avr.id and avp.player_id = pp.player_id
         where pp.snapshot_id = ${snapshot.id}
         order by rank
       `;
@@ -1836,6 +1964,17 @@ const databaseServiceLayer = Layer.effect(
           rank: row.rank,
           schedule: row.schedule,
           teamAbbreviation: row.team_abbreviation,
+          usableValue:
+            row.usable_value_cents === null ||
+            row.usable_diagnostics === null ||
+            row.valuation_production_value === null
+              ? null
+              : {
+                  diagnostics: row.usable_diagnostics,
+                  modelVersion: row.valuation_production_value.modelVersion,
+                  schedule: row.valuation_production_value.schedule,
+                  valueCents: row.usable_value_cents,
+                },
         }),
       );
 
@@ -1935,6 +2074,7 @@ const databaseServiceLayer = Layer.effect(
       projected_as_of: string;
       projection_model_version: string;
       projection_snapshot_id: string;
+      production_value: AuctionValuationArtifactInput['productionValue'];
       promoted_at: string | null;
       promoted_by_user_id: string | null;
       season_key: string;
@@ -1958,6 +2098,11 @@ const databaseServiceLayer = Layer.effect(
         projected_edge_cents: number;
         projected_value_cents: number;
         projection_rank: number;
+        usable_diagnostics: NonNullable<
+          AuctionValuationArtifactInput['current']['players'][number]['usableDiagnostics']
+        > | null;
+        usable_edge_cents: number | null;
+        usable_value_cents: number | null;
       }>`
         select *
         from fantasy.auction_valuation_players
@@ -1981,6 +2126,9 @@ const databaseServiceLayer = Layer.effect(
               projectedEdgeCents: player.projected_edge_cents,
               projectedValueCents: player.projected_value_cents,
               projectionRank: player.projection_rank,
+              usableDiagnostics: player.usable_diagnostics,
+              usableEdgeCents: player.usable_edge_cents,
+              usableValueCents: player.usable_value_cents,
             })),
             seasonKey: row.season_key,
           },
@@ -1998,6 +2146,7 @@ const databaseServiceLayer = Layer.effect(
             modelVersion: row.projection_model_version,
             snapshotId: row.projection_snapshot_id,
           },
+          productionValue: row.production_value,
           promotedAt: row.promoted_at,
           promotedByUserId: row.promoted_by_user_id,
           runId: row.id,
@@ -5632,6 +5781,25 @@ const databaseServiceLayer = Layer.effect(
             seasonKey: projection.season_key,
           }),
         );
+        if (artifact.productionValue !== null) {
+          const [schedule] = yield* sql<{
+            as_of: string;
+            fingerprint: string;
+            season_key: string;
+          }>`
+            select season_key, fingerprint, as_of::text
+            from fantasy.nba_schedule_snapshots
+            where id = ${artifact.productionValue.schedule.snapshotId}
+          `;
+          if (schedule === undefined) throw new Error('Season calendar snapshot does not exist');
+          yield* Effect.try(() =>
+            validateAuctionValuationScheduleLink(artifact, {
+              asOf: schedule.as_of,
+              fingerprint: schedule.fingerprint,
+              seasonKey: schedule.season_key,
+            }),
+          );
+        }
 
         const historyPlayerIds = [
           ...new Set(
@@ -5655,7 +5823,7 @@ const databaseServiceLayer = Layer.effect(
               projection_snapshot_id, season_key, artifact_version, model_version,
               projection_model_version, projection_as_of, historical_input_fingerprint,
               historical_season_keys, league_settings, fingerprint, candidate_results,
-              selected_model_id, selection_rule, methodology, limitations
+              selected_model_id, selection_rule, methodology, limitations, production_value
             )
           values
             (
@@ -5667,7 +5835,8 @@ const databaseServiceLayer = Layer.effect(
               ${artifact.fingerprint},
               ${serializeAuctionValuationJson(artifact.candidateResults)}::jsonb,
               ${artifact.selectedModelId}, ${artifact.selectionRule}, ${artifact.methodology},
-              ${serializeAuctionValuationJson(artifact.limitations)}::jsonb
+              ${serializeAuctionValuationJson(artifact.limitations)}::jsonb,
+              ${artifact.productionValue === null ? null : serializeAuctionValuationJson(artifact.productionValue)}::jsonb
             )
           on conflict (fingerprint) do nothing
           returning id
@@ -5695,6 +5864,9 @@ const databaseServiceLayer = Layer.effect(
               projected_value_cents: player.projectedValueCents,
               projection_rank: player.projectionRank,
               run_id: run.id,
+              usable_diagnostics: player.usableDiagnostics,
+              usable_edge_cents: player.usableEdgeCents,
+              usable_value_cents: player.usableValueCents,
             })),
           )}
         `;

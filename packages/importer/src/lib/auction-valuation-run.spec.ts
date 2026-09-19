@@ -11,16 +11,32 @@ import {
 
 const inputs = (): AuctionValuationInputs => ({
   league: { baseBudgetCents: 20_000, rosterSize: 13, seasonKey: '2026-27', teamCount: 12 },
+  leagueFormat: {
+    fingerprint: 'league-format-1',
+    lineupSlots: [
+      {
+        code: 'FLX',
+        eligiblePositions: ['PG', 'SG', 'SF', 'PF', 'C'],
+        label: 'Flex',
+        maxActive: 10,
+        minActive: 0,
+      },
+    ],
+    version: 1,
+  },
   projection: {
     asOf: '2026-09-18T00:00:00.000Z',
     modelVersion: 'projection-v1',
     players: [
       {
+        availability: { rate: 1 },
         fantasyPoints: 2_800,
         fantasyPointsPerGame: 40,
         playerId: '00000000-0000-4000-8000-000000000001',
         playerName: 'Player One',
+        positions: ['PG'],
         rank: 1,
+        teamAbbreviation: 'AAA',
       },
     ],
     seasonKey: '2026-27',
@@ -50,6 +66,31 @@ const inputs = (): AuctionValuationInputs => ({
       teamCount: 12,
     })),
   },
+  seasonCalendar: {
+    fantraxCapturedAt: '2026-09-18T00:00:00.000Z',
+    fantasyPeriods: [
+      {
+        endAt: '2026-10-26T23:59:59.999Z',
+        phase: 'regular-season',
+        playoffRound: null,
+        scoringPeriod: 1,
+        startAt: '2026-10-20T00:00:00.000Z',
+      },
+    ],
+    fingerprint: 'calendar-fingerprint-1',
+    games: [
+      {
+        awayTeam: 'BBB',
+        date: '2026-10-20',
+        homeTeam: 'AAA',
+        postponed: false,
+        scheduledAt: '2026-10-20T23:00:00.000Z',
+      },
+    ],
+    nbaScheduleSnapshotId: '00000000-0000-4000-8000-000000000020',
+    seasonKey: '2026-27',
+  },
+  streamingSlotsPerTeam: 1,
 });
 
 describe('auction valuation run workflow', () => {
@@ -66,6 +107,30 @@ describe('auction valuation run workflow', () => {
         league: { ...input.league, seasonKey: '2025-26' },
       }),
     ).toThrow('League season does not match projection season');
+  });
+
+  it('fingerprints exact calendar, format, and streaming inputs', () => {
+    const input = inputs();
+    const baseline = planAuctionValuationRun(input);
+    const reordered = planAuctionValuationRun({
+      ...input,
+      projection: { ...input.projection, players: [...input.projection.players].reverse() },
+      seasonCalendar: {
+        ...input.seasonCalendar,
+        games: [...input.seasonCalendar.games].reverse(),
+      },
+    });
+    const changed = planAuctionValuationRun({
+      ...input,
+      seasonCalendar: { ...input.seasonCalendar, fingerprint: 'calendar-fingerprint-2' },
+    });
+
+    expect(reordered.fingerprint).toBe(baseline.fingerprint);
+    expect(changed.fingerprint).not.toBe(baseline.fingerprint);
+    expect(baseline.productionValue).toMatchObject({
+      leagueFormat: { version: 1 },
+      streamingSlotsPerTeam: 1,
+    });
   });
 
   it('sends the same immutable artifact for idempotent saves', async () => {

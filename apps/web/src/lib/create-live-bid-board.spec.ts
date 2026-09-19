@@ -42,7 +42,7 @@ const projection: LatestProjectionSnapshot = {
 };
 
 const valuation: AuctionValuationRun = {
-  artifactVersion: 'auction-valuation-artifact-v1',
+  artifactVersion: 'auction-valuation-artifact-v2',
   candidateResults: [],
   createdAt: '2026-09-18T01:00:00.000Z',
   current: {
@@ -59,6 +59,19 @@ const valuation: AuctionValuationRun = {
         projectedEdgeCents: 1_000,
         projectedValueCents: 6_000,
         projectionRank: 1,
+        usableDiagnostics: {
+          availabilityExposure: 12 / 82,
+          capturedPlayoffWeightedPoints: 100,
+          congestionLoss: 20,
+          estimatedCapturedRegularSeasonPoints: 2_400,
+          expectedScheduledPoints: 2_420,
+          playoffWeightedGames: 3.5,
+          positionalReplacementDelta: 500,
+          rawProjectedPoints: 2_800,
+          usablePoints: 2_500,
+        },
+        usableEdgeCents: 500,
+        usableValueCents: 5_500,
       },
     ],
     seasonKey: '2026-27',
@@ -73,6 +86,46 @@ const valuation: AuctionValuationRun = {
     asOf: projection.asOf,
     modelVersion: projection.modelVersion,
     snapshotId: projection.snapshotId,
+  },
+  productionValue: {
+    auctionPoolCents: 240_000,
+    draftablePlayerCount: 1,
+    leagueFormat: {
+      fingerprint: 'c'.repeat(64),
+      lineupSlots: [
+        {
+          code: 'C',
+          eligiblePositions: ['C'],
+          label: 'Center',
+          maxActive: 1,
+          minActive: 0,
+        },
+      ],
+      version: 1,
+    },
+    longTermPlayerCount: 1,
+    modelVersion: 'usable-lineup-v1',
+    schedule: {
+      asOf: '2026-09-19T00:00:00.000Z',
+      fingerprint: 'd'.repeat(64),
+      snapshotId: '00000000-0000-4000-8000-000000000030',
+    },
+    seasonCalendar: {
+      asOf: '2026-09-19T00:00:00.000Z',
+      fingerprint: 'd'.repeat(64),
+      games: [
+        {
+          awayTeam: 'BOS',
+          date: '2026-10-20',
+          homeTeam: 'DEN',
+          postponed: false,
+          scheduledAt: '2026-10-20T23:00:00.000Z',
+        },
+      ],
+      playoffPeriods: [],
+      snapshotId: '00000000-0000-4000-8000-000000000030',
+    },
+    streamingSlotsPerTeam: 1,
   },
   promotedAt: '2026-09-18T02:00:00.000Z',
   promotedByUserId: 'user-1',
@@ -95,6 +148,14 @@ describe('createLiveBidBoard', () => {
       modelId: 'recency-market-v1',
       seasonsBacktested: 2,
     });
+    expect(board.players[0]?.usableValue).toMatchObject({
+      modelVersion: 'usable-lineup-v1',
+      valueCents: 5_500,
+    });
+    expect(board.usableContext).toMatchObject({
+      modelVersion: 'usable-lineup-v1',
+      scheduleAsOf: '2026-09-19T00:00:00.000Z',
+    });
   });
 
   it('refuses a promoted run linked to a stale projection snapshot', () => {
@@ -109,5 +170,7 @@ describe('createLiveBidBoard', () => {
       },
     });
     expect(board.players[0]?.calibratedMarket).toBeNull();
+    expect(board.players[0]?.usableValue).toBeNull();
+    expect(board.usableContext).toBeNull();
   });
 });

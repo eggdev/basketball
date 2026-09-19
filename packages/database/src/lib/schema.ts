@@ -786,6 +786,20 @@ export const auctionValuationRuns = fantasySchema.table(
     selectionRule: text('selection_rule').notNull(),
     methodology: text('methodology').notNull(),
     limitations: jsonb('limitations').$type<ReadonlyArray<string>>().notNull(),
+    productionValue: jsonb('production_value').$type<{
+      auctionPoolCents: number;
+      draftablePlayerCount: number;
+      leagueFormat: {
+        fingerprint: string;
+        lineupSlots: ReadonlyArray<Record<string, unknown>>;
+        version: number;
+      };
+      longTermPlayerCount: number;
+      modelVersion: string;
+      schedule: { asOf: string; fingerprint: string; snapshotId: string };
+      seasonCalendar: Record<string, unknown>;
+      streamingSlotsPerTeam: number;
+    }>(),
     status: text('status').notNull().default('candidate'),
     promotedAt: timestamp('promoted_at', { withTimezone: true }),
     promotedByUserId: text('promoted_by_user_id'),
@@ -821,6 +835,19 @@ export const auctionValuationPlayers = fantasySchema.table(
     fairHighCents: integer('fair_high_cents').notNull(),
     projectedValueCents: integer('projected_value_cents').notNull(),
     projectedEdgeCents: integer('projected_edge_cents').notNull(),
+    usableValueCents: integer('usable_value_cents'),
+    usableEdgeCents: integer('usable_edge_cents'),
+    usableDiagnostics: jsonb('usable_diagnostics').$type<{
+      availabilityExposure: number;
+      capturedPlayoffWeightedPoints: number;
+      congestionLoss: number;
+      estimatedCapturedRegularSeasonPoints: number;
+      expectedScheduledPoints: number;
+      playoffWeightedGames: number;
+      positionalReplacementDelta: number;
+      rawProjectedPoints: number;
+      usablePoints: number;
+    }>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

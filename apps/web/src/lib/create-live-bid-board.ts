@@ -26,6 +26,21 @@ export function createLiveBidBoard(input: {
     input.market?.players.map((player) => [player.playerId, player]) ?? [],
   );
   const targets = new Map(input.plan?.targets.map((target) => [target.playerId, target]) ?? []);
+  const usableContext =
+    valuationRun?.productionValue == null
+      ? null
+      : {
+          lineupSlots: valuationRun.productionValue.leagueFormat.lineupSlots.map((slot) => ({
+            ...slot,
+            code: slot.code as 'C' | 'F' | 'FLX' | 'G' | 'PF' | 'PG' | 'SF' | 'SG',
+            eligiblePositions: slot.eligiblePositions as ReadonlyArray<
+              'C' | 'PF' | 'PG' | 'SF' | 'SG'
+            >,
+          })),
+          modelVersion: valuationRun.productionValue.modelVersion,
+          scheduleAsOf: valuationRun.productionValue.schedule.asOf,
+          seasonCalendar: valuationRun.productionValue.seasonCalendar,
+        };
 
   return {
     baseBudgetCents: input.league.baseBudgetCents,
@@ -34,6 +49,7 @@ export function createLiveBidBoard(input: {
       const historical = historicalPlayers.get(player.playerId);
       const target = targets.get(player.playerId);
       return {
+        availabilityRate: player.availability.rate,
         availabilityTier: player.availability.tier,
         calibratedMarket:
           calibrated === undefined || !calibrated.isModeled || valuationRun === null
@@ -62,6 +78,27 @@ export function createLiveBidBoard(input: {
         rank: player.rank,
         target:
           target === undefined ? null : { maxBidCents: target.maxBidCents, stance: target.stance },
+        teamAbbreviation: player.teamAbbreviation,
+        usableValue:
+          calibrated?.usableDiagnostics == null ||
+          calibrated.usableValueCents == null ||
+          valuationRun?.productionValue == null
+            ? null
+            : {
+                diagnostics: {
+                  capturedPlayoffWeightedPoints:
+                    calibrated.usableDiagnostics.capturedPlayoffWeightedPoints,
+                  congestionLoss: calibrated.usableDiagnostics.congestionLoss,
+                  estimatedCapturedRegularSeasonPoints:
+                    calibrated.usableDiagnostics.estimatedCapturedRegularSeasonPoints,
+                  expectedScheduledPoints: calibrated.usableDiagnostics.expectedScheduledPoints,
+                  playoffWeightedGames: calibrated.usableDiagnostics.playoffWeightedGames,
+                  usablePoints: calibrated.usableDiagnostics.usablePoints,
+                },
+                modelVersion: valuationRun.productionValue.modelVersion,
+                scheduleAsOf: valuationRun.productionValue.schedule.asOf,
+                valueCents: calibrated.usableValueCents,
+              },
       };
     }),
     projection: {
@@ -72,5 +109,6 @@ export function createLiveBidBoard(input: {
     },
     rosterSize: input.league.rosterSize,
     teamCount: input.league.teamCount,
+    usableContext,
   };
 }

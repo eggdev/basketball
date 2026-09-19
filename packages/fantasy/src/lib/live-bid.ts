@@ -20,6 +20,28 @@ export interface LiveBidTarget {
   readonly stance: 'avoid' | 'target' | 'watch';
 }
 
+export interface LiveBidRosterMarginalValue {
+  readonly candidateStandalonePlayoffWeightedPoints: number;
+  readonly candidateStandaloneRegularSeasonPoints: number;
+  readonly concentrationRisk: {
+    readonly level: 'high' | 'low' | 'moderate';
+    readonly sameTeamPlayerCount: number;
+    readonly sameTeamRosterShare: number;
+  };
+  readonly capturedPlayoffWeightedPoints: number;
+  readonly congestionLoss: number;
+  readonly daysBenched: number;
+  readonly filledSlotNeeds: ReadonlyArray<string>;
+  readonly marginalPlayoffWeightedPoints: number;
+  readonly marginalRegularSeasonPoints: number;
+  readonly modelVersion: string;
+  readonly playoffWeightedGames: number;
+  readonly projectedPoints: number;
+  readonly scheduleAsOf: string;
+  readonly usablePoints: number;
+  readonly valueCents: number;
+}
+
 export interface LiveBidEvaluationInput {
   readonly baseBudgetCents: number;
   readonly calibratedMarket?: {
@@ -42,6 +64,7 @@ export interface LiveBidEvaluationInput {
   readonly players: ReadonlyArray<LiveBidPlayer>;
   readonly remainingBudgetCents: number;
   readonly remainingRosterSpots: number;
+  readonly rosterMarginalValue?: LiveBidRosterMarginalValue | null;
   readonly rosterSize: number;
   readonly target: LiveBidTarget | null;
   readonly teamCount: number;
@@ -63,6 +86,7 @@ export interface LiveBidEvaluation {
     readonly positions: ReadonlyArray<string>;
     readonly projectionRank: number;
     readonly replacementPointsPerGame: number;
+    readonly rosterMarginalValue: LiveBidRosterMarginalValue | null;
     readonly rosterFit: LiveBidRosterFit;
   };
   readonly market: {
@@ -76,12 +100,14 @@ export interface LiveBidEvaluation {
     readonly priceSource: 'calibrated-model' | 'historical-average' | 'projection-value';
     readonly priceSignal: LiveBidPriceSignal;
     readonly projectedValueCents: number;
+    readonly usableValueCents: number | null;
   };
   readonly methodology: string;
   readonly personal: {
     readonly maxBidCents: number;
     readonly maxBidSource: 'model' | 'saved-target';
     readonly targetStance: LiveBidTarget['stance'] | null;
+    readonly valueBasis: 'global-fppg-v1' | 'roster-marginal-usable-lineup-v1';
   };
   readonly player: {
     readonly id: string;
@@ -210,9 +236,21 @@ export function evaluateLiveBid(input: LiveBidEvaluationInput): LiveBidEvaluatio
   });
   const rosterFit = rosterFitFor(player, ownedPlayers);
   const maximumLegalBidCents = input.remainingBudgetCents;
-  const modelMaxBidCents = roundToDollar(
-    projectedValueCents * personalValueMultiplier(player, rosterFit, input.target),
-  );
+  if (
+    input.rosterMarginalValue != null &&
+    (!Number.isSafeInteger(input.rosterMarginalValue.valueCents) ||
+      input.rosterMarginalValue.valueCents < 0)
+  ) {
+    throw new RangeError('roster-marginal value must be non-negative integer cents');
+  }
+  const personalValueCents = input.rosterMarginalValue?.valueCents ?? projectedValueCents;
+  const personalMultiplier =
+    input.rosterMarginalValue == null
+      ? personalValueMultiplier(player, rosterFit, input.target)
+      : input.target?.stance === 'target'
+        ? 1.05
+        : 1;
+  const modelMaxBidCents = roundToDollar(personalValueCents * personalMultiplier);
   const requestedMaxBidCents = input.target?.maxBidCents ?? modelMaxBidCents;
   const maxBidCents = clamp(requestedMaxBidCents, 0, maximumLegalBidCents);
   const maxBidSource =
@@ -241,7 +279,9 @@ export function evaluateLiveBid(input: LiveBidEvaluationInput): LiveBidEvaluatio
         ? 'No player-specific league price history is available, so the market range uses projection value.'
         : `${input.historicalMarket?.seasonsDrafted ?? 0} historical league draft(s) imply an expected market price of $${(historicalExpectedPriceCents / 100).toFixed(0)}.`,
     input.target?.maxBidCents == null
-      ? `The personal cap adjusts projection value for ${player.availabilityTier} availability and ${rosterFit.replace('-', ' ')} roster fit.`
+      ? input.rosterMarginalValue === null || input.rosterMarginalValue === undefined
+        ? `The personal cap adjusts projection value for ${player.availabilityTier} availability and ${rosterFit.replace('-', ' ')} roster fit.`
+        : `The personal cap uses ${input.rosterMarginalValue.marginalRegularSeasonPoints.toFixed(1)} roster-marginal points from ${input.rosterMarginalValue.modelVersion}.`
       : 'The saved scenario max bid is the personal cap.',
   ];
   if (input.target?.stance === 'avoid') {
@@ -264,6 +304,7 @@ export function evaluateLiveBid(input: LiveBidEvaluationInput): LiveBidEvaluatio
       positions: player.positions,
       projectionRank: player.rank,
       replacementPointsPerGame,
+      rosterMarginalValue: input.rosterMarginalValue ?? null,
       rosterFit,
     },
     market: {
@@ -278,13 +319,16 @@ export function evaluateLiveBid(input: LiveBidEvaluationInput): LiveBidEvaluatio
       priceSource,
       priceSignal,
       projectedValueCents,
+      usableValueCents: input.rosterMarginalValue?.valueCents ?? null,
     },
     methodology:
-      'Projection value reserves minimum bids, then allocates the remaining league auction pool by projected points per game above replacement. Calibrated market price estimates league demand from walk-forward historical tests. The personal cap is deterministic and is never set by an AI judgment.',
+      'Projection value and calibrated league price remain separate market signals. When usable-lineup context is present, the personal cap uses roster-marginal production; otherwise it uses the global points-per-game basis. The personal cap is deterministic and is never set by an AI judgment.',
     personal: {
       maxBidCents,
       maxBidSource,
       targetStance: input.target?.stance ?? null,
+      valueBasis:
+        input.rosterMarginalValue == null ? 'global-fppg-v1' : 'roster-marginal-usable-lineup-v1',
     },
     player: { id: player.playerId, name: player.playerName },
     reasons,

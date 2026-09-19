@@ -7,6 +7,7 @@ import {
   serializeAuctionValuationJson,
   validateAuctionValuationArtifact,
   validateAuctionValuationProjectionLink,
+  validateAuctionValuationScheduleLink,
   validateSeasonCalendarBatch,
   type AuctionValuationArtifactInput,
   type SeasonCalendarBatch,
@@ -63,7 +64,7 @@ describe('loadDatabaseConfig', () => {
 });
 
 const artifact = (): AuctionValuationArtifactInput => ({
-  artifactVersion: 'auction-valuation-artifact-v1',
+  artifactVersion: 'auction-valuation-artifact-v2',
   candidateResults: [{ id: 'recency-market-v1' }],
   current: {
     players: [
@@ -79,6 +80,19 @@ const artifact = (): AuctionValuationArtifactInput => ({
         projectedEdgeCents: 700,
         projectedValueCents: 4_700,
         projectionRank: 1,
+        usableDiagnostics: {
+          availabilityExposure: 0.1,
+          capturedPlayoffWeightedPoints: 120,
+          congestionLoss: 40,
+          estimatedCapturedRegularSeasonPoints: 2_400,
+          expectedScheduledPoints: 2_440,
+          playoffWeightedGames: 10,
+          positionalReplacementDelta: 500,
+          rawProjectedPoints: 2_500,
+          usablePoints: 2_520,
+        },
+        usableEdgeCents: 236_000,
+        usableValueCents: 240_000,
       },
     ],
     seasonKey: '2026-27',
@@ -93,6 +107,46 @@ const artifact = (): AuctionValuationArtifactInput => ({
     asOf: '2026-09-18T00:00:00.000Z',
     modelVersion: 'projection-v1',
     snapshotId: '00000000-0000-4000-8000-000000000010',
+  },
+  productionValue: {
+    auctionPoolCents: 240_000,
+    draftablePlayerCount: 1,
+    leagueFormat: {
+      fingerprint: 'c'.repeat(64),
+      lineupSlots: [
+        {
+          code: 'FLX',
+          eligiblePositions: ['PG', 'SG', 'SF', 'PF', 'C'],
+          label: 'Flex',
+          maxActive: 10,
+          minActive: 0,
+        },
+      ],
+      version: 1,
+    },
+    longTermPlayerCount: 1,
+    modelVersion: 'usable-lineup-v1',
+    schedule: {
+      asOf: '2026-09-19T12:00:00.000Z',
+      fingerprint: 'd'.repeat(64),
+      snapshotId: '00000000-0000-4000-8000-000000000020',
+    },
+    seasonCalendar: {
+      asOf: '2026-09-19T12:00:00.000Z',
+      fingerprint: 'd'.repeat(64),
+      games: [
+        {
+          awayTeam: 'BBB',
+          date: '2026-10-20',
+          homeTeam: 'AAA',
+          postponed: false,
+          scheduledAt: '2026-10-20T23:00:00.000Z',
+        },
+      ],
+      playoffPeriods: [],
+      snapshotId: '00000000-0000-4000-8000-000000000020',
+    },
+    streamingSlotsPerTeam: 1,
   },
   seasonKey: '2026-27',
   selectedModelId: 'recency-market-v1',
@@ -148,6 +202,27 @@ describe('validateAuctionValuationArtifact', () => {
       }),
     ).toThrow('historical input fingerprint');
   });
+
+  it('requires immutable usable diagnostics and exact pool conservation', () => {
+    expect(() =>
+      validateAuctionValuationArtifact({
+        ...artifact(),
+        current: {
+          ...artifact().current,
+          players: [{ ...artifact().current.players[0]!, usableDiagnostics: null }],
+        },
+      }),
+    ).toThrow('usable valuation diagnostics');
+    expect(() =>
+      validateAuctionValuationArtifact({
+        ...artifact(),
+        current: {
+          ...artifact().current,
+          players: [{ ...artifact().current.players[0]!, usableValueCents: 239_999 }],
+        },
+      }),
+    ).toThrow('conserve');
+  });
 });
 
 describe('serializeAuctionValuationJson', () => {
@@ -156,6 +231,22 @@ describe('serializeAuctionValuationJson', () => {
 
     expect(serialized).toBe('["2024-25","2025-26"]');
     expect(JSON.parse(serialized)).toEqual(['2024-25', '2025-26']);
+  });
+
+  it('round-trips immutable usable diagnostics and their schedule provenance', () => {
+    const candidate = artifact();
+    const persisted = JSON.parse(
+      serializeAuctionValuationJson({
+        productionValue: candidate.productionValue,
+        usableDiagnostics: candidate.current.players[0]!.usableDiagnostics,
+      }),
+    ) as {
+      productionValue: AuctionValuationArtifactInput['productionValue'];
+      usableDiagnostics: AuctionValuationArtifactInput['current']['players'][number]['usableDiagnostics'];
+    };
+
+    expect(persisted.productionValue).toEqual(candidate.productionValue);
+    expect(persisted.usableDiagnostics).toEqual(candidate.current.players[0]!.usableDiagnostics);
   });
 });
 
@@ -187,6 +278,24 @@ describe('validateAuctionValuationProjectionLink', () => {
         asOf: '2026-09-18T00:00:00.001Z',
       }),
     ).toThrow('timestamp');
+  });
+});
+
+describe('validateAuctionValuationScheduleLink', () => {
+  const schedule = () => ({
+    asOf: '2026-09-19T12:00:00.000Z',
+    fingerprint: 'd'.repeat(64),
+    seasonKey: '2026-27',
+  });
+
+  it('accepts the exact calendar and rejects fingerprint drift', () => {
+    expect(() => validateAuctionValuationScheduleLink(artifact(), schedule())).not.toThrow();
+    expect(() =>
+      validateAuctionValuationScheduleLink(artifact(), {
+        ...schedule(),
+        fingerprint: 'e'.repeat(64),
+      }),
+    ).toThrow('fingerprint');
   });
 });
 

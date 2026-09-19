@@ -85,6 +85,13 @@
       "when": 1789842807256,
       "tag": "0011_shallow_stepford_cuckoos",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789851046909,
+      "tag": "0012_chubby_sister_grimm",
+      "breakpoints": true
     }
   ]
 }

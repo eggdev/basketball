@@ -75,6 +75,29 @@ const projection = (status: 'current' | 'missing' | 'stale'): LatestProjectionSn
               weightedExpectedPoints: 109.35,
             },
       teamAbbreviation: 'DEN',
+      usableValue:
+        status === 'missing'
+          ? null
+          : {
+              diagnostics: {
+                availabilityExposure: 0.122,
+                capturedPlayoffWeightedPoints: 108,
+                congestionLoss: 120,
+                estimatedCapturedRegularSeasonPoints: 2_880,
+                expectedScheduledPoints: 3_000,
+                playoffWeightedGames: 2.625,
+                positionalReplacementDelta: 800,
+                rawProjectedPoints: 3_000,
+                usablePoints: 2_988,
+              },
+              modelVersion: 'usable-lineup-v1',
+              schedule: {
+                asOf: '2026-09-19T11:00:00.000Z',
+                fingerprint: 'abcdef1234567890',
+                snapshotId: 'calendar-1',
+              },
+              valueCents: 6_500,
+            },
     },
   ],
   seasonKey: '2026-27',
@@ -93,6 +116,10 @@ describe('PlayersView season calendar freshness', () => {
     expect(html).toContain('abcdef12');
     expect(html).toContain('Quarterfinal P20');
     expect(html).toContain('4 games');
+    expect(html).toContain('usable-lineup-v1');
+    expect(html).toContain('2,880.0');
+    expect(html).toContain('120.0');
+    expect(html).toContain('$65');
     expect(html).not.toContain('Calendar Pending');
   });
 

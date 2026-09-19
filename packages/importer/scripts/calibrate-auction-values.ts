@@ -1,9 +1,12 @@
+import { readFile } from 'node:fs/promises';
+
 import {
   Database,
   databaseLayer,
   loadDatabaseConfig,
   type DatabaseConfig,
 } from '@fantasy-basketball/database';
+import { evaluateLeagueFormat } from '@fantasy-basketball/fantasy';
 import { Effect } from 'effect';
 
 import {
@@ -36,6 +39,9 @@ const run = async () => {
     return;
   }
 
+  const leagueFormat = await Effect.runPromise(
+    evaluateLeagueFormat(await readFile('config/league-format.json', 'utf8')),
+  );
   const inputs = await runWithDatabase(
     config,
     Effect.gen(function* () {
@@ -47,7 +53,17 @@ const run = async () => {
       ]);
       if (projection === null) throw new Error('No projection snapshot is available');
       if (workspace.league === null) throw new Error('No current league season is available');
-      return { league: workspace.league, projection, rankings };
+      const seasonCalendar = yield* database.latestSeasonCalendar(projection.seasonKey);
+      if (seasonCalendar === null)
+        throw new Error(`No season calendar is available for ${projection.seasonKey}`);
+      return {
+        league: workspace.league,
+        leagueFormat,
+        projection,
+        rankings,
+        seasonCalendar,
+        streamingSlotsPerTeam: workspace.plan?.streamingSlots ?? 1,
+      };
     }),
   );
   const artifact = planAuctionValuationRun(inputs);
@@ -64,6 +80,7 @@ const run = async () => {
     historicalInputFingerprint: artifact.historicalInputs.fingerprint,
     historicalSeasonKeys: artifact.historicalInputs.seasonKeys,
     projectionSnapshotId: artifact.projection.snapshotId,
+    productionValue: artifact.productionValue,
     seasonKey: artifact.seasonKey,
     selectedModelId: selected?.id ?? artifact.selectedModelId,
   };

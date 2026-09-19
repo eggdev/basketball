@@ -302,6 +302,8 @@ The draft room consumes only the promoted run linked to the exact current projec
 snapshot. A missing or stale promotion is shown visibly and falls back to deterministic
 projection and historical-market values. Promotion governs live price estimates only;
 it never changes source projections or historical records.
+The promoted artifact may also carry versioned usable-lineup production
+utility. Re-promoting the prior compatible run is the rollback path.
 
 ## Current implementation status
 
@@ -339,17 +341,30 @@ historical errors, and keeps hindsight realized value visibly separate. Only an
 explicitly promoted, snapshot-compatible selection feeds the draft UI and Eve's
 live-bid tool.
 
-The live draft room reserves $1 minimum bids, then allocates the remaining
-league auction pool by projected points above the 156-player replacement line.
-It keeps calibrated market price separate from projected production value and
-the owner's personal cap. The authenticated draft page prepares the complete
-bid board once, then evaluates deterministic guardrails synchronously in the
-browser while Jev reviews qualitative roster and plan fit in the background.
+The live draft room keeps the legacy global points-per-game value available for
+comparison and adds the versioned `usable-lineup-v1` experiment. That model
+optimizes daily position eligibility against the dated NBA schedule, accounts
+for availability, lineup congestion, playoff-period weights, and the reserved
+streaming slot, and conserves the exact auction pool after $1 minimum bids.
+Calibrated market price remains a prediction of what this league may pay;
+usable value is separate production utility. Brendan's personal cap uses the
+candidate's marginal optimized value on the currently owned roster when the
+promoted artifact matches the exact projection and schedule snapshots.
+
+The authenticated draft page prepares the complete bid board once, then
+evaluates deterministic guardrails synchronously in the browser while Jev
+reviews qualitative roster and plan fit in the background.
 Jev latency therefore cannot delay the actionable bid signal. Players without
 a defensible historical signal fall back to projection value during live
 evaluation rather than presenting a false calibrated price. Manual draft-room
 state and the last 20 evaluations survive refresh in the browser; the feature
 is read-only and cannot place a Fantrax bid.
+
+Usable-lineup artifacts are immutable candidates. Importing one does not make
+it live: an operator must review it and explicitly promote its run ID. To roll
+back, promote the previous compatible run again. The model is not yet a
+historical injury backtest or playoff-probability model because daily historical
+availability is not preserved.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be

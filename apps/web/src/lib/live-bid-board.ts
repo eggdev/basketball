@@ -1,5 +1,7 @@
 import {
   evaluateLiveBid,
+  evaluateRosterCandidate,
+  type LeagueLineupSlot,
   type LiveBidAction,
   type LiveBidEvaluation,
   type LiveBidEvaluationInput,
@@ -38,9 +40,24 @@ export interface LiveBidProjectionMetadata {
 }
 
 export interface LiveBidBoardPlayer extends LiveBidPlayer {
+  readonly availabilityRate: number;
   readonly calibratedMarket: LiveBidEvaluationInput['calibratedMarket'];
   readonly historicalMarket: LiveBidEvaluationInput['historicalMarket'];
   readonly target: LiveBidTarget | null;
+  readonly teamAbbreviation: string;
+  readonly usableValue: {
+    readonly diagnostics: {
+      readonly capturedPlayoffWeightedPoints: number;
+      readonly congestionLoss: number;
+      readonly estimatedCapturedRegularSeasonPoints: number;
+      readonly expectedScheduledPoints: number;
+      readonly playoffWeightedGames: number;
+      readonly usablePoints: number;
+    };
+    readonly modelVersion: string;
+    readonly scheduleAsOf: string;
+    readonly valueCents: number;
+  } | null;
 }
 
 export interface LiveBidBoard {
@@ -49,6 +66,12 @@ export interface LiveBidBoard {
   readonly projection: LiveBidProjectionMetadata;
   readonly rosterSize: number;
   readonly teamCount: number;
+  readonly usableContext: {
+    readonly lineupSlots: ReadonlyArray<LeagueLineupSlot>;
+    readonly modelVersion: string;
+    readonly scheduleAsOf: string;
+    readonly seasonCalendar: Parameters<typeof evaluateRosterCandidate>[0]['seasonCalendar'];
+  } | null;
 }
 
 /**
@@ -64,6 +87,64 @@ export function evaluateLiveBidBoard(
   if (player === undefined)
     throw new Error(`Projection unavailable for player ${request.playerId}`);
 
+  const rosterMarginalValue =
+    board.usableContext === null || player.usableValue === null
+      ? null
+      : (() => {
+          const marginal = evaluateRosterCandidate({
+            candidate: {
+              availabilityRate: player.availabilityRate,
+              fantasyPoints: player.fantasyPoints,
+              fantasyPointsPerGame: player.fantasyPointsPerGame,
+              playerId: player.playerId,
+              playerName: player.playerName,
+              positions: player.positions,
+              projectionRank: player.rank,
+              teamAbbreviation: player.teamAbbreviation,
+            },
+            lineupSlots: board.usableContext.lineupSlots,
+            roster: request.ownedPlayerIds.flatMap((playerId) => {
+              const owned = board.players.find((candidate) => candidate.playerId === playerId);
+              return owned === undefined
+                ? []
+                : [
+                    {
+                      availabilityRate: owned.availabilityRate,
+                      fantasyPoints: owned.fantasyPoints,
+                      fantasyPointsPerGame: owned.fantasyPointsPerGame,
+                      playerId: owned.playerId,
+                      playerName: owned.playerName,
+                      positions: owned.positions,
+                      projectionRank: owned.rank,
+                      teamAbbreviation: owned.teamAbbreviation,
+                    },
+                  ];
+            }),
+            seasonCalendar: board.usableContext.seasonCalendar,
+          });
+          const standalonePoints =
+            marginal.candidateStandaloneRegularSeasonPoints +
+            marginal.candidateStandalonePlayoffWeightedPoints;
+          const marginalPoints =
+            marginal.marginalRegularSeasonPoints + marginal.marginalPlayoffWeightedPoints;
+          const marginalRatio =
+            standalonePoints === 0
+              ? 0
+              : Math.max(0, Math.min(1, marginalPoints / standalonePoints));
+          return {
+            ...marginal,
+            capturedPlayoffWeightedPoints:
+              player.usableValue.diagnostics.capturedPlayoffWeightedPoints,
+            congestionLoss: player.usableValue.diagnostics.congestionLoss,
+            modelVersion: board.usableContext.modelVersion,
+            playoffWeightedGames: player.usableValue.diagnostics.playoffWeightedGames,
+            projectedPoints: player.fantasyPoints,
+            scheduleAsOf: board.usableContext.scheduleAsOf,
+            usablePoints: player.usableValue.diagnostics.usablePoints,
+            valueCents: Math.round(player.usableValue.valueCents * marginalRatio),
+          };
+        })();
+
   const baseline = evaluateLiveBid({
     baseBudgetCents: board.baseBudgetCents,
     calibratedMarket: player.calibratedMarket,
@@ -75,6 +156,7 @@ export function evaluateLiveBidBoard(
     players: board.players,
     remainingBudgetCents: request.remainingBudgetCents,
     remainingRosterSpots: request.remainingRosterSpots,
+    rosterMarginalValue,
     rosterSize: board.rosterSize,
     target: player.target,
     teamCount: board.teamCount,

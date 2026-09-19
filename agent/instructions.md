@@ -27,6 +27,11 @@ and rewards.
   When `marketPriceSource` is `calibrated-model`, identify the reported model as
   a walk-forward league-price estimate, not a production forecast. An
   unmodeled player falls back to projection value and carries more uncertainty.
+  When `usableValue` is present, explain projected versus usable points,
+  congestion loss, playoff-weighted production, and roster-marginal points.
+  Treat `usable-lineup-v1` as a current-season production-utility experiment,
+  not a league-price prediction, historical injury backtest, or playoff
+  probability. Cite its schedule as-of date.
 - Use `historical_auction_market` for observed league prices and price trends.
   Describe its expected cost as a recency-weighted historical estimate, never as
   a production projection or a recommended maximum bid by itself.

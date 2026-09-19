@@ -1,7 +1,7 @@
 import { Database, databaseLayer, loadDatabaseConfig } from '@fantasy-basketball/database/runtime';
 import {
-  buildAuctionValuationLab,
   evaluateLiveBid,
+  evaluateRosterCandidate,
   leagueOwnerProfile,
 } from '@fantasy-basketball/fantasy';
 import { Effect } from 'effect';
@@ -39,6 +39,19 @@ const outputSchema = z.object({
   reasons: z.array(z.string()),
   replacementPointsPerGame: z.number(),
   rosterFit: z.enum(['fills-need', 'neutral', 'redundant']),
+  usableValue: z
+    .object({
+      congestionLoss: z.number(),
+      modelVersion: z.string(),
+      playoffWeightedGames: z.number(),
+      playoffWeightedMarginalPoints: z.number(),
+      projectedPoints: z.number(),
+      rosterMarginalPoints: z.number(),
+      scheduleAsOf: z.string(),
+      usablePoints: z.number(),
+      valueDollars: z.number(),
+    })
+    .nullable(),
   season: z.string(),
 });
 
@@ -61,13 +74,16 @@ export default defineTool({
     const context = await Effect.runPromise(
       Effect.gen(function* () {
         const database = yield* Database;
-        const [projection, market, workspace, rankings] = yield* Effect.all([
+        const [projection, market, workspace] = yield* Effect.all([
           database.latestProjectionSnapshot,
           database.historicalAuctionMarket,
           database.preDraftWorkspace(leagueOwnerProfile.canonicalKey),
-          database.historicalRankings,
         ]);
-        return { market, projection, rankings, workspace };
+        const valuation =
+          projection === null
+            ? null
+            : yield* database.promotedAuctionValuationRun(projection.seasonKey);
+        return { market, projection, valuation, workspace };
       }).pipe(Effect.provide(databaseLayer(config))),
     );
     if (context.projection === null) throw new Error('No projection snapshot is available');
@@ -100,52 +116,84 @@ export default defineTool({
     const target = context.workspace.plan?.targets.find(
       (candidate) => candidate.playerId === player.playerId,
     );
-    const valuationLab = buildAuctionValuationLab({
-      current: {
-        baseBudgetCents: context.workspace.league.baseBudgetCents,
-        players: context.projection.players.map((candidate) => ({
-          fantasyPoints: candidate.fantasyPoints,
-          fantasyPointsPerGame: candidate.fantasyPointsPerGame,
-          playerId: candidate.playerId,
-          playerName: candidate.playerName,
-          rank: candidate.rank,
-        })),
-        rosterSize: context.workspace.league.rosterSize,
-        seasonKey: context.projection.seasonKey,
-        teamCount: context.workspace.league.teamCount,
-      },
-      historicalSeasons: context.rankings.seasons.map((season) => ({
-        auctionPrices: season.auctionPlayers,
-        baseBudgetCents: season.baseBudgetCents,
-        players: season.players.map((candidate) => ({
-          auctionCostCents: candidate.auctionCostCents,
-          fantasyPoints: candidate.fantasyPoints,
-          fantasyPointsPerGame: candidate.fantasyPointsPerGame,
-          playerId: candidate.playerId,
-          playerName: candidate.playerName,
-        })),
-        rosterSize: season.rosterSize,
-        seasonKey: season.seasonKey,
-        teamCount: season.teamCount,
-      })),
-    });
-    const calibratedPlayer = valuationLab.current?.players.find(
+    const valuation =
+      context.valuation?.projection.snapshotId === context.projection.snapshotId
+        ? context.valuation
+        : null;
+    const calibratedPlayer = valuation?.current.players.find(
       (candidate) => candidate.playerId === player.playerId,
     );
-    const selectedModel = valuationLab.models.find(
-      (model) => model.id === valuationLab.selectedModelId,
-    );
+    const rosterMarginalValue =
+      valuation?.productionValue == null ||
+      calibratedPlayer?.usableValueCents == null ||
+      calibratedPlayer.usableDiagnostics == null
+        ? null
+        : (() => {
+            const marginal = evaluateRosterCandidate({
+              candidate: {
+                availabilityRate: player.availability.rate,
+                fantasyPoints: player.fantasyPoints,
+                fantasyPointsPerGame: player.fantasyPointsPerGame,
+                playerId: player.playerId,
+                playerName: player.playerName,
+                positions: player.positions,
+                projectionRank: player.rank,
+                teamAbbreviation: player.teamAbbreviation,
+              },
+              lineupSlots: valuation.productionValue.leagueFormat.lineupSlots.map((slot) => ({
+                ...slot,
+                code: slot.code as 'C' | 'F' | 'FLX' | 'G' | 'PF' | 'PG' | 'SF' | 'SG',
+                eligiblePositions: slot.eligiblePositions as ReadonlyArray<
+                  'C' | 'PF' | 'PG' | 'SF' | 'SG'
+                >,
+              })),
+              roster: context.projection.players
+                .filter((candidate) => ownedPlayerIds.includes(candidate.playerId))
+                .map((candidate) => ({
+                  availabilityRate: candidate.availability.rate,
+                  fantasyPoints: candidate.fantasyPoints,
+                  fantasyPointsPerGame: candidate.fantasyPointsPerGame,
+                  playerId: candidate.playerId,
+                  playerName: candidate.playerName,
+                  positions: candidate.positions,
+                  projectionRank: candidate.rank,
+                  teamAbbreviation: candidate.teamAbbreviation,
+                })),
+              seasonCalendar: valuation.productionValue.seasonCalendar,
+            });
+            const standalonePoints =
+              marginal.candidateStandaloneRegularSeasonPoints +
+              marginal.candidateStandalonePlayoffWeightedPoints;
+            const marginalPoints =
+              marginal.marginalRegularSeasonPoints + marginal.marginalPlayoffWeightedPoints;
+            const marginalRatio =
+              standalonePoints === 0
+                ? 0
+                : Math.max(0, Math.min(1, marginalPoints / standalonePoints));
+            return {
+              ...marginal,
+              capturedPlayoffWeightedPoints:
+                calibratedPlayer.usableDiagnostics.capturedPlayoffWeightedPoints,
+              congestionLoss: calibratedPlayer.usableDiagnostics.congestionLoss,
+              modelVersion: valuation.productionValue.modelVersion,
+              playoffWeightedGames: calibratedPlayer.usableDiagnostics.playoffWeightedGames,
+              projectedPoints: player.fantasyPoints,
+              scheduleAsOf: valuation.productionValue.schedule.asOf,
+              usablePoints: calibratedPlayer.usableDiagnostics.usablePoints,
+              valueCents: Math.round(calibratedPlayer.usableValueCents * marginalRatio),
+            };
+          })();
     const evaluation = evaluateLiveBid({
       baseBudgetCents: context.workspace.league.baseBudgetCents,
       calibratedMarket:
-        calibratedPlayer === undefined || !calibratedPlayer.isModeled
+        calibratedPlayer === undefined || !calibratedPlayer.isModeled || valuation === null
           ? null
           : {
               expectedPriceCents: calibratedPlayer.marketEstimateCents,
               fairHighCents: calibratedPlayer.fairHighCents,
               fairLowCents: calibratedPlayer.fairLowCents,
-              modelId: valuationLab.selectedModelId,
-              seasonsBacktested: selectedModel?.seasons.length ?? 0,
+              modelId: valuation.selectedModelId,
+              seasonsBacktested: valuation.historicalInputs.seasonKeys.length,
             },
       currentPriceCents: toCents(input.currentBidDollars),
       draftStateVersion: input.draftStateVersion,
@@ -171,6 +219,7 @@ export default defineTool({
       })),
       remainingBudgetCents: toCents(input.remainingBudgetDollars),
       remainingRosterSpots: input.remainingRosterSpots,
+      rosterMarginalValue,
       rosterSize: context.workspace.league.rosterSize,
       target:
         target === undefined ? null : { maxBidCents: target.maxBidCents, stance: target.stance },
@@ -206,6 +255,22 @@ export default defineTool({
       replacementPointsPerGame: evaluation.impact.replacementPointsPerGame,
       rosterFit: evaluation.impact.rosterFit,
       season: context.projection.seasonKey,
+      usableValue:
+        evaluation.impact.rosterMarginalValue === null
+          ? null
+          : {
+              congestionLoss: evaluation.impact.rosterMarginalValue.congestionLoss,
+              modelVersion: evaluation.impact.rosterMarginalValue.modelVersion,
+              playoffWeightedGames: evaluation.impact.rosterMarginalValue.playoffWeightedGames,
+              playoffWeightedMarginalPoints:
+                evaluation.impact.rosterMarginalValue.marginalPlayoffWeightedPoints,
+              projectedPoints: evaluation.impact.rosterMarginalValue.projectedPoints,
+              rosterMarginalPoints:
+                evaluation.impact.rosterMarginalValue.marginalRegularSeasonPoints,
+              scheduleAsOf: evaluation.impact.rosterMarginalValue.scheduleAsOf,
+              usablePoints: evaluation.impact.rosterMarginalValue.usablePoints,
+              valueDollars: toDollars(evaluation.impact.rosterMarginalValue.valueCents),
+            },
     };
   },
 });

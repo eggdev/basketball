@@ -29,6 +29,46 @@ const artifactInput = () => ({
     modelVersion: 'projection-v1',
     snapshotId: 'snapshot-1',
   },
+  productionValue: {
+    leagueFormat: {
+      fingerprint: 'league-format-1',
+      lineupSlots: [
+        {
+          code: 'FLX' as const,
+          eligiblePositions: ['PG', 'SG', 'SF', 'PF', 'C'] as const,
+          label: 'Flex',
+          maxActive: 2,
+          minActive: 0,
+        },
+      ],
+      version: 1,
+    },
+    players: season('2025-26', [null, null, null], [45, 21, 20]).players.map(
+      ({ auctionCostCents: _auctionCostCents, ...projection }, index) => ({
+        availabilityRate: 1,
+        ...projection,
+        positions: ['PG'] as const,
+        projectionRank: index + 1,
+        teamAbbreviation: index === 2 ? 'BBB' : 'AAA',
+      }),
+    ),
+    seasonCalendar: {
+      asOf: '2025-09-01T00:00:00.000Z',
+      fingerprint: 'calendar-fingerprint-1',
+      games: [
+        {
+          awayTeam: 'BBB',
+          date: '2025-10-20',
+          homeTeam: 'AAA',
+          postponed: false,
+          scheduledAt: '2025-10-20T23:00:00.000Z',
+        },
+      ],
+      playoffPeriods: [],
+      snapshotId: 'calendar-snapshot-1',
+    },
+    streamingSlotsPerTeam: 0,
+  },
 });
 
 const season = (
@@ -61,6 +101,35 @@ describe('allocateAuctionValues', () => {
     expect(result.replacementPointsPerGame).toBe(10);
     expect(result.players.reduce((sum, player) => sum + player.valueCents, 0)).toBe(20_000);
     expect(result.players.at(-1)?.valueCents).toBe(100);
+  });
+
+  it('conserves the complete auction pool for the legacy global basis', () => {
+    const result = allocateAuctionValues({
+      baseBudgetCents: 20_000,
+      players: season('2024-25', [null, null, null, null], [40, 30, 20, 10]).players,
+      rosterSize: 2,
+      teamCount: 2,
+    });
+
+    expect(result.auctionPoolCents).toBe(40_000);
+    expect(result.players.reduce((sum, player) => sum + player.valueCents, 0)).toBe(40_000);
+  });
+
+  it('orders tied players by player ID and assigns remainder dollars deterministically', () => {
+    const result = allocateAuctionValues({
+      baseBudgetCents: 200,
+      players: [
+        { fantasyPoints: 100, fantasyPointsPerGame: 10, playerId: 'player-b' },
+        { fantasyPoints: 100, fantasyPointsPerGame: 10, playerId: 'player-a' },
+      ],
+      rosterSize: 1,
+      teamCount: 1,
+    });
+
+    expect(result.players).toEqual([
+      { playerId: 'player-a', valueCents: 200 },
+      { playerId: 'player-b', valueCents: 0 },
+    ]);
   });
 });
 
@@ -245,5 +314,39 @@ describe('buildAuctionValuationArtifact', () => {
     expect(changedProjection.fingerprint).not.toBe(first.fingerprint);
     expect(changedLeague.fingerprint).not.toBe(first.fingerprint);
     expect(first.candidateResults.every((model) => model.predictions.length > 0)).toBe(true);
+  });
+
+  it('fingerprints the usable-points lineup, streaming reserve, and schedule snapshot', () => {
+    const input = artifactInput();
+    const first = buildAuctionValuationArtifact(input);
+    const changedFormat = buildAuctionValuationArtifact({
+      ...input,
+      productionValue: {
+        ...input.productionValue,
+        leagueFormat: { ...input.productionValue.leagueFormat, version: 2 },
+      },
+    });
+    const changedStreaming = buildAuctionValuationArtifact({
+      ...input,
+      productionValue: { ...input.productionValue, streamingSlotsPerTeam: 1 },
+    });
+    const changedSchedule = buildAuctionValuationArtifact({
+      ...input,
+      productionValue: {
+        ...input.productionValue,
+        seasonCalendar: {
+          ...input.productionValue.seasonCalendar,
+          fingerprint: 'calendar-fingerprint-2',
+        },
+      },
+    });
+
+    expect(changedFormat.fingerprint).not.toBe(first.fingerprint);
+    expect(changedStreaming.fingerprint).not.toBe(first.fingerprint);
+    expect(changedSchedule.fingerprint).not.toBe(first.fingerprint);
+    expect(first.productionValue).toMatchObject({
+      modelVersion: 'usable-lineup-v1',
+      schedule: { fingerprint: 'calendar-fingerprint-1' },
+    });
   });
 });

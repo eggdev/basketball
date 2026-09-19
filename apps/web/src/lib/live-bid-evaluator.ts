@@ -97,6 +97,20 @@ async function judgeWithJev(input: {
         deterministicGuardrails: {
           action: input.baseline.action,
           priceSignal: input.baseline.market.priceSignal,
+          usableValue:
+            input.baseline.impact.rosterMarginalValue === null
+              ? null
+              : {
+                  congestionLoss: input.baseline.impact.rosterMarginalValue.congestionLoss,
+                  modelVersion: input.baseline.impact.rosterMarginalValue.modelVersion,
+                  playoffWeightedMarginalPoints:
+                    input.baseline.impact.rosterMarginalValue.marginalPlayoffWeightedPoints,
+                  projectedPoints: input.baseline.impact.rosterMarginalValue.projectedPoints,
+                  rosterMarginalPoints:
+                    input.baseline.impact.rosterMarginalValue.marginalRegularSeasonPoints,
+                  scheduleAsOf: input.baseline.impact.rosterMarginalValue.scheduleAsOf,
+                  usablePoints: input.baseline.impact.rosterMarginalValue.usablePoints,
+                },
         },
         ownerPlan:
           input.plan === null

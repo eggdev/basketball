@@ -20,7 +20,8 @@ type ProjectionSortKey =
   | 'playoffs'
   | 'points'
   | 'points-per-game'
-  | 'rank';
+  | 'rank'
+  | 'usable';
 
 export function PlayersView({
   market,
@@ -88,6 +89,9 @@ export function PlayersView({
           (left.schedule?.weightedExpectedPoints ?? -1)
         );
       }
+      if (projectionSortKey === 'usable') {
+        return (right.usableValue?.valueCents ?? -1) - (left.usableValue?.valueCents ?? -1);
+      }
       if (projectionSortKey === 'expected-market') {
         return (
           (marketByPlayer.get(right.playerId)?.expectedPriceCents ?? -1) -
@@ -145,6 +149,20 @@ export function PlayersView({
               {projections.calendar.fingerprint.slice(0, 8)}
             </span>
           )}
+          {projections.players.some((player) => player.usableValue != null) ? (
+            <span className={styles.positive}>
+              {' '}
+              · Usable lineup{' '}
+              {
+                projections.players.find((player) => player.usableValue != null)?.usableValue
+                  ?.modelVersion
+              }{' '}
+              · schedule as of{' '}
+              {projections.players
+                .find((player) => player.usableValue != null)
+                ?.usableValue?.schedule.asOf.slice(0, 10)}
+            </span>
+          ) : null}
         </div>
       ) : (
         <div className={styles.warning}>
@@ -227,6 +245,7 @@ export function PlayersView({
                   <option value="games">Expected games</option>
                   <option value="availability">Availability rate</option>
                   <option value="playoffs">Playoff value</option>
+                  <option value="usable">Usable auction value</option>
                   <option value="expected-market">Historical market</option>
                 </select>
               </label>
@@ -252,12 +271,15 @@ export function PlayersView({
                   <th scope="col">Rank</th>
                   <th scope="col">Player</th>
                   <th scope="col">Projected FP</th>
+                  <th scope="col">Usable FP</th>
+                  <th scope="col">Congestion loss</th>
                   <th scope="col">FP/G</th>
                   <th scope="col">Expected games</th>
                   <th scope="col">Availability</th>
                   <th scope="col">Expected 2D / 3D</th>
                   <th scope="col">Playoff value</th>
                   <th scope="col">Historical market</th>
+                  <th scope="col">Usable value</th>
                 </tr>
               </thead>
               <tbody>
@@ -277,6 +299,18 @@ export function PlayersView({
                         </span>
                       </th>
                       <td>{formatFantasyPoints(player.fantasyPoints)}</td>
+                      <td>
+                        {player.usableValue
+                          ? formatFantasyPoints(
+                              player.usableValue.diagnostics.estimatedCapturedRegularSeasonPoints,
+                            )
+                          : '—'}
+                      </td>
+                      <td>
+                        {player.usableValue
+                          ? formatFantasyPoints(player.usableValue.diagnostics.congestionLoss)
+                          : '—'}
+                      </td>
                       <td>{formatFantasyPoints(player.fantasyPointsPerGame)}</td>
                       <td>{player.availability.expectedGames.toFixed(1)}</td>
                       <td
@@ -302,6 +336,9 @@ export function PlayersView({
                           : 'Pending'}
                       </td>
                       <td>{marketPlayer ? formatPrice(marketPlayer.expectedPriceCents) : '—'}</td>
+                      <td>
+                        {player.usableValue ? formatPrice(player.usableValue.valueCents) : '—'}
+                      </td>
                     </tr>
                   );
                 })}

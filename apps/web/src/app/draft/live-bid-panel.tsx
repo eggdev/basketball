@@ -248,7 +248,7 @@ export function LiveBidPanel({ board }: { readonly board: LiveBidBoard }) {
   const evePrompt =
     evaluation === null
       ? ''
-      : `Review the live bid on ${evaluation.player.name} at ${formatPrice(evaluation.market.currentPriceCents)}. The engine says ${actionLabel[evaluation.action].toLocaleLowerCase()}, with a ${formatPrice(evaluation.personal.maxBidCents)} personal cap and ${signalLabel[evaluation.market.priceSignal].toLocaleLowerCase()} market signal. Explain the fit for my current plan and tell me what would change your recommendation.`;
+      : `Review the live bid on ${evaluation.player.name} at ${formatPrice(evaluation.market.currentPriceCents)}. The engine says ${actionLabel[evaluation.action].toLocaleLowerCase()}, with a ${formatPrice(evaluation.personal.maxBidCents)} personal cap and ${signalLabel[evaluation.market.priceSignal].toLocaleLowerCase()} market signal.${evaluation.impact.rosterMarginalValue === null ? '' : ` The ${evaluation.impact.rosterMarginalValue.modelVersion} model estimates ${evaluation.impact.rosterMarginalValue.marginalRegularSeasonPoints.toFixed(1)} roster-marginal points, ${evaluation.impact.rosterMarginalValue.congestionLoss.toFixed(1)} congestion loss, and ${evaluation.impact.rosterMarginalValue.marginalPlayoffWeightedPoints.toFixed(1)} playoff-weighted marginal points from the schedule as of ${evaluation.impact.rosterMarginalValue.scheduleAsOf}.`} Keep league market price separate from personal production utility, explain the fit for my current plan, and tell me what would change your recommendation.`;
 
   return (
     <section className={`${styles.panel} ${styles.liveBidPanel}`}>
@@ -374,9 +374,59 @@ export function LiveBidPanel({ board }: { readonly board: LiveBidBoard }) {
                   <dd>{formatPrice(evaluation.market.projectedValueCents)}</dd>
                 </div>
                 <div>
+                  <dt>Usable value</dt>
+                  <dd>
+                    {evaluation.market.usableValueCents === null
+                      ? 'Pending'
+                      : formatPrice(evaluation.market.usableValueCents)}
+                  </dd>
+                </div>
+                <div>
                   <dt>Impact</dt>
                   <dd>+{evaluation.impact.marginalPointsPerGame.toFixed(1)} FPPG vs replacement</dd>
                 </div>
+                {evaluation.impact.rosterMarginalValue === null ? null : (
+                  <>
+                    <div>
+                      <dt>Projected / usable FP</dt>
+                      <dd>
+                        {evaluation.impact.rosterMarginalValue.projectedPoints.toFixed(1)} /{' '}
+                        {evaluation.impact.rosterMarginalValue.usablePoints.toFixed(1)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Congestion loss</dt>
+                      <dd>{evaluation.impact.rosterMarginalValue.congestionLoss.toFixed(1)} FP</dd>
+                    </div>
+                    <div>
+                      <dt>Roster marginal</dt>
+                      <dd>
+                        {evaluation.impact.rosterMarginalValue.marginalRegularSeasonPoints.toFixed(
+                          1,
+                        )}{' '}
+                        FP · {evaluation.impact.rosterMarginalValue.daysBenched} bench days
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Playoff weighted</dt>
+                      <dd>
+                        {evaluation.impact.rosterMarginalValue.marginalPlayoffWeightedPoints.toFixed(
+                          1,
+                        )}{' '}
+                        marginal FP ·{' '}
+                        {evaluation.impact.rosterMarginalValue.playoffWeightedGames.toFixed(1)}{' '}
+                        games
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Usable model</dt>
+                      <dd>
+                        {evaluation.impact.rosterMarginalValue.modelVersion} · as of{' '}
+                        {evaluation.impact.rosterMarginalValue.scheduleAsOf.slice(0, 10)}
+                      </dd>
+                    </div>
+                  </>
+                )}
               </dl>
               <ul className={styles.liveReasons}>
                 {evaluation.reasons.map((reason) => (

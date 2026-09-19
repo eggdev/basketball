@@ -70,6 +70,22 @@ describe('evaluateLiveBid', () => {
     expect(evaluation.action).toBe('keep-bidding');
   });
 
+  it('keeps the legacy personal cap deterministic for empty and partially filled rosters', () => {
+    const emptyRoster = evaluate({ remainingBudgetCents: 50_000 });
+    const partiallyFilled = evaluate({
+      ownedPlayerIds: ['anchor', 'replacement'],
+      playerId: 'wing',
+      remainingBudgetCents: 50_000,
+    });
+
+    expect(emptyRoster.personal).toMatchObject({
+      maxBidCents: 29_800,
+      maxBidSource: 'model',
+    });
+    expect(partiallyFilled.impact.rosterFit).toBe('fills-need');
+    expect(partiallyFilled.personal.maxBidCents).toBe(7_500);
+  });
+
   it('keeps observed league price separate from projection value', () => {
     const evaluation = evaluate({
       currentPriceCents: 4_000,
@@ -86,6 +102,41 @@ describe('evaluateLiveBid', () => {
     expect(evaluation.market.fairLowCents).toBe(4_200);
     expect(evaluation.market.fairHighCents).toBe(5_800);
     expect(evaluation.market.priceSignal).toBe('under-value');
+  });
+
+  it('uses roster-marginal utility for the personal cap without changing market value', () => {
+    const evaluation = evaluate({
+      remainingBudgetCents: 50_000,
+      rosterMarginalValue: {
+        candidateStandalonePlayoffWeightedPoints: 200,
+        candidateStandaloneRegularSeasonPoints: 2_520,
+        concentrationRisk: {
+          level: 'high',
+          sameTeamPlayerCount: 3,
+          sameTeamRosterShare: 0.5,
+        },
+        capturedPlayoffWeightedPoints: 120,
+        congestionLoss: 300,
+        daysBenched: 30,
+        filledSlotNeeds: ['PG'],
+        marginalPlayoffWeightedPoints: 60,
+        marginalRegularSeasonPoints: 500,
+        modelVersion: 'usable-lineup-v1',
+        playoffWeightedGames: 10,
+        projectedPoints: 2_520,
+        scheduleAsOf: '2026-09-19T00:00:00.000Z',
+        usablePoints: 2_220,
+        valueCents: 5_000,
+      },
+    });
+
+    expect(evaluation.market.projectedValueCents).toBe(28_900);
+    expect(evaluation.market.usableValueCents).toBe(5_000);
+    expect(evaluation.personal).toMatchObject({
+      maxBidCents: 5_000,
+      valueBasis: 'roster-marginal-usable-lineup-v1',
+    });
+    expect(evaluation.action).toBe('keep-bidding');
   });
 
   it('prefers an empirically calibrated market range over the raw historical average', () => {

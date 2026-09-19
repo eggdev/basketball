@@ -1,11 +1,11 @@
 import Link from 'next/link';
 
-import { formatPrice, formatSignedPrice } from '../../../lib/format';
+import { formatFantasyPoints, formatPrice, formatSignedPrice } from '../../../lib/format';
 import { loadHistoricalRankings } from '../../../lib/historical-rankings';
 import { loadLatestProjectionSnapshot } from '../../../lib/latest-projections';
 import { loadPreDraftWorkspace } from '../../../lib/pre-draft-workspace';
 import {
-  createAuctionValuationArtifact,
+  createAuctionValuationLab,
   loadPromotedAuctionValuationRun,
 } from '../../../lib/valuation-lab';
 import { loadViewer } from '../../../lib/viewer';
@@ -43,7 +43,7 @@ export default async function ValuationLabPage() {
   const preview =
     rankings === null || projection === null || workspace === null || workspace.league === null
       ? null
-      : createAuctionValuationArtifact({ league: workspace.league, projection, rankings });
+      : createAuctionValuationLab({ league: workspace.league, projection, rankings });
   const promoted =
     projection === null
       ? null
@@ -54,19 +54,22 @@ export default async function ValuationLabPage() {
       : promoted.projection.snapshotId === projection?.snapshotId
         ? 'Promoted'
         : 'Stale';
-  const lab =
-    preview === null
-      ? null
-      : {
-          current: preview.current,
-          limitations: preview.limitations,
-          methodology: preview.methodology,
-          models: preview.candidateResults,
-          selectedModelId: preview.selectedModelId,
-          version: preview.modelVersion,
-        };
+  const lab = preview;
   const selectedModel = lab?.models.find((model) => model.id === lab.selectedModelId) ?? null;
-  const currentPlayers = lab?.current?.players.slice(0, 75) ?? [];
+  const usableRun =
+    promoted !== null &&
+    promoted.projection.snapshotId === projection?.snapshotId &&
+    promoted.productionValue !== null
+      ? promoted
+      : null;
+  const usableByPlayer = new Map(
+    usableRun?.current.players.map((player) => [player.playerId, player]) ?? [],
+  );
+  const currentPlayers =
+    lab?.current?.players.slice(0, 75).map((player) => ({
+      ...player,
+      usable: usableByPlayer.get(player.playerId) ?? null,
+    })) ?? [];
   const hindsightBargains =
     selectedModel?.predictions
       .filter(
@@ -85,7 +88,10 @@ export default async function ValuationLabPage() {
       : [
           `Review our auction valuation calibration results. The selected model is ${selectedModel.label} (${selectedModel.id}).`,
           `Its drafted-player MAE is ${formatPrice(selectedModel.metrics.draftedPlayerMaeCents ?? 0)}, with ${percentage(selectedModel.metrics.fairRangeCoverageRate)} fair-range coverage across ${selectedModel.metrics.draftedPlayerCount} drafted-player predictions.`,
-          'Explain what this does and does not prove, identify the most decision-relevant current value gaps, and propose one concrete next calibration experiment. Do not describe hindsight production as a preseason projection.',
+          usableRun?.productionValue == null
+            ? 'The usable-lineup production experiment is not promoted for this projection; do not infer roster utility from market price.'
+            : `Keep expected league price separate from ${usableRun.productionValue.modelVersion} production utility using schedule ${usableRun.productionValue.schedule.fingerprint.slice(0, 8)}.`,
+          'Explain what this does and does not prove, identify the most decision-relevant current value gaps, and propose one concrete next calibration experiment. Do not describe hindsight production as a preseason projection or playoff probability.',
         ].join(' ');
 
   return (
@@ -122,10 +128,13 @@ export default async function ValuationLabPage() {
         <>
           <div className={styles.notice}>
             <strong>{promotionState}</strong>
-            {lab.methodology} Preview fingerprint {preview?.fingerprint.slice(0, 12)}.{' '}
+            {lab.methodology}{' '}
             {promoted === null
               ? 'This preview does not power live advice.'
               : `Run ${promoted.runId} was promoted ${promoted.promotedAt ?? 'at an unknown time'} against projection ${promoted.projection.asOf}.`}
+            {usableRun?.productionValue == null
+              ? ' Usable-lineup value is not promoted for this projection.'
+              : ` ${usableRun.productionValue.modelVersion} · schedule as of ${usableRun.productionValue.schedule.asOf.slice(0, 10)} · ${usableRun.productionValue.schedule.fingerprint.slice(0, 8)}.`}
           </div>
 
           <div className={styles.sectionStack}>
@@ -289,8 +298,8 @@ export default async function ValuationLabPage() {
                 <div>
                   <h2>{lab.current?.seasonKey ?? 'Current'} calibrated board</h2>
                   <p>
-                    Expected league price, empirical error range, and current projection value stay
-                    separate.
+                    Expected league price predicts demand. Projection and usable-lineup values are
+                    separate production axes.
                   </p>
                 </div>
                 <span className={styles.badge}>{currentPlayers.length} shown</span>
@@ -307,6 +316,10 @@ export default async function ValuationLabPage() {
                       <th>Market estimate</th>
                       <th>Fair range</th>
                       <th>Projection value</th>
+                      <th>Usable value</th>
+                      <th>Projected / captured FP</th>
+                      <th>Congestion loss</th>
+                      <th>Playoff weighted</th>
                       <th>Value gap</th>
                       <th>History</th>
                     </tr>
@@ -325,6 +338,26 @@ export default async function ValuationLabPage() {
                             : '—'}
                         </td>
                         <td>{formatPrice(player.projectedValueCents)}</td>
+                        <td>
+                          {player.usable?.usableValueCents == null
+                            ? '—'
+                            : formatPrice(player.usable.usableValueCents)}
+                        </td>
+                        <td>
+                          {player.usable?.usableDiagnostics == null
+                            ? '—'
+                            : `${formatFantasyPoints(player.usable.usableDiagnostics.rawProjectedPoints)} / ${formatFantasyPoints(player.usable.usableDiagnostics.estimatedCapturedRegularSeasonPoints)}`}
+                        </td>
+                        <td>
+                          {player.usable?.usableDiagnostics == null
+                            ? '—'
+                            : formatFantasyPoints(player.usable.usableDiagnostics.congestionLoss)}
+                        </td>
+                        <td>
+                          {player.usable?.usableDiagnostics == null
+                            ? '—'
+                            : `${formatFantasyPoints(player.usable.usableDiagnostics.capturedPlayoffWeightedPoints)} FP · ${player.usable.usableDiagnostics.playoffWeightedGames.toFixed(1)} games`}
+                        </td>
                         <td
                           className={
                             player.projectedEdgeCents >= 0 ? styles.positive : styles.negative
