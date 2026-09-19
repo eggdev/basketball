@@ -117,7 +117,7 @@ describe('PlayersView season calendar freshness', () => {
     expect(html).toContain('Quarterfinal P20');
     expect(html).toContain('4 games');
     expect(html).toContain('usable-lineup-v1');
-    expect(html).toContain('2,880.0');
+    expect(html).toContain('2,988.0');
     expect(html).toContain('120.0');
     expect(html).toContain('$65');
     expect(html).not.toContain('Calendar Pending');

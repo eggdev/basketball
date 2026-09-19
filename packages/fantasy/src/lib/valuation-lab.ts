@@ -770,14 +770,14 @@ export function buildAuctionValuationArtifact(input: {
   }
   const orderedSeasonCalendar = {
     ...input.productionValue.seasonCalendar,
+    fantasyPeriods: [...input.productionValue.seasonCalendar.fantasyPeriods].sort(
+      (left, right) => left.scoringPeriod - right.scoringPeriod,
+    ),
     games: [...input.productionValue.seasonCalendar.games].sort(
       (left, right) =>
         left.scheduledAt.localeCompare(right.scheduledAt) ||
         left.homeTeam.localeCompare(right.homeTeam) ||
         left.awayTeam.localeCompare(right.awayTeam),
-    ),
-    playoffPeriods: [...input.productionValue.seasonCalendar.playoffPeriods].sort(
-      (left, right) => left.scoringPeriod - right.scoringPeriod,
     ),
   };
   const usableBoard = buildUsablePointsBoard({

@@ -124,11 +124,32 @@ describe('auction valuation run workflow', () => {
       ...input,
       seasonCalendar: { ...input.seasonCalendar, fingerprint: 'calendar-fingerprint-2' },
     });
+    const changedPeriodBoundary = planAuctionValuationRun({
+      ...input,
+      seasonCalendar: {
+        ...input.seasonCalendar,
+        fantasyPeriods: input.seasonCalendar.fantasyPeriods.map((period) => ({
+          ...period,
+          endAt: '2026-10-27T23:59:59.999Z',
+        })),
+      },
+    });
 
     expect(reordered.fingerprint).toBe(baseline.fingerprint);
     expect(changed.fingerprint).not.toBe(baseline.fingerprint);
+    expect(changedPeriodBoundary.fingerprint).not.toBe(baseline.fingerprint);
     expect(baseline.productionValue).toMatchObject({
       leagueFormat: { version: 1 },
+      seasonCalendar: {
+        fantasyPeriods: [
+          {
+            endAt: '2026-10-26T23:59:59.999Z',
+            phase: 'regular-season',
+            scoringPeriod: 1,
+            startAt: '2026-10-20T00:00:00.000Z',
+          },
+        ],
+      },
       streamingSlotsPerTeam: 1,
     });
   });

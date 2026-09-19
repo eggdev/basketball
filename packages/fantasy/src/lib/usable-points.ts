@@ -16,19 +16,20 @@ export interface UsablePointsPlayer {
 export interface UsablePointsCalendar {
   readonly asOf: string;
   readonly fingerprint: string;
+  readonly fantasyPeriods: ReadonlyArray<{
+    readonly endAt: string;
+    readonly label: string;
+    readonly phase: 'playoffs' | 'regular-season';
+    readonly scoringPeriod: number;
+    readonly startAt: string;
+    readonly weight: number;
+  }>;
   readonly games: ReadonlyArray<{
     readonly awayTeam: string;
     readonly date: string;
     readonly homeTeam: string;
     readonly postponed: boolean;
     readonly scheduledAt: string;
-  }>;
-  readonly playoffPeriods: ReadonlyArray<{
-    readonly endAt: string;
-    readonly label: string;
-    readonly scoringPeriod: number;
-    readonly startAt: string;
-    readonly weight: number;
   }>;
   readonly snapshotId: string;
 }
@@ -121,6 +122,8 @@ interface WeightedPlayer {
   readonly weight: number;
 }
 
+type TeamScheduleByDate = ReadonlyMap<string, ReadonlyMap<string, string>>;
+
 const round = (value: number, places = 3): number => {
   const factor = 10 ** places;
   return Math.round((value + Number.EPSILON) * factor) / factor;
@@ -146,6 +149,37 @@ const expandedSlots = (
 
 const isEligible = (player: UsablePointsPlayer, slot: SlotInstance): boolean =>
   player.positions.some((position) => slot.eligiblePositions.has(position));
+
+const fantasyPeriodForTimestamp = (
+  scheduledAt: string,
+  periods: UsablePointsCalendar['fantasyPeriods'],
+) => {
+  const timestamp = Date.parse(scheduledAt);
+  return periods.find(
+    (period) => timestamp >= Date.parse(period.startAt) && timestamp <= Date.parse(period.endAt),
+  );
+};
+
+const teamScheduleByDate = (calendar: UsablePointsCalendar): TeamScheduleByDate => {
+  const result = new Map<string, Map<string, string>>();
+  calendar.games.forEach((calendarGame) => {
+    if (calendarGame.postponed) return;
+    if (
+      fantasyPeriodForTimestamp(calendarGame.scheduledAt, calendar.fantasyPeriods) === undefined
+    ) {
+      return;
+    }
+    const teams = result.get(calendarGame.date) ?? new Map<string, string>();
+    for (const team of [calendarGame.homeTeam, calendarGame.awayTeam]) {
+      const existing = teams.get(team);
+      if (existing === undefined || calendarGame.scheduledAt.localeCompare(existing) < 0) {
+        teams.set(team, calendarGame.scheduledAt);
+      }
+    }
+    result.set(calendarGame.date, teams);
+  });
+  return result;
+};
 
 /**
  * Selects the maximum-weight matchable player subset. Matchable player sets form
@@ -209,6 +243,22 @@ const validateInput = (input: UsablePointsBoardInput): void => {
     throw new RangeError('streaming slots must be a non-negative integer below roster size');
   }
   if (input.lineupSlots.length === 0) throw new Error('lineup slots are required');
+  if (input.seasonCalendar.fantasyPeriods.length === 0)
+    throw new Error('Fantrax scoring periods are required');
+  if (
+    new Set(input.seasonCalendar.fantasyPeriods.map((period) => period.scoringPeriod)).size !==
+    input.seasonCalendar.fantasyPeriods.length
+  ) {
+    throw new Error('Fantrax scoring periods must be unique');
+  }
+  input.seasonCalendar.fantasyPeriods.forEach((period) => {
+    const startAt = Date.parse(period.startAt);
+    const endAt = Date.parse(period.endAt);
+    if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || startAt > endAt)
+      throw new Error(`Fantrax scoring period ${period.scoringPeriod} has invalid boundaries`);
+    if (!Number.isFinite(period.weight) || period.weight <= 0)
+      throw new Error(`Fantrax scoring period ${period.scoringPeriod} has invalid weight`);
+  });
   if (new Set(input.players.map((player) => player.playerId)).size !== input.players.length)
     throw new Error('usable-points players must be unique');
   input.players.forEach((player) => {
@@ -232,52 +282,52 @@ export function buildUsablePointsBoard(input: UsablePointsBoardInput): UsablePoi
     teamPlayers.push(player);
     playersByTeam.set(player.teamAbbreviation, teamPlayers);
   });
-  const teamsByDate = new Map<string, Set<string>>();
-  input.seasonCalendar.games.forEach((calendarGame) => {
-    if (calendarGame.postponed) return;
-    const teams = teamsByDate.get(calendarGame.date) ?? new Set<string>();
-    teams.add(calendarGame.homeTeam);
-    teams.add(calendarGame.awayTeam);
-    teamsByDate.set(calendarGame.date, teams);
-  });
+  const scheduleByDate = teamScheduleByDate(input.seasonCalendar);
 
   const expectedByPlayer = new Map<string, number>();
   const capturedByPlayer = new Map<string, number>();
   const regularSeasonCapturedByPlayer = new Map<string, number>();
   const playoffByPlayer = new Map<string, number>();
   const playoffGamesByPlayer = new Map<string, number>();
-  const dailyAssignments = [...teamsByDate.entries()]
+  const dailyAssignments = [...scheduleByDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([date, teams]): DailyLineupAssignment => {
-      const scheduledPlayers = [...teams].flatMap((team) => playersByTeam.get(team) ?? []);
-      const weightedPlayers = scheduledPlayers.map((scheduledPlayer) => {
+      const scheduledPlayers = [...teams.entries()].flatMap(([team, scheduledAt]) =>
+        (playersByTeam.get(team) ?? []).map((scheduledPlayer) => ({
+          player: scheduledPlayer,
+          scheduledAt,
+        })),
+      );
+      const weightedPlayers = scheduledPlayers.map(({ player: scheduledPlayer, scheduledAt }) => {
         const weight = scheduledPlayer.fantasyPointsPerGame * scheduledPlayer.availabilityRate;
         expectedByPlayer.set(
           scheduledPlayer.playerId,
           (expectedByPlayer.get(scheduledPlayer.playerId) ?? 0) + weight,
         );
-        return { player: scheduledPlayer, weight };
+        return { player: scheduledPlayer, scheduledAt, weight };
       });
       const assignment = assignLineup({
         capacityMultiplier: input.teamCount,
         lineupSlots: input.lineupSlots,
         players: weightedPlayers,
       });
-      const period = input.seasonCalendar.playoffPeriods.find(
-        (candidate) =>
-          Date.parse(`${date}T12:00:00.000Z`) >= Date.parse(candidate.startAt) &&
-          Date.parse(`${date}T12:00:00.000Z`) <= Date.parse(candidate.endAt),
-      );
       assignment.selected.forEach(({ playerId }) => {
-        const weight =
-          weightedPlayers.find(({ player }) => player.playerId === playerId)?.weight ?? 0;
+        const selectedPlayer = weightedPlayers.find(({ player }) => player.playerId === playerId);
+        const weight = selectedPlayer?.weight ?? 0;
+        const period =
+          selectedPlayer === undefined
+            ? undefined
+            : fantasyPeriodForTimestamp(
+                selectedPlayer.scheduledAt,
+                input.seasonCalendar.fantasyPeriods,
+              );
         capturedByPlayer.set(playerId, (capturedByPlayer.get(playerId) ?? 0) + weight);
-        if (period === undefined) {
+        if (period?.phase === 'regular-season') {
           regularSeasonCapturedByPlayer.set(
             playerId,
             (regularSeasonCapturedByPlayer.get(playerId) ?? 0) + weight,
           );
-        } else {
+        } else if (period !== undefined) {
           playoffByPlayer.set(
             playerId,
             (playoffByPlayer.get(playerId) ?? 0) + weight * period.weight,
@@ -285,8 +335,7 @@ export function buildUsablePointsBoard(input: UsablePointsBoardInput): UsablePoi
           playoffGamesByPlayer.set(
             playerId,
             (playoffGamesByPlayer.get(playerId) ?? 0) +
-              input.players.find((player) => player.playerId === playerId)!.availabilityRate *
-                period.weight,
+              selectedPlayer!.player.availabilityRate * period.weight,
           );
         }
       });
@@ -392,48 +441,48 @@ export function buildUsablePointsBoard(input: UsablePointsBoardInput): UsablePoi
   };
 }
 
-const playoffWeightForDate = (
-  date: string,
-  periods: UsablePointsCalendar['playoffPeriods'],
-): number => {
-  const timestamp = Date.parse(`${date}T12:00:00.000Z`);
-  return (
-    periods.find(
-      (period) => timestamp >= Date.parse(period.startAt) && timestamp <= Date.parse(period.endAt),
-    )?.weight ?? 0
-  );
-};
-
 const rosterSchedule = (input: {
   readonly lineupSlots: ReadonlyArray<LeagueLineupSlot>;
   readonly players: ReadonlyArray<UsablePointsPlayer>;
   readonly seasonCalendar: UsablePointsCalendar;
 }) => {
-  const teamsByDate = new Map<string, Set<string>>();
-  input.seasonCalendar.games.forEach((calendarGame) => {
-    if (calendarGame.postponed) return;
-    const teams = teamsByDate.get(calendarGame.date) ?? new Set<string>();
-    teams.add(calendarGame.homeTeam);
-    teams.add(calendarGame.awayTeam);
-    teamsByDate.set(calendarGame.date, teams);
-  });
-  return [...teamsByDate.entries()]
+  return [...teamScheduleByDate(input.seasonCalendar).entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([date, teams]) => {
-      const scheduled = input.players
-        .filter((player) => teams.has(player.teamAbbreviation))
-        .map((player) => ({
-          player,
-          weight: player.fantasyPointsPerGame * player.availabilityRate,
-        }));
+      const scheduled = input.players.flatMap((player) => {
+        const scheduledAt = teams.get(player.teamAbbreviation);
+        return scheduledAt === undefined
+          ? []
+          : [
+              {
+                player,
+                scheduledAt,
+                weight: player.fantasyPointsPerGame * player.availabilityRate,
+              },
+            ];
+      });
+      const assignment = assignLineup({
+        capacityMultiplier: 1,
+        lineupSlots: input.lineupSlots,
+        players: scheduled,
+      });
+      let playoffWeightedPoints = 0;
+      let regularSeasonPoints = 0;
+      assignment.selected.forEach(({ playerId }) => {
+        const selected = scheduled.find(({ player }) => player.playerId === playerId);
+        if (selected === undefined) return;
+        const period = fantasyPeriodForTimestamp(
+          selected.scheduledAt,
+          input.seasonCalendar.fantasyPeriods,
+        );
+        if (period?.phase === 'regular-season') regularSeasonPoints += selected.weight;
+        else if (period !== undefined) playoffWeightedPoints += selected.weight * period.weight;
+      });
       return {
-        assignment: assignLineup({
-          capacityMultiplier: 1,
-          lineupSlots: input.lineupSlots,
-          players: scheduled,
-        }),
+        assignment,
         date,
-        playoffWeight: playoffWeightForDate(date, input.seasonCalendar.playoffPeriods),
+        playoffWeightedPoints,
+        regularSeasonPoints,
         scheduled,
       };
     });
@@ -463,18 +512,22 @@ export function evaluateRosterCandidate(input: RosterCandidateInput): RosterCand
 
   withCandidate.forEach((day, index) => {
     const baseline = withoutCandidate[index];
-    const marginal =
-      day.assignment.totalExpectedPoints - (baseline?.assignment.totalExpectedPoints ?? 0);
-    if (day.playoffWeight === 0) marginalRegularSeasonPoints += marginal;
-    else marginalPlayoffWeightedPoints += marginal * day.playoffWeight;
+    marginalRegularSeasonPoints += day.regularSeasonPoints - (baseline?.regularSeasonPoints ?? 0);
+    marginalPlayoffWeightedPoints +=
+      day.playoffWeightedPoints - (baseline?.playoffWeightedPoints ?? 0);
     const candidateScheduled = day.scheduled.find(
       ({ player }) => player.playerId === input.candidate.playerId,
     );
     if (candidateScheduled === undefined) return;
-    if (day.playoffWeight === 0) {
+    const candidatePeriod = fantasyPeriodForTimestamp(
+      candidateScheduled.scheduledAt,
+      input.seasonCalendar.fantasyPeriods,
+    );
+    if (candidatePeriod?.phase === 'regular-season') {
       candidateStandaloneRegularSeasonPoints += candidateScheduled.weight;
-    } else {
-      candidateStandalonePlayoffWeightedPoints += candidateScheduled.weight * day.playoffWeight;
+    } else if (candidatePeriod !== undefined) {
+      candidateStandalonePlayoffWeightedPoints +=
+        candidateScheduled.weight * candidatePeriod.weight;
     }
     const selected = day.assignment.selected.find(
       ({ playerId }) => playerId === input.candidate.playerId,
@@ -490,7 +543,7 @@ export function evaluateRosterCandidate(input: RosterCandidateInput): RosterCand
   const concentrationLevel =
     sameTeamPlayerCount >= 3 && sameTeamRosterShare >= 0.35
       ? 'high'
-      : sameTeamPlayerCount >= 2 || sameTeamRosterShare >= 0.2
+      : sameTeamPlayerCount >= 2 && sameTeamRosterShare >= 0.2
         ? 'moderate'
         : 'low';
   const slotOrder = new Map(input.lineupSlots.map((slot, index) => [slot.code, index]));

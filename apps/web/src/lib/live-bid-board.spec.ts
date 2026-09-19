@@ -130,6 +130,16 @@ describe('evaluateLiveBidBoard', () => {
         scheduleAsOf: '2026-09-19T00:00:00.000Z',
         seasonCalendar: {
           asOf: '2026-09-19T00:00:00.000Z',
+          fantasyPeriods: [
+            {
+              endAt: '2026-10-31T23:59:59.999Z',
+              label: 'Regular season',
+              phase: 'regular-season',
+              scoringPeriod: 1,
+              startAt: '2026-10-01T00:00:00.000Z',
+              weight: 1,
+            },
+          ],
           fingerprint: 'calendar-1',
           games: [
             {
@@ -140,7 +150,6 @@ describe('evaluateLiveBidBoard', () => {
               scheduledAt: '2026-10-20T23:00:00.000Z',
             },
           ],
-          playoffPeriods: [],
           snapshotId: 'snapshot-1',
         },
       },
@@ -170,6 +179,16 @@ describe('evaluateLiveBidBoard', () => {
   it('keeps prepared-board evaluation below the 300 ms p95 target', () => {
     const calendar = {
       asOf: '2026-09-19T00:00:00.000Z',
+      fantasyPeriods: [
+        {
+          endAt: '2027-01-31T23:59:59.999Z',
+          label: 'Regular season',
+          phase: 'regular-season' as const,
+          scoringPeriod: 1,
+          startAt: '2026-10-01T00:00:00.000Z',
+          weight: 1,
+        },
+      ],
       fingerprint: 'calendar-benchmark',
       games: Array.from({ length: 82 }, (_, index) => {
         const scheduledAt = new Date(Date.UTC(2026, 9, 20 + index, 23));
@@ -181,7 +200,6 @@ describe('evaluateLiveBidBoard', () => {
           scheduledAt: scheduledAt.toISOString(),
         };
       }),
-      playoffPeriods: [],
       snapshotId: 'snapshot-benchmark',
     };
     const benchmarkBoard: LiveBidBoard = {

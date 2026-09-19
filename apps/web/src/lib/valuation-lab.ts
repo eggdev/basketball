@@ -104,31 +104,32 @@ export function createAuctionValuationArtifact(input: {
       })),
       seasonCalendar: {
         asOf: input.calendar.fantraxCapturedAt,
+        fantasyPeriods: input.calendar.fantasyPeriods.map((period) => ({
+          endAt: period.endAt,
+          label:
+            period.phase === 'regular-season'
+              ? `Scoring period ${period.scoringPeriod}`
+              : period.playoffRound === 'final'
+                ? 'Championship'
+                : period.playoffRound === 'semifinal'
+                  ? 'Semifinal'
+                  : period.playoffRound === 'quarterfinal'
+                    ? 'Quarterfinal'
+                    : 'Playoffs',
+          phase: period.phase,
+          scoringPeriod: period.scoringPeriod,
+          startAt: period.startAt,
+          weight:
+            period.phase === 'regular-season'
+              ? 1
+              : period.playoffRound === 'final'
+                ? 1.5
+                : period.playoffRound === 'quarterfinal'
+                  ? 0.75
+                  : 1,
+        })),
         fingerprint: input.calendar.fingerprint,
         games: input.calendar.games,
-        playoffPeriods: input.calendar.fantasyPeriods.flatMap((period) =>
-          period.phase === 'playoffs' && period.playoffRound !== null
-            ? [
-                {
-                  endAt: period.endAt,
-                  label:
-                    period.playoffRound === 'final'
-                      ? 'Championship'
-                      : period.playoffRound === 'semifinal'
-                        ? 'Semifinal'
-                        : 'Quarterfinal',
-                  scoringPeriod: period.scoringPeriod,
-                  startAt: period.startAt,
-                  weight:
-                    period.playoffRound === 'final'
-                      ? 1.5
-                      : period.playoffRound === 'semifinal'
-                        ? 1
-                        : 0.75,
-                },
-              ]
-            : [],
-        ),
         snapshotId: input.calendar.nbaScheduleSnapshotId,
       },
       streamingSlotsPerTeam: input.streamingSlotsPerTeam,

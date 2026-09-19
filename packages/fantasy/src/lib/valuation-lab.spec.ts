@@ -54,6 +54,16 @@ const artifactInput = () => ({
     ),
     seasonCalendar: {
       asOf: '2025-09-01T00:00:00.000Z',
+      fantasyPeriods: [
+        {
+          endAt: '2025-10-31T23:59:59.999Z',
+          label: 'Regular season',
+          phase: 'regular-season' as const,
+          scoringPeriod: 1,
+          startAt: '2025-10-01T00:00:00.000Z',
+          weight: 1,
+        },
+      ],
       fingerprint: 'calendar-fingerprint-1',
       games: [
         {
@@ -64,7 +74,6 @@ const artifactInput = () => ({
           scheduledAt: '2025-10-20T23:00:00.000Z',
         },
       ],
-      playoffPeriods: [],
       snapshotId: 'calendar-snapshot-1',
     },
     streamingSlotsPerTeam: 0,

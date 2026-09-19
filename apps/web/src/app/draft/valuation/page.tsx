@@ -70,6 +70,9 @@ export default async function ValuationLabPage() {
       ...player,
       usable: usableByPlayer.get(player.playerId) ?? null,
     })) ?? [];
+  const limitations = [
+    ...new Set([...(lab?.limitations ?? []), ...(usableRun?.limitations ?? [])]),
+  ];
   const hindsightBargains =
     selectedModel?.predictions
       .filter(
@@ -317,7 +320,7 @@ export default async function ValuationLabPage() {
                       <th>Fair range</th>
                       <th>Projection value</th>
                       <th>Usable value</th>
-                      <th>Projected / captured FP</th>
+                      <th>Projected / usable FP</th>
                       <th>Congestion loss</th>
                       <th>Playoff weighted</th>
                       <th>Value gap</th>
@@ -346,7 +349,7 @@ export default async function ValuationLabPage() {
                         <td>
                           {player.usable?.usableDiagnostics == null
                             ? '—'
-                            : `${formatFantasyPoints(player.usable.usableDiagnostics.rawProjectedPoints)} / ${formatFantasyPoints(player.usable.usableDiagnostics.estimatedCapturedRegularSeasonPoints)}`}
+                            : `${formatFantasyPoints(player.usable.usableDiagnostics.rawProjectedPoints)} / ${formatFantasyPoints(player.usable.usableDiagnostics.usablePoints)}`}
                         </td>
                         <td>
                           {player.usable?.usableDiagnostics == null
@@ -376,7 +379,7 @@ export default async function ValuationLabPage() {
 
             <div className={styles.warning}>
               <strong>Known limits</strong>
-              {lab.limitations.join(' ')}
+              {limitations.join(' ')}
             </div>
           </div>
         </>

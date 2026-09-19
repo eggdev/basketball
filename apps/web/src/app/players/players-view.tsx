@@ -301,9 +301,7 @@ export function PlayersView({
                       <td>{formatFantasyPoints(player.fantasyPoints)}</td>
                       <td>
                         {player.usableValue
-                          ? formatFantasyPoints(
-                              player.usableValue.diagnostics.estimatedCapturedRegularSeasonPoints,
-                            )
+                          ? formatFantasyPoints(player.usableValue.diagnostics.usablePoints)
                           : '—'}
                       </td>
                       <td>

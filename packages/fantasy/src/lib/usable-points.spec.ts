@@ -16,6 +16,64 @@ const game = {
   scheduledAt: '2026-10-20T23:00:00.000Z',
 };
 
+const regularFantasyPeriods: UsablePointsBoardInput['seasonCalendar']['fantasyPeriods'] = [
+  {
+    endAt: '2026-11-30T23:59:59.999Z',
+    label: 'Regular season',
+    phase: 'regular-season',
+    scoringPeriod: 1,
+    startAt: '2026-10-01T00:00:00.000Z',
+    weight: 1,
+  },
+];
+
+const sameDayPlayoffBoundaryCalendar: UsablePointsBoardInput['seasonCalendar'] = {
+  asOf: '2027-03-01T00:00:00.000Z',
+  fingerprint: 'calendar-same-day-boundary',
+  fantasyPeriods: [
+    {
+      endAt: '2027-03-15T22:59:58.000Z',
+      label: 'Quarterfinal',
+      phase: 'playoffs',
+      scoringPeriod: 21,
+      startAt: '2027-03-08T00:00:00.000Z',
+      weight: 0.75,
+    },
+    {
+      endAt: '2027-03-22T22:59:58.000Z',
+      label: 'Semifinal',
+      phase: 'playoffs',
+      scoringPeriod: 22,
+      startAt: '2027-03-15T23:00:00.000Z',
+      weight: 1,
+    },
+  ],
+  games: [
+    {
+      awayTeam: 'BBB',
+      date: '2027-03-15',
+      homeTeam: 'AAA',
+      postponed: false,
+      scheduledAt: '2027-03-15T22:59:58.000Z',
+    },
+    {
+      awayTeam: 'BBB',
+      date: '2027-03-15',
+      homeTeam: 'AAA',
+      postponed: false,
+      scheduledAt: '2027-03-15T22:59:58.000Z',
+    },
+    {
+      awayTeam: 'DDD',
+      date: '2027-03-15',
+      homeTeam: 'CCC',
+      postponed: false,
+      scheduledAt: '2027-03-15T23:00:00.000Z',
+    },
+  ],
+  snapshotId: 'snapshot-same-day-boundary',
+};
+
 const player = (
   playerId: string,
   positions: UsablePointsPlayer['positions'],
@@ -56,9 +114,9 @@ const board = (
       input.seasonCalendar ??
       ({
         asOf: '2026-09-19T00:00:00.000Z',
+        fantasyPeriods: regularFantasyPeriods,
         fingerprint: 'calendar-1',
         games: [game],
-        playoffPeriods: [],
         snapshotId: 'snapshot-1',
       } satisfies UsablePointsBoardInput['seasonCalendar']),
     streamingSlotsPerTeam: input.streamingSlotsPerTeam ?? 0,
@@ -206,6 +264,7 @@ describe('buildUsablePointsBoard league value', () => {
       rosterSize: 2,
       seasonCalendar: {
         asOf: '2026-09-19T00:00:00.000Z',
+        fantasyPeriods: regularFantasyPeriods,
         fingerprint: 'calendar-2',
         games: [
           game,
@@ -216,7 +275,6 @@ describe('buildUsablePointsBoard league value', () => {
             scheduledAt: '2026-10-21T23:00:00.000Z',
           },
         ],
-        playoffPeriods: [],
         snapshotId: 'snapshot-2',
       },
     });
@@ -234,17 +292,18 @@ describe('buildUsablePointsBoard league value', () => {
       players: [{ ...player('managed', ['PG'], 20), availabilityRate: 0.5 }],
       seasonCalendar: {
         asOf: '2026-09-19T00:00:00.000Z',
-        fingerprint: 'calendar-playoff',
-        games: [game],
-        playoffPeriods: [
+        fantasyPeriods: [
           {
             endAt: '2026-10-20T23:59:59.999Z',
             label: 'Championship',
+            phase: 'playoffs',
             scoringPeriod: 24,
             startAt: '2026-10-20T00:00:00.000Z',
             weight: 2,
           },
         ],
+        fingerprint: 'calendar-playoff',
+        games: [game],
         snapshotId: 'snapshot-playoff',
       },
     });
@@ -257,6 +316,81 @@ describe('buildUsablePointsBoard league value', () => {
       expectedScheduledPoints: 10,
       playoffWeightedGames: 1,
       usablePoints: 20,
+    });
+  });
+
+  it('uses exact scheduled timestamps across same-day playoff boundaries', () => {
+    const result = board({
+      lineupSlots: slots(slot('FLX', ['PG', 'SG', 'SF', 'PF', 'C'], 2)),
+      players: [player('quarterfinal', ['PG'], 10, 'AAA'), player('semifinal', ['SG'], 20, 'CCC')],
+      seasonCalendar: sameDayPlayoffBoundaryCalendar,
+    });
+
+    expect(result.dailyAssignments).toHaveLength(1);
+    expect(result.dailyAssignments[0]?.totalExpectedPoints).toBe(30);
+    expect(result.players.find(({ playerId }) => playerId === 'quarterfinal')).toMatchObject({
+      capturedPlayoffWeightedPoints: 7.5,
+      expectedScheduledPoints: 10,
+      playoffWeightedGames: 0.75,
+    });
+    expect(result.players.find(({ playerId }) => playerId === 'semifinal')).toMatchObject({
+      capturedPlayoffWeightedPoints: 20,
+      expectedScheduledPoints: 20,
+      playoffWeightedGames: 1,
+    });
+  });
+
+  it('excludes games outside the Fantrax scoring-period window', () => {
+    const seasonCalendar = {
+      asOf: '2026-09-19T00:00:00.000Z',
+      fantasyPeriods: [
+        {
+          endAt: '2026-10-20T23:59:59.999Z',
+          label: 'Regular season',
+          phase: 'regular-season' as const,
+          scoringPeriod: 1,
+          startAt: '2026-10-20T00:00:00.000Z',
+          weight: 1,
+        },
+      ],
+      fingerprint: 'calendar-window',
+      games: [
+        {
+          ...game,
+          date: '2026-10-19',
+          scheduledAt: '2026-10-19T23:00:00.000Z',
+        },
+        game,
+        {
+          ...game,
+          date: '2026-10-21',
+          scheduledAt: '2026-10-21T23:00:00.000Z',
+        },
+      ],
+      snapshotId: 'snapshot-window',
+    };
+    const candidate = player('in-window', ['PG'], 20);
+    const result = board({
+      lineupSlots: slots(slot('PG', ['PG'])),
+      players: [candidate],
+      seasonCalendar,
+    });
+    const marginal = evaluateRosterCandidate({
+      candidate,
+      lineupSlots: slots(slot('PG', ['PG'])),
+      roster: [],
+      seasonCalendar,
+    });
+
+    expect(result.dailyAssignments).toHaveLength(1);
+    expect(result.players[0]).toMatchObject({
+      estimatedCapturedRegularSeasonPoints: 20,
+      expectedScheduledPoints: 20,
+      usablePoints: 20,
+    });
+    expect(marginal).toMatchObject({
+      candidateStandaloneRegularSeasonPoints: 20,
+      marginalRegularSeasonPoints: 20,
     });
   });
 
@@ -291,9 +425,9 @@ describe('evaluateRosterCandidate', () => {
       roster: [player('guard-one', ['PG'], 39), player('guard-two', ['PG'], 38)],
       seasonCalendar: {
         asOf: '2026-09-19T00:00:00.000Z',
+        fantasyPeriods: regularFantasyPeriods,
         fingerprint: 'calendar-1',
         games: [game],
-        playoffPeriods: [],
         snapshotId: 'snapshot-1',
       },
     });
@@ -303,9 +437,9 @@ describe('evaluateRosterCandidate', () => {
       roster: [player('center', ['C'], 10)],
       seasonCalendar: {
         asOf: '2026-09-19T00:00:00.000Z',
+        fantasyPeriods: regularFantasyPeriods,
         fingerprint: 'calendar-1',
         games: [game],
-        playoffPeriods: [],
         snapshotId: 'snapshot-1',
       },
     });
@@ -320,6 +454,51 @@ describe('evaluateRosterCandidate', () => {
     expect(guardHeavy.concentrationRisk).toEqual({
       level: 'high',
       sameTeamPlayerCount: 3,
+      sameTeamRosterShare: 1,
+    });
+  });
+
+  it('uses the candidate game timestamp for same-day playoff marginal value', () => {
+    const quarterfinal = evaluateRosterCandidate({
+      candidate: player('quarterfinal', ['PG'], 10, 'AAA'),
+      lineupSlots: slots(slot('FLX', ['PG', 'SG', 'SF', 'PF', 'C'])),
+      roster: [],
+      seasonCalendar: sameDayPlayoffBoundaryCalendar,
+    });
+    const semifinal = evaluateRosterCandidate({
+      candidate: player('semifinal', ['SG'], 20, 'CCC'),
+      lineupSlots: slots(slot('FLX', ['PG', 'SG', 'SF', 'PF', 'C'])),
+      roster: [],
+      seasonCalendar: sameDayPlayoffBoundaryCalendar,
+    });
+
+    expect(quarterfinal).toMatchObject({
+      candidateStandalonePlayoffWeightedPoints: 7.5,
+      marginalPlayoffWeightedPoints: 7.5,
+    });
+    expect(semifinal).toMatchObject({
+      candidateStandalonePlayoffWeightedPoints: 20,
+      marginalPlayoffWeightedPoints: 20,
+    });
+  });
+
+  it('treats a first player from one NBA team as low concentration risk', () => {
+    const result = evaluateRosterCandidate({
+      candidate: player('first-player', ['PG'], 20, 'AAA'),
+      lineupSlots: slots(slot('PG', ['PG'])),
+      roster: [],
+      seasonCalendar: {
+        asOf: '2026-09-19T00:00:00.000Z',
+        fantasyPeriods: regularFantasyPeriods,
+        fingerprint: 'calendar-1',
+        games: [game],
+        snapshotId: 'snapshot-1',
+      },
+    });
+
+    expect(result.concentrationRisk).toEqual({
+      level: 'low',
+      sameTeamPlayerCount: 1,
       sameTeamRosterShare: 1,
     });
   });

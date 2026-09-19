@@ -1121,19 +1121,20 @@ export interface AuctionValuationArtifactInput {
     readonly seasonCalendar: {
       readonly asOf: string;
       readonly fingerprint: string;
+      readonly fantasyPeriods: ReadonlyArray<{
+        readonly endAt: string;
+        readonly label: string;
+        readonly phase: 'playoffs' | 'regular-season';
+        readonly scoringPeriod: number;
+        readonly startAt: string;
+        readonly weight: number;
+      }>;
       readonly games: ReadonlyArray<{
         readonly awayTeam: string;
         readonly date: string;
         readonly homeTeam: string;
         readonly postponed: boolean;
         readonly scheduledAt: string;
-      }>;
-      readonly playoffPeriods: ReadonlyArray<{
-        readonly endAt: string;
-        readonly label: string;
-        readonly scoringPeriod: number;
-        readonly startAt: string;
-        readonly weight: number;
       }>;
       readonly snapshotId: string;
     };
@@ -1230,6 +1231,18 @@ export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtif
       throw new Error('schedule fingerprint must be SHA-256');
     if (!/^[a-f0-9]{64}$/.test(artifact.productionValue.leagueFormat.fingerprint))
       throw new Error('league format fingerprint must be SHA-256');
+    if (artifact.productionValue.seasonCalendar.fantasyPeriods.length === 0)
+      throw new Error('usable production value requires Fantrax scoring periods');
+    if (
+      artifact.productionValue.seasonCalendar.snapshotId !==
+        artifact.productionValue.schedule.snapshotId ||
+      artifact.productionValue.seasonCalendar.fingerprint !==
+        artifact.productionValue.schedule.fingerprint ||
+      Date.parse(artifact.productionValue.seasonCalendar.asOf) !==
+        Date.parse(artifact.productionValue.schedule.asOf)
+    ) {
+      throw new Error('usable production schedule provenance must match its season calendar');
+    }
     const usablePool = artifact.current.players.reduce(
       (total, player) => total + (player.usableValueCents ?? 0),
       0,
@@ -1922,7 +1935,10 @@ const databaseServiceLayer = Layer.effect(
           AuctionValuationArtifactInput['current']['players'][number]['usableDiagnostics']
         > | null;
         usable_value_cents: number | null;
-        valuation_production_value: AuctionValuationArtifactInput['productionValue'];
+        valuation_model_version: string | null;
+        valuation_schedule:
+          | NonNullable<AuctionValuationArtifactInput['productionValue']>['schedule']
+          | null;
       }>`
         select
           pp.player_id,
@@ -1936,7 +1952,8 @@ const databaseServiceLayer = Layer.effect(
           pp.schedule,
           avp.usable_value_cents,
           avp.usable_diagnostics,
-          avr.production_value as valuation_production_value,
+          avr.production_value ->> 'modelVersion' as valuation_model_version,
+          avr.production_value -> 'schedule' as valuation_schedule,
           row_number() over (
             order by
               pp.expected_fantasy_points desc,
@@ -1967,12 +1984,13 @@ const databaseServiceLayer = Layer.effect(
           usableValue:
             row.usable_value_cents === null ||
             row.usable_diagnostics === null ||
-            row.valuation_production_value === null
+            row.valuation_model_version === null ||
+            row.valuation_schedule === null
               ? null
               : {
                   diagnostics: row.usable_diagnostics,
-                  modelVersion: row.valuation_production_value.modelVersion,
-                  schedule: row.valuation_production_value.schedule,
+                  modelVersion: row.valuation_model_version,
+                  schedule: row.valuation_schedule,
                   valueCents: row.usable_value_cents,
                 },
         }),

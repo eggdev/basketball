@@ -133,6 +133,16 @@ const artifact = (): AuctionValuationArtifactInput => ({
     },
     seasonCalendar: {
       asOf: '2026-09-19T12:00:00.000Z',
+      fantasyPeriods: [
+        {
+          endAt: '2026-10-31T23:59:59.999Z',
+          label: 'Regular season',
+          phase: 'regular-season',
+          scoringPeriod: 1,
+          startAt: '2026-10-01T00:00:00.000Z',
+          weight: 1,
+        },
+      ],
       fingerprint: 'd'.repeat(64),
       games: [
         {
@@ -143,7 +153,6 @@ const artifact = (): AuctionValuationArtifactInput => ({
           scheduledAt: '2026-10-20T23:00:00.000Z',
         },
       ],
-      playoffPeriods: [],
       snapshotId: '00000000-0000-4000-8000-000000000020',
     },
     streamingSlotsPerTeam: 1,
@@ -222,6 +231,18 @@ describe('validateAuctionValuationArtifact', () => {
         },
       }),
     ).toThrow('conserve');
+    expect(() =>
+      validateAuctionValuationArtifact({
+        ...artifact(),
+        productionValue: {
+          ...artifact().productionValue!,
+          seasonCalendar: {
+            ...artifact().productionValue!.seasonCalendar,
+            fantasyPeriods: [],
+          },
+        },
+      }),
+    ).toThrow('Fantrax scoring periods');
   });
 });
 

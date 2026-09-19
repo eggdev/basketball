@@ -85,6 +85,16 @@ const board: LiveBidBoard = {
     scheduleAsOf: '2026-09-19T00:00:00.000Z',
     seasonCalendar: {
       asOf: '2026-09-19T00:00:00.000Z',
+      fantasyPeriods: [
+        {
+          endAt: '2026-10-31T23:59:59.999Z',
+          label: 'Regular season',
+          phase: 'regular-season',
+          scoringPeriod: 1,
+          startAt: '2026-10-01T00:00:00.000Z',
+          weight: 1,
+        },
+      ],
       fingerprint: 'calendar-1',
       games: [
         {
@@ -95,7 +105,6 @@ const board: LiveBidBoard = {
           scheduledAt: '2026-10-20T23:00:00.000Z',
         },
       ],
-      playoffPeriods: [],
       snapshotId: 'snapshot-1',
     },
   },
