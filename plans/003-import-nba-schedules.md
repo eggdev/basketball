@@ -17,6 +17,11 @@
 - **Depends on**: `plans/001-reconcile-player-identities.md`
 - **Category**: direction / data ingestion
 - **Planned at**: commit `009198a`, 2026-09-18
+- **Result**: DONE — independently approved at `0effe41`. The live 2026-27
+  validation authorized successfully and returned 1,200 currently scheduled
+  NBA games across all 30 teams plus 21 dated Fantrax periods, including three
+  playoff rounds. Migration 0011 is additive and was exercised on disposable
+  PostgreSQL 18. Production was not migrated or imported during review.
 
 ## Why this matters
 
@@ -234,14 +239,14 @@ and missing schedules; `bun run check && bun run build` -> both exit 0.
 
 ## Done criteria
 
-- [ ] One command validates and one explicitly imports the active season calendar.
-- [ ] NBA games come from the official endpoint through cached/rate-limited transport.
-- [ ] Fantrax playoff periods come from league info rather than hardcoded dates.
-- [ ] Stored projections reference the exact calendar snapshot/fingerprint used.
-- [ ] Player projections contain schedule values for every resolved NBA team.
-- [ ] Stale and missing schedules are visible in the UI.
-- [ ] `bun run check && bun run build` exits 0.
-- [ ] Only in-scope files and `plans/README.md` are modified.
+- [x] One command validates and one explicitly imports the active season calendar.
+- [x] NBA games come from the official endpoint through cached/rate-limited transport.
+- [x] Fantrax playoff periods come from league info rather than hardcoded dates.
+- [x] Stored projections reference the exact calendar snapshot/fingerprint used.
+- [x] Player projections contain schedule values for every resolved NBA team.
+- [x] Stale and missing schedules are visible in the UI.
+- [x] `bun run check && bun run build` exits 0.
+- [x] Only in-scope files and `plans/README.md` are modified.
 
 ## STOP conditions
 
