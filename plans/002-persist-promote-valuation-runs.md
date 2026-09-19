@@ -267,4 +267,3 @@ historical records.
 - Reviewers should verify no future data enters a historical walk-forward fold.
 - Plan 004 will create a new usable-points valuation basis; it must create and
   promote a new run, never edit this plan's earlier artifacts.
-

@@ -264,4 +264,3 @@ deployment limit with headroom.
 - The durable live auction ledger remains separate future work. Its real events
   can later replay through this state machine for evaluation, but this plan must
   not couple simulation to Fantrax transport.
-

@@ -236,4 +236,3 @@ that only the active plan powers default live recommendations.
 - Reviewers should scrutinize active/preview separation and ownership checks.
 - Deletion remains intentionally deferred because archived plans may be
   referenced by future simulation and conversation records.
-

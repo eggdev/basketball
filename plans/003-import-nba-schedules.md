@@ -258,4 +258,3 @@ and missing schedules; `bun run check && bun run build` -> both exit 0.
 - Future providers can be adapters at the existing season-calendar seam.
 - Plan 004 relies on dated games, not merely weekly totals; reviewers must make
   sure the read model preserves individual game dates.
-

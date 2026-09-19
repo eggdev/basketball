@@ -245,4 +245,3 @@ intent.
   than visual polish.
 - Plan 007 must preserve intervals and sample confidence; it must not collapse
   profiles to one deterministic maximum bid.
-

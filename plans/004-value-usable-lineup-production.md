@@ -273,4 +273,3 @@ action. Document how to roll back to the prior promoted run.
   tie determinism, and separation between market price and personal utility.
 - Future game-level historical data can add real captured-points backtests
   without changing this module's external interface.
-
