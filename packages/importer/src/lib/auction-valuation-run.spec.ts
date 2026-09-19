@@ -58,6 +58,16 @@ describe('auction valuation run workflow', () => {
     expect(planAuctionValuationRun(input)).toEqual(planAuctionValuationRun(input));
   });
 
+  it('rejects league settings from a different season', () => {
+    const input = inputs();
+    expect(() =>
+      planAuctionValuationRun({
+        ...input,
+        league: { ...input.league, seasonKey: '2025-26' },
+      }),
+    ).toThrow('League season does not match projection season');
+  });
+
   it('sends the same immutable artifact for idempotent saves', async () => {
     const artifact = planAuctionValuationRun(inputs());
     const saveAuctionValuationRun = vi.fn<

@@ -61,8 +61,13 @@ export interface AuctionValuationCommitter<Error> {
   ) => Effect.Effect<SaveAuctionValuationRunResult, Error>;
 }
 
-export const planAuctionValuationRun = (input: AuctionValuationInputs): AuctionValuationArtifact =>
-  buildAuctionValuationArtifact({
+export const planAuctionValuationRun = (
+  input: AuctionValuationInputs,
+): AuctionValuationArtifact => {
+  if (input.league.seasonKey !== input.projection.seasonKey) {
+    throw new Error('League season does not match projection season');
+  }
+  return buildAuctionValuationArtifact({
     current: {
       baseBudgetCents: input.league.baseBudgetCents,
       players: input.projection.players,
@@ -84,6 +89,7 @@ export const planAuctionValuationRun = (input: AuctionValuationInputs): AuctionV
       snapshotId: input.projection.snapshotId,
     },
   });
+};
 
 export const commitAuctionValuationRun = <Error>(
   artifact: AuctionValuationArtifact,

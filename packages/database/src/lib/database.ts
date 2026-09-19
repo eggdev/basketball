@@ -953,9 +953,25 @@ const moneyFields = [
 export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtifactInput): void => {
   if (!/^[a-f0-9]{64}$/.test(artifact.fingerprint))
     throw new Error('valuation fingerprint must be SHA-256');
+  if (!/^[a-f0-9]{64}$/.test(artifact.historicalInputs.fingerprint))
+    throw new Error('historical input fingerprint must be SHA-256');
   if (artifact.current.seasonKey !== artifact.seasonKey)
     throw new Error('valuation current season does not match artifact season');
   if (artifact.current.players.length === 0) throw new Error('valuation run is incomplete');
+  if (artifact.candidateResults.length === 0)
+    throw new Error('valuation run requires candidate results');
+  const candidateIds = artifact.candidateResults.map((candidate) => {
+    if (candidate === null || typeof candidate !== 'object' || !('id' in candidate))
+      throw new Error('valuation candidate requires an ID');
+    const id = candidate.id;
+    if (typeof id !== 'string' || id.trim() === '')
+      throw new Error('valuation candidate requires an ID');
+    return id;
+  });
+  if (!candidateIds.includes(artifact.selectedModelId))
+    throw new Error('selected valuation model is absent from candidate results');
+  if (new Set(candidateIds).size !== candidateIds.length)
+    throw new Error('valuation candidate IDs must be unique');
   const players = new Set<string>();
   const ranks = new Set<number>();
   artifact.current.players.forEach((player) => {
@@ -969,6 +985,39 @@ export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtif
       if (!Number.isSafeInteger(player[field])) throw new Error(`${field} must be integer cents`);
     });
   });
+};
+
+/** Confirms that a candidate contains the complete, exact projection snapshot input. */
+export const validateAuctionValuationProjectionLink = (
+  artifact: AuctionValuationArtifactInput,
+  projection: {
+    readonly asOf: string;
+    readonly modelVersion: string;
+    readonly playerIds: ReadonlyArray<string>;
+    readonly seasonKey: string;
+  },
+): void => {
+  if (projection.seasonKey !== artifact.seasonKey)
+    throw new Error('Valuation season does not match projection snapshot');
+  if (projection.modelVersion !== artifact.projection.modelVersion)
+    throw new Error('Valuation projection model does not match projection snapshot');
+  const artifactAsOf = Date.parse(artifact.projection.asOf);
+  const projectionAsOf = Date.parse(projection.asOf);
+  if (
+    !Number.isFinite(artifactAsOf) ||
+    !Number.isFinite(projectionAsOf) ||
+    artifactAsOf !== projectionAsOf
+  ) {
+    throw new Error('Valuation projection timestamp does not match projection snapshot');
+  }
+  const artifactPlayers = new Set(artifact.current.players.map((player) => player.playerId));
+  const projectionPlayers = new Set(projection.playerIds);
+  if (
+    artifactPlayers.size !== projectionPlayers.size ||
+    [...artifactPlayers].some((playerId) => !projectionPlayers.has(playerId))
+  ) {
+    throw new Error('Valuation players do not exactly match projection snapshot');
+  }
 };
 
 export const planAuctionValuationPromotion = (input: {
@@ -5063,12 +5112,6 @@ const databaseServiceLayer = Layer.effect(
     ): Effect.Effect<SaveAuctionValuationRunResult, DatabaseUnavailable> => {
       const operation = Effect.gen(function* () {
         yield* Effect.try(() => validateAuctionValuationArtifact(artifact));
-        const [existing] = yield* sql<{ id: string }>`
-          select id from fantasy.auction_valuation_runs
-          where fingerprint = ${artifact.fingerprint}
-        `;
-        if (existing !== undefined) return { alreadySaved: true, runId: existing.id };
-
         const [projection] = yield* sql<{
           as_of: string;
           model_version: string;
@@ -5079,23 +5122,36 @@ const databaseServiceLayer = Layer.effect(
           where id = ${artifact.projection.snapshotId}
         `;
         if (projection === undefined) throw new Error('Projection snapshot does not exist');
-        if (projection.season_key !== artifact.seasonKey)
-          throw new Error('Valuation season does not match projection snapshot');
-        if (projection.model_version !== artifact.projection.modelVersion)
-          throw new Error('Valuation projection model does not match projection snapshot');
+        const projectionPlayers = yield* sql<{ player_id: string }>`
+          select player_id
+          from fantasy.player_projections
+          where snapshot_id = ${artifact.projection.snapshotId}
+          order by player_id
+        `;
+        yield* Effect.try(() =>
+          validateAuctionValuationProjectionLink(artifact, {
+            asOf: projection.as_of,
+            modelVersion: projection.model_version,
+            playerIds: projectionPlayers.map((player) => player.player_id),
+            seasonKey: projection.season_key,
+          }),
+        );
 
-        const playerIds = artifact.current.players.flatMap((player) => [
-          player.playerId,
-          ...(player.historyPlayerId === null ? [] : [player.historyPlayerId]),
-        ]);
-        const existingPlayers =
-          playerIds.length === 0
+        const historyPlayerIds = [
+          ...new Set(
+            artifact.current.players.flatMap((player) =>
+              player.historyPlayerId === null ? [] : [player.historyPlayerId],
+            ),
+          ),
+        ];
+        const existingHistoryPlayers =
+          historyPlayerIds.length === 0
             ? []
             : yield* sql<{
                 id: string;
-              }>`select id from fantasy.players where id in ${sql.in(playerIds)}`;
-        if (new Set(existingPlayers.map((player) => player.id)).size !== new Set(playerIds).size)
-          throw new Error('Valuation references an unknown player');
+              }>`select id from fantasy.players where id in ${sql.in(historyPlayerIds)}`;
+        if (existingHistoryPlayers.length !== historyPlayerIds.length)
+          throw new Error('Valuation references an unknown historical player');
 
         const [run] = yield* sql<{ id: string }>`
           insert into fantasy.auction_valuation_runs
@@ -5115,9 +5171,17 @@ const databaseServiceLayer = Layer.effect(
               ${artifact.selectedModelId}, ${artifact.selectionRule}, ${artifact.methodology},
               ${sql.json(artifact.limitations)}
             )
+          on conflict (fingerprint) do nothing
           returning id
         `;
-        if (run === undefined) throw new Error('Valuation run was not created');
+        if (run === undefined) {
+          const [winner] = yield* sql<{ id: string }>`
+            select id from fantasy.auction_valuation_runs
+            where fingerprint = ${artifact.fingerprint}
+          `;
+          if (winner === undefined) throw new Error('Valuation run conflict winner was not found');
+          return { alreadySaved: true, runId: winner.id };
+        }
         yield* sql`
           insert into fantasy.auction_valuation_players ${sql.insert(
             artifact.current.players.map((player) => ({

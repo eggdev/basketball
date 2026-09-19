@@ -4,6 +4,7 @@ import {
   loadDatabaseConfig,
   planAuctionValuationPromotion,
   validateAuctionValuationArtifact,
+  validateAuctionValuationProjectionLink,
   type AuctionValuationArtifactInput,
 } from './database';
 
@@ -59,7 +60,7 @@ describe('loadDatabaseConfig', () => {
 
 const artifact = (): AuctionValuationArtifactInput => ({
   artifactVersion: 'auction-valuation-artifact-v1',
-  candidateResults: [],
+  candidateResults: [{ id: 'recency-market-v1' }],
   current: {
     players: [
       {
@@ -127,6 +128,52 @@ describe('validateAuctionValuationArtifact', () => {
         current: { ...artifact().current, players: [] },
       }),
     ).toThrow('incomplete');
+  });
+
+  it('requires complete candidate metadata and historical provenance', () => {
+    expect(() => validateAuctionValuationArtifact({ ...artifact(), candidateResults: [] })).toThrow(
+      'candidate results',
+    );
+    expect(() =>
+      validateAuctionValuationArtifact({ ...artifact(), selectedModelId: 'missing-model' }),
+    ).toThrow('absent from candidate results');
+    expect(() =>
+      validateAuctionValuationArtifact({
+        ...artifact(),
+        historicalInputs: { ...artifact().historicalInputs, fingerprint: 'invalid' },
+      }),
+    ).toThrow('historical input fingerprint');
+  });
+});
+
+describe('validateAuctionValuationProjectionLink', () => {
+  const projection = () => ({
+    asOf: '2026-09-18T00:00:00.000Z',
+    modelVersion: 'projection-v1',
+    playerIds: ['00000000-0000-4000-8000-000000000001'],
+    seasonKey: '2026-27',
+  });
+
+  it('accepts exact timestamps and player sets independent of ordering', () => {
+    expect(() => validateAuctionValuationProjectionLink(artifact(), projection())).not.toThrow();
+  });
+
+  it('rejects snapshot omissions, extras, and timestamp drift', () => {
+    expect(() =>
+      validateAuctionValuationProjectionLink(artifact(), { ...projection(), playerIds: [] }),
+    ).toThrow('exactly match');
+    expect(() =>
+      validateAuctionValuationProjectionLink(artifact(), {
+        ...projection(),
+        playerIds: [...projection().playerIds, 'extra-player'],
+      }),
+    ).toThrow('exactly match');
+    expect(() =>
+      validateAuctionValuationProjectionLink(artifact(), {
+        ...projection(),
+        asOf: '2026-09-18T00:00:00.001Z',
+      }),
+    ).toThrow('timestamp');
   });
 });
 
