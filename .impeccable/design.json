@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-20T14:01:07Z",
+  "title": "Design System: Fantasy Basketball Draft Room",
+  "extensions": {
+    "colorMeta": {
+      "brand-navy": {
+        "role": "primary",
+        "displayName": "Court Navy",
+        "canonical": "#00428b",
+        "tonalRamp": ["#000a15", "#001225", "#001a35", "#00244a", "#003164", "#00428b", "#6aa1d9", "#dbeeff"]
+      },
+      "brand-gray": {
+        "role": "neutral",
+        "displayName": "League Gray",
+        "canonical": "#919798",
+        "tonalRamp": ["#171a1b", "#292d2e", "#414647", "#5c6263", "#777d7e", "#919798", "#c7cbcc", "#f2f3f3"]
+      },
+      "brand-orange": {
+        "role": "primary",
+        "displayName": "Draft Orange",
+        "canonical": "#f48327",
+        "tonalRamp": ["#2b1404", "#572809", "#843f10", "#b65c19", "#f48327", "#f89d55", "#ffbd87", "#ffe7d2"]
+      },
+      "brand-white": {
+        "role": "neutral",
+        "displayName": "Scoreboard White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#262626", "#454545", "#646464", "#838383", "#a2a2a2", "#c1c1c1", "#e0e0e0", "#ffffff"]
+      },
+      "canvas-deep": {
+        "role": "neutral",
+        "displayName": "Deep Bench",
+        "canonical": "#000a15",
+        "tonalRamp": ["#000a15", "#001225", "#001a35", "#00244a", "#003164", "#00428b", "#6aa1d9", "#dbeeff"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Night Court",
+        "canonical": "#001225",
+        "tonalRamp": ["#000a15", "#001225", "#001a35", "#00244a", "#003164", "#00428b", "#6aa1d9", "#dbeeff"]
+      },
+      "surface-1": {
+        "role": "neutral",
+        "displayName": "Navy Surface I",
+        "canonical": "#001a35",
+        "tonalRamp": ["#000a15", "#001225", "#001a35", "#00244a", "#003164", "#00428b", "#6aa1d9", "#dbeeff"]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Navy Surface II",
+        "canonical": "#00244a",
+        "tonalRamp": ["#000a15", "#001225", "#001a35", "#00244a", "#003164", "#00428b", "#6aa1d9", "#dbeeff"]
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "Navy Surface III",
+        "canonical": "#003164",
+        "tonalRamp": ["#000a15", "#001225", "#001a35", "#00244a", "#003164", "#00428b", "#6aa1d9", "#dbeeff"]
+      },
+      "surface-active": {
+        "role": "primary",
+        "displayName": "Active Navy",
+        "canonical": "#00428b",
+        "tonalRamp": ["#000a15", "#001225", "#001a35", "#00244a", "#003164", "#00428b", "#6aa1d9", "#dbeeff"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Primary Ink",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#262626", "#454545", "#646464", "#838383", "#a2a2a2", "#c1c1c1", "#e0e0e0", "#ffffff"]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Cool Silver",
+        "canonical": "#c8cccd",
+        "tonalRamp": ["#1d2021", "#343839", "#4d5253", "#676d6e", "#83898a", "#a0a5a6", "#c8cccd", "#f1f2f2"]
+      },
+      "ink-subtle": {
+        "role": "neutral",
+        "displayName": "Metadata Gray",
+        "canonical": "#919798",
+        "tonalRamp": ["#171a1b", "#292d2e", "#414647", "#5c6263", "#777d7e", "#919798", "#c7cbcc", "#f2f3f3"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline Gray",
+        "canonical": "rgb(145 151 152 / 0.22)",
+        "tonalRamp": ["#171a1b", "#292d2e", "#414647", "#5c6263", "#777d7e", "#919798", "#c7cbcc", "#f2f3f3"]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline Gray",
+        "canonical": "rgb(145 151 152 / 0.42)",
+        "tonalRamp": ["#171a1b", "#292d2e", "#414647", "#5c6263", "#777d7e", "#919798", "#c7cbcc", "#f2f3f3"]
+      },
+      "signal": {
+        "role": "primary",
+        "displayName": "Decision Signal",
+        "canonical": "#f48327",
+        "tonalRamp": ["#2b1404", "#572809", "#843f10", "#b65c19", "#f48327", "#f89d55", "#ffbd87", "#ffe7d2"]
+      },
+      "signal-soft": {
+        "role": "primary",
+        "displayName": "Soft Decision Signal",
+        "canonical": "#ffb172",
+        "tonalRamp": ["#2b1404", "#572809", "#843f10", "#b65c19", "#f48327", "#f89d55", "#ffbd87", "#ffe7d2"]
+      },
+      "success": {
+        "role": "secondary",
+        "displayName": "Verified Green",
+        "canonical": "#63d6a2",
+        "tonalRamp": ["#08231a", "#0f4431", "#176449", "#238660", "#3baa7c", "#63d6a2", "#9be8c5", "#e0faed"]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Exception Red",
+        "canonical": "#ff8f92",
+        "tonalRamp": ["#2b0b0d", "#57161a", "#84252a", "#b83b40", "#e75f64", "#ff8f92", "#ffbdbe", "#ffe7e8"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Page Display", "purpose": "Responsive page titles; the only large type role." },
+      "headline": { "displayName": "Panel Headline", "purpose": "Anchors dense panel regions without competing with the page title." },
+      "title": { "displayName": "Section Title", "purpose": "Compact section and card headings." },
+      "body": { "displayName": "Analytical Body", "purpose": "Controls, supporting copy, and evidence explanations." },
+      "navigation": { "displayName": "Rail Navigation", "purpose": "Primary navigation items in the fixed or drawer rail." },
+      "label": { "displayName": "Instrument Label", "purpose": "Uppercase context, field, and table labels." },
+      "data": { "displayName": "Tabular Data", "purpose": "Comparable prices, ranks, scores, budgets, and metrics." },
+      "mono": { "displayName": "Evidence Mono", "purpose": "Inline and block code inside Eve responses." }
+    },
+    "shadows": [
+      {
+        "name": "signal-focus-halo",
+        "value": "0 0 0 3px rgb(244 131 39 / 0.1)",
+        "purpose": "Reinforces the orange focus border on active fields and the Eve composer; never used as ambient elevation."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Panel movement and one-pixel button press feedback."
+      },
+      {
+        "name": "duration-fast",
+        "value": "140ms",
+        "purpose": "Color, border, opacity, and short interaction transitions."
+      },
+      {
+        "name": "duration-panel",
+        "value": "220ms",
+        "purpose": "Eve rail and mobile navigation movement."
+      },
+      {
+        "name": "processing-pulse",
+        "value": "1.3s cubic-bezier(0.16, 1, 0.3, 1) infinite",
+        "purpose": "The compact Eve analyzing-state dot only."
+      }
+    ],
+    "breakpoints": [
+      { "name": "content-mobile", "value": "680px" },
+      { "name": "shell-mobile", "value": "760px" },
+      { "name": "workspace-collapse", "value": "1000px" },
+      { "name": "eve-overlay", "value": "1180px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The current decisive action; use once per immediate decision context.",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">Save scenario</button>",
+      "css": ".ds-button-primary { padding: 9px 12px; border: 1px solid var(--color-signal); border-radius: var(--radius-md); background: var(--color-signal); color: var(--color-canvas-deep); cursor: pointer; font-family: var(--font-ui); font-size: 0.72rem; font-weight: 750; transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) var(--ease-out); } .ds-button-primary:hover:not(:disabled) { border-color: var(--color-signal-soft); background: var(--color-signal-soft); } .ds-button-primary:active:not(:disabled) { transform: translateY(1px); } .ds-button-primary:focus-visible { outline: 2px solid var(--color-signal); outline-offset: 3px; } .ds-button-primary:disabled { cursor: not-allowed; opacity: 0.45; }"
+    },
+    {
+      "name": "Secondary Control",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A quiet navy control for supporting actions that must not compete with the decision signal.",
+      "html": "<button class=\"ds-button-secondary\" type=\"button\">Compare players</button>",
+      "css": ".ds-button-secondary { padding: 9px 12px; border: 1px solid var(--color-line-strong); border-radius: var(--radius-md); background: var(--color-surface-2); color: var(--color-ink-muted); cursor: pointer; font-family: var(--font-ui); font-size: 0.72rem; font-weight: 750; transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) var(--ease-out); } .ds-button-secondary:hover:not(:disabled) { border-color: var(--color-brand-navy); background: var(--color-surface-3); color: var(--color-ink); } .ds-button-secondary:active:not(:disabled) { transform: translateY(1px); } .ds-button-secondary:focus-visible { outline: 2px solid var(--color-signal); outline-offset: 3px; } .ds-button-secondary:disabled { cursor: not-allowed; opacity: 0.45; }"
+    },
+    {
+      "name": "Primary Navigation Item",
+      "kind": "nav",
+      "refersTo": "navigation-item-active",
+      "description": "Grouped rail navigation with a tonal hover and an orange current-page dot.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Primary navigation preview\"><a class=\"ds-nav-item\" href=\"#\"><span aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"8\" r=\"3\"></circle><path d=\"M5.5 19c.7-4 2.9-6 6.5-6s5.8 2 6.5 6\"></path></svg></span>Players</a><a class=\"ds-nav-item\" aria-current=\"page\" href=\"#\"><span aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\"><rect height=\"16\" rx=\"2\" width=\"14\" x=\"5\" y=\"4\"></rect><path d=\"M9 8h6M9 12h6M9 16h4\"></path></svg></span>Draft</a></nav>",
+      "css": ".ds-nav { padding: 18px 12px; background: var(--color-canvas-deep); font-family: var(--font-ui); } .ds-nav-item { position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid transparent; border-radius: var(--radius-md); color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 620; text-decoration: none; } .ds-nav-item:hover { background: var(--color-surface-1); color: var(--color-ink); } .ds-nav-item[aria-current='page'] { border-color: var(--color-brand-navy); background: var(--color-brand-navy); color: var(--color-brand-white); } .ds-nav-item > span { display: grid; width: 25px; height: 25px; place-items: center; border-radius: var(--radius-sm); background: rgb(var(--color-brand-gray-rgb) / 0.08); color: currentColor; } .ds-nav-item svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; } .ds-nav-item[aria-current='page']::after { position: absolute; right: 9px; width: 5px; height: 5px; border-radius: 999px; background: var(--color-signal); content: ''; } .ds-nav-item:focus-visible { outline: 2px solid var(--color-signal); outline-offset: 3px; }"
+    },
+    {
+      "name": "Statistic Card",
+      "kind": "card",
+      "refersTo": "stat-card",
+      "description": "A compact metric tile for the decisive evidence row.",
+      "html": "<article class=\"ds-stat-card\"><span>Budget remaining</span><strong>$127</strong></article>",
+      "css": ".ds-stat-card { padding: 14px 16px; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-surface-2); font-family: var(--font-ui); } .ds-stat-card span { display: block; color: var(--color-ink-subtle); font-size: 0.65rem; } .ds-stat-card strong { display: block; margin-top: 4px; color: var(--color-ink); font-size: 1.28rem; letter-spacing: -0.03em; }"
+    },
+    {
+      "name": "Labeled Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "The standard compact field for filters, scenario inputs, and live-draft controls.",
+      "html": "<label class=\"ds-field\"><span>Maximum bid</span><input type=\"text\" inputmode=\"numeric\" placeholder=\"Enter dollars\"></label>",
+      "css": ".ds-field { display: flex; min-width: 160px; flex-direction: column; gap: 4px; font-family: var(--font-ui); } .ds-field > span { color: var(--color-ink-subtle); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; } .ds-field input { min-width: 0; padding: 8px 10px; border: 1px solid var(--color-line-strong); border-radius: 8px; outline: none; background: var(--color-surface-1); color: var(--color-ink-muted); font: inherit; font-size: 0.72rem; } .ds-field input::placeholder { color: var(--color-ink-subtle); opacity: 1; } .ds-field input:focus { border-color: var(--color-signal); box-shadow: 0 0 0 3px rgb(var(--color-brand-orange-rgb) / 0.1); } .ds-field input:focus-visible { outline: 2px solid var(--color-signal); outline-offset: 3px; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "A text-plus-dot state marker; orange is attention and green is verified readiness.",
+      "html": "<span class=\"ds-status-badge ds-status-ready\">Ready</span>",
+      "css": ".ds-status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid rgb(var(--color-brand-gray-rgb) / 0.18); border-radius: 999px; color: var(--color-ink-muted); font-family: var(--font-ui); font-size: 0.6rem; white-space: nowrap; } .ds-status-badge::before { width: 6px; height: 6px; border-radius: 999px; background: var(--color-signal); content: ''; } .ds-status-ready::before { background: var(--color-success); }"
+    },
+    {
+      "name": "Evidence Caveat",
+      "kind": "custom",
+      "description": "A restrained warning container for inferred, incomplete, or unavailable evidence.",
+      "html": "<aside class=\"ds-warning\"><strong>Evidence note</strong><span>Roster activity is inferred from daily snapshots, not a confirmed transaction ledger.</span></aside>",
+      "css": ".ds-warning { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 15px; padding: 12px 14px; border: 1px solid rgb(var(--color-brand-orange-rgb) / 0.2); border-radius: var(--radius-md); background: rgb(var(--color-brand-orange-rgb) / 0.07); color: var(--color-ink-muted); font-family: var(--font-ui); font-size: 0.7rem; line-height: 1.5; } .ds-warning strong { flex: none; color: var(--color-ink-muted); }"
+    },
+    {
+      "name": "Eve Composer",
+      "kind": "custom",
+      "description": "The spatially stable analyst input with the same field and decision-action grammar as the workspace.",
+      "html": "<form class=\"ds-composer\"><label for=\"ds-eve-message\">Message Eve</label><div><textarea id=\"ds-eve-message\" placeholder=\"Ask about a player, team, or price…\" rows=\"2\"></textarea><button type=\"submit\">Send</button></div></form>",
+      "css": ".ds-composer { padding: 12px 14px 16px; border-top: 1px solid rgb(var(--color-brand-gray-rgb) / 0.11); font-family: var(--font-ui); } .ds-composer > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); } .ds-composer > div { display: flex; align-items: flex-end; gap: 8px; } .ds-composer textarea { min-height: 46px; flex: 1; resize: none; padding: 10px 11px; border: 1px solid var(--color-line-strong); border-radius: 10px; outline: none; background: var(--color-canvas); color: var(--color-ink); font: inherit; font-size: 0.72rem; line-height: 1.4; } .ds-composer textarea:focus { border-color: var(--color-signal); box-shadow: 0 0 0 3px rgb(var(--color-brand-orange-rgb) / 0.1); } .ds-composer button { padding: 10px 12px; border-radius: 9px; background: var(--color-signal); color: var(--color-canvas-deep); font: inherit; font-weight: 800; } .ds-composer textarea:focus-visible, .ds-composer button:focus-visible { outline: 2px solid var(--color-signal); outline-offset: 3px; }"
+    },
+    {
+      "name": "Live Decision",
+      "kind": "custom",
+      "description": "The draft-room judgment pattern that keeps the deterministic action, metrics, and Eve caveat visually distinct.",
+      "html": "<section class=\"ds-live-decision\"><div class=\"ds-live-hero\"><strong class=\"ds-live-action ds-live-caution\">Hold</strong><div><strong>Jalen Williams</strong><small>Current bid $42</small></div></div><dl class=\"ds-live-metrics\"><div><dt>Maximum bid</dt><dd>$46</dd></div><div><dt>Budget after</dt><dd>$85</dd></div><div><dt>Roster spots</dt><dd>7</dd></div><div><dt>Market gap</dt><dd>+$4</dd></div></dl><p class=\"ds-live-judgment\"><span>Eve</span>Price is within the deterministic cap; current roster fit remains the deciding factor.</p></section>",
+      "css": ".ds-live-decision { padding: 16px; border: 1px solid rgb(var(--color-brand-gray-rgb) / 0.13); border-radius: 12px; background: rgb(0 18 37 / 0.46); font-family: var(--font-ui); } .ds-live-hero { display: flex; align-items: center; gap: 12px; } .ds-live-hero > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; } .ds-live-hero > div > strong { color: var(--color-ink); font-size: 1rem; } .ds-live-hero small { color: var(--color-ink-subtle); font-size: 0.66rem; } .ds-live-action { min-width: 92px; padding: 8px 10px; border: 1px solid currentColor; border-radius: 8px; font-size: 0.68rem; font-weight: 850; text-align: center; text-transform: uppercase; } .ds-live-caution { color: var(--color-signal); } .ds-live-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 15px 0 0; } .ds-live-metrics div { padding: 10px; border: 1px solid rgb(var(--color-brand-gray-rgb) / 0.09); border-radius: 8px; background: rgb(0 26 53 / 0.65); } .ds-live-metrics dt { color: var(--color-ink-subtle); font-size: 0.58rem; text-transform: uppercase; } .ds-live-metrics dd { margin: 4px 0 0; color: var(--color-ink-muted); font-size: 0.68rem; font-weight: 700; } .ds-live-judgment { margin: 12px 0 0; padding: 10px 11px; border-left: 1px solid var(--color-signal); background: rgb(var(--color-brand-orange-rgb) / 0.05); color: var(--color-ink-subtle); font-size: 0.64rem; line-height: 1.5; } .ds-live-judgment span { margin-right: 7px; color: var(--color-signal); font-weight: 800; text-transform: uppercase; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Front-Office Control Deck",
+    "overview": "The Draft Room is a continuous navy instrument frame for making evidence-backed decisions under pressure. Its product grammar is dark, compact, and operational: a restrained adaptation of Linear's structural clarity, not a copy of its marketing language or visual identity. League research, live decisions, and Eve all occupy the same composed field so the owner never loses context when moving from evidence to judgment.\n\nThe visual system earns confidence through stable geometry, dense but legible information, and explicit evidence states. Matte tonal layers and hairline rules establish hierarchy without turning each dataset into a floating card. Orange is deliberately scarce; it identifies an active, selected, or decisive moment, while white carries primary information and cool gray carries provenance, metadata, and uncertainty.",
+    "keyCharacteristics": [
+      "Continuous matte-navy frame with a narrow navigation rail, broad evidence workspace, and spatially stable Eve rail.",
+      "Compact neutral typography, tight tracking, and tabular numerals for scan-heavy league evidence.",
+      "Tonal depth and hairline borders instead of ambient shadows, glow, gradients, or a white SaaS card grid.",
+      "Restrained orange decision signals, with green and red reserved for outcome semantics.",
+      "Evidence caveats remain visible wherever data is inferred, incomplete, unavailable, or degraded."
+    ],
+    "rules": [
+      { "name": "The One Navy Family Rule", "body": "Blue surfaces stay inside the Court Navy tonal family; do not introduce an independent blue accent.", "section": "colors" },
+      { "name": "The Decision Signal Rule", "body": "Draft Orange appears at active, selected, focused, or decisive moments. It must not become ambient decoration or a general-purpose fill.", "section": "colors" },
+      { "name": "The Evidence Color Rule", "body": "Green and red describe verified state or outcome, never decorative mood; uncertainty and missing evidence remain neutral or orange-caveated.", "section": "colors" },
+      { "name": "The No Hero Type Rule", "body": "Operative screens begin with a clear page title, not a marketing headline; display type never overwhelms the evidence below it.", "section": "typography" },
+      { "name": "The Tabular Evidence Rule", "body": "Prices, ranks, budgets, scores, and rule values use tabular numerals whenever they appear in columns or changing readouts.", "section": "typography" },
+      { "name": "The Stable Frame Rule", "body": "Eve joins or overlays the instrument frame without reordering navigation or displacing the owner's current evidence context.", "section": "layout" },
+      { "name": "The Dense, Not Cramped Rule", "body": "Use the established spacing rhythm and clear tonal grouping; do not enlarge controls or add whitespace merely to make the interface feel simpler.", "section": "layout" },
+      { "name": "The Flat Instrument Rule", "body": "Surfaces remain shadowless at rest; use tonal steps and hairlines for structure, and reserve the focus halo for keyboard or text-entry focus.", "section": "elevation" },
+      { "name": "The Radius Follows Scope Rule", "body": "The larger the information region, the larger its established corner step; do not use oversized rounding to make dense analytical panels feel playful.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do preserve one continuous navy operating field across navigation, evidence, and Eve.",
+      "Do reserve Draft Orange for the current action, active state, focus, rank, or decisive evidence signal.",
+      "Do label facts, projections, inferences, unavailable evidence, and degraded AI states in visible language.",
+      "Do use tabular numerals and stable metric geometry for values that change or must be compared.",
+      "Do keep the owner spatially oriented when Eve opens, closes, streams, fails, or resumes."
+    ],
+    "donts": [
+      "Don't introduce gradients, glow, ambient card shadows, a white SaaS canvas, or an unrelated blue accent.",
+      "Don't spread orange across passive decoration or multiple competing calls to action.",
+      "Don't turn every dataset into an isolated floating card or trade scan density for ornamental whitespace.",
+      "Don't use color alone to communicate readiness, risk, failure, or evidence quality.",
+      "Don't present inferred roster activity, historical prices, projections, or Eve output as authoritative fact without its caveat."
+    ]
+  }
+}

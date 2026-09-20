@@ -124,7 +124,6 @@ export function PlayersView({
           </AskEveButton>
         }
         description="Availability-adjusted forecasts and league-scored history alongside the prices this room has actually paid."
-        eyebrow="Player research"
         title="Player rankings"
       />
 

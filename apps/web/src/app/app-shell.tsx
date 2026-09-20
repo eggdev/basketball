@@ -92,31 +92,85 @@ interface NavigationGroup {
   readonly label: string;
   readonly links: ReadonlyArray<{
     readonly href: string;
-    readonly icon: string;
+    readonly icon: NavigationIconName;
     readonly label: string;
   }>;
+}
+
+type NavigationIconName =
+  | 'draft'
+  | 'league'
+  | 'managers'
+  | 'players'
+  | 'settings'
+  | 'trades'
+  | 'waivers';
+
+function NavigationIcon({ name }: { readonly name: NavigationIconName }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      {name === 'league' ? (
+        <>
+          <path d="M5 19v-7M12 19V5M19 19V9" />
+          <path d="M3 19h18" />
+        </>
+      ) : name === 'players' ? (
+        <>
+          <circle cx="12" cy="8" r="3" />
+          <path d="M5.5 19c.7-4 2.9-6 6.5-6s5.8 2 6.5 6" />
+        </>
+      ) : name === 'managers' ? (
+        <>
+          <circle cx="9" cy="8" r="2.5" />
+          <circle cx="16.5" cy="9.5" r="2" />
+          <path d="M3.5 19c.6-4 2.5-6 5.5-6 2.8 0 4.7 1.8 5.4 5.2M14 14c3.3-.5 5.5 1.2 6.2 4.5" />
+        </>
+      ) : name === 'draft' ? (
+        <>
+          <rect height="16" rx="2" width="14" x="5" y="4" />
+          <path d="M9 8h6M9 12h6M9 16h4" />
+        </>
+      ) : name === 'trades' ? (
+        <>
+          <path d="M4 8h13M14 5l3 3-3 3" />
+          <path d="M20 16H7M10 13l-3 3 3 3" />
+        </>
+      ) : name === 'waivers' ? (
+        <>
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3.5 19c.7-4 2.6-6 5.5-6 1.7 0 3.1.6 4.1 1.8M17 12v7M13.5 15.5h7" />
+        </>
+      ) : (
+        <>
+          <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+          <circle cx="16" cy="7" r="2" />
+          <circle cx="8" cy="17" r="2" />
+        </>
+      )}
+    </svg>
+  );
 }
 
 const navigation: ReadonlyArray<NavigationGroup> = [
   {
     label: 'Research',
     links: [
-      { href: '/league', label: 'League', icon: 'L' },
-      { href: '/players', label: 'Players', icon: 'P' },
-      { href: '/managers', label: 'Managers', icon: 'M' },
+      { href: '/league', label: 'League', icon: 'league' },
+      { href: '/players', label: 'Players', icon: 'players' },
+      { href: '/managers', label: 'Managers', icon: 'managers' },
     ],
   },
   {
     label: 'Decision rooms',
     links: [
-      { href: '/draft', label: 'Draft', icon: 'D' },
-      { href: '/trades', label: 'Trades', icon: 'T' },
-      { href: '/waivers', label: 'Waivers', icon: 'W' },
+      { href: '/draft', label: 'Draft', icon: 'draft' },
+      { href: '/trades', label: 'Trades', icon: 'trades' },
+      { href: '/waivers', label: 'Waivers', icon: 'waivers' },
     ],
   },
   {
     label: 'System',
-    links: [{ href: '/settings', label: 'League settings', icon: 'S' }],
+    links: [{ href: '/settings', label: 'League settings', icon: 'settings' }],
   },
 ];
 
@@ -494,7 +548,12 @@ function AppShellRuntime({
         />
         <aside className={styles.navigation} data-open={navOpen}>
           <div className={styles.brand}>
-            <span aria-hidden="true">FB</span>
+            <span aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8" />
+                <path d="M4.5 9.2c4.8.4 8.5 4.1 8.9 8.9M10.6 4.1c.4 4.8 4.1 8.5 8.9 8.9M4.7 15h14.6M9 4.7v14.6" />
+              </svg>
+            </span>
             <div>
               <strong>Draft Room</strong>
               <small>League intelligence</small>
@@ -516,7 +575,9 @@ function AppShellRuntime({
                       key={link.href}
                       onClick={() => setNavOpen(false)}
                     >
-                      <span aria-hidden="true">{link.icon}</span>
+                      <span aria-hidden="true">
+                        <NavigationIcon name={link.icon} />
+                      </span>
                       {link.label}
                     </Link>
                   );
@@ -554,11 +615,13 @@ function AppShellRuntime({
               onClick={() => setNavOpen(true)}
               type="button"
             >
-              ☰
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
             </button>
             <div>
-              <small>Fantrax decision room</small>
               <strong>{routeTitle(pathname)}</strong>
+              <small>Fantrax decision room</small>
             </div>
             <button
               aria-expanded={chatOpen}
@@ -582,7 +645,6 @@ function AppShellRuntime({
         <aside aria-label="Eve analyst" className={styles.chatPanel}>
           <header className={styles.chatHeader}>
             <div>
-              <p>Eve analyst</p>
               <h2>League chat</h2>
             </div>
             <div className={styles.chatActions}>
@@ -616,7 +678,9 @@ function AppShellRuntime({
                 onClick={() => setChatOpen(false)}
                 type="button"
               >
-                ×
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="m6 6 12 12M18 6 6 18" />
+                </svg>
               </button>
             </div>
           </header>

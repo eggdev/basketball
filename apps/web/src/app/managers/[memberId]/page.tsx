@@ -36,7 +36,6 @@ export default async function ManagerProfilePage({
           ) : null
         }
         description="Season-by-season auction behavior and manager identity history."
-        eyebrow="Manager profile"
         title={member?.displayName ?? 'Manager profile'}
       />
 
@@ -83,7 +82,7 @@ export default async function ManagerProfilePage({
               </article>
             </div>
 
-            <p className={styles.eyebrow}>Season history</p>
+            <h3 className={styles.sectionTitle}>Season history</h3>
             <div className={styles.seasonTimeline}>
               {[...member.seasons].reverse().map((season) => (
                 <article

@@ -59,7 +59,6 @@ export function TradesView({
           ) : null
         }
         description="Put two historical roster builds side by side and start a grounded trade conversation with Eve."
-        eyebrow="Roster analysis"
         title="Trade lab"
       />
 

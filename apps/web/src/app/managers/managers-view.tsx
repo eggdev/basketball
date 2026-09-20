@@ -49,8 +49,8 @@ function TeamReconciliationForm({
         <strong>{teamName}</strong>
         <small>{teams.map((team) => team.seasonKey).join(' · ')}</small>
       </div>
-      <label htmlFor={fieldId}>
-        <span className={styles.eyebrow}>Canonical manager</span>
+      <label className={styles.field} htmlFor={fieldId}>
+        <span>Canonical manager</span>
       </label>
       <select
         id={fieldId}
@@ -126,7 +126,6 @@ export function ManagersView({
           </AskEveButton>
         }
         description="Follow the people behind changing team names and learn how each manager approaches the auction."
-        eyebrow="Behavioral history"
         title="Manager profiles"
       />
 

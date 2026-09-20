@@ -81,7 +81,6 @@ export default async function DraftPage() {
           </>
         }
         description={`A persistent planning room for ${leagueOwnerProfile.displayName}: test roster-building angles, set budget guardrails, and turn market signals into draft targets.`}
-        eyebrow="Pre-draft lab"
         title={`${seasonKey} draft plan`}
       />
 

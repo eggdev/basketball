@@ -88,7 +88,6 @@ export function WaiversView({
           </AskEveButton>
         }
         description="Study productive players who were absent from historical draft snapshots and shape a future streaming model."
-        eyebrow="Player acquisition"
         title="Waiver research"
       />
 

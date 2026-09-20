@@ -5,18 +5,15 @@ import styles from './workspace.module.css';
 export function PageHeader({
   actions,
   description,
-  eyebrow,
   title,
 }: {
   readonly actions?: ReactNode;
   readonly description: string;
-  readonly eyebrow: string;
   readonly title: string;
 }) {
   return (
     <header className={styles.pageHeader}>
       <div>
-        <p className={styles.eyebrow}>{eyebrow}</p>
         <h1>{title}</h1>
         <p>{description}</p>
       </div>

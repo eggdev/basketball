@@ -37,7 +37,6 @@ export default async function SettingsPage() {
           </AskEveButton>
         }
         description="The versioned rules that drive imports, historical scoring, future projections, and roster valuation."
-        eyebrow="Configuration"
         title="League settings"
       />
 

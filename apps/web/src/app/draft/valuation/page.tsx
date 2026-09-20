@@ -25,7 +25,6 @@ export default async function ValuationLabPage() {
       <div className={styles.page}>
         <PageHeader
           description="Compare auction-price models against completed league seasons without letting future results leak into their predictions."
-          eyebrow="Draft research"
           title="Valuation calibration"
         />
         <DataUnavailable
@@ -111,7 +110,6 @@ export default async function ValuationLabPage() {
           </>
         }
         description="Walk-forward tests show how each price model would have performed using only information available before that season’s auction."
-        eyebrow="Draft research"
         title="Valuation calibration"
       />
 

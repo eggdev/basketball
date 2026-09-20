@@ -83,7 +83,6 @@ export function LeagueView({
           </AskEveButton>
         }
         description="Regular-season strength, playoff outcomes, weekly consistency, active games, and the auction rosters that produced them."
-        eyebrow="League intelligence"
         title="League outcomes"
       />
 
