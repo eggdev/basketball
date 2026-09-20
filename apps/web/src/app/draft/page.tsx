@@ -36,6 +36,7 @@ export default async function DraftPage() {
   const liveSeason = rosterSnapshot?.seasons[0] ?? null;
   const seasonKey = workspace?.league?.seasonKey ?? liveSeason?.seasonKey ?? '2026-27';
   const plan = workspace?.plan;
+  const ownerReady = workspace?.owner !== undefined && workspace.owner !== null;
   const defaults = leagueOwnerProfile.defaultPlan;
   const priceBoard = market?.players.slice(0, 14) ?? [];
   const adpBoard = adp?.players.slice(0, 75) ?? [];
@@ -76,11 +77,11 @@ export default async function DraftPage() {
               context={{ planId: plan?.id ?? null, season: seasonKey }}
               prompt={evePrompt}
             >
-              Workshop with Eve
+              Plan with Eve
             </AskEveButton>
           </>
         }
-        description={`A persistent planning room for ${leagueOwnerProfile.displayName}: test roster-building angles, set budget guardrails, and turn market signals into draft targets.`}
+        description={`Test roster builds, set budget guardrails, and turn market signals into targets for ${leagueOwnerProfile.displayName}.`}
         title={`${seasonKey} draft plan`}
       />
 
@@ -103,11 +104,14 @@ export default async function DraftPage() {
         <article className={styles.readinessCard}>
           <header>
             <h3>Owner context</h3>
-            <span className={`${styles.statusBadge} ${styles.statusReady}`}>Ready</span>
+            <span className={`${styles.statusBadge} ${ownerReady ? styles.statusReady : ''}`}>
+              {ownerReady ? 'Ready' : 'Sign in'}
+            </span>
           </header>
           <p>
-            {workspace?.owner?.teamName ?? 'Current team'} is linked to the canonical Clyde /
-            Brendan history.
+            {ownerReady
+              ? `${workspace?.owner?.teamName ?? 'Current team'} is linked to the Clyde / Brendan owner history.`
+              : 'Connect the current team to the Clyde / Brendan owner history.'}
           </p>
         </article>
         <article className={styles.readinessCard}>
@@ -131,23 +135,18 @@ export default async function DraftPage() {
           </header>
           <p>{market?.summary.seasonCount ?? 0} league auctions seed price expectations.</p>
         </article>
-        <article className={styles.readinessCard}>
-          <header>
-            <h3>Mock simulations</h3>
-            <span className={styles.statusBadge}>Next model</span>
-          </header>
-          <p>
-            Manager demand curves and auction simulations will build on plans and target signals.
-          </p>
-        </article>
       </section>
 
       {viewer !== null && liveBidBoard !== null ? <LiveBidPanel board={liveBidBoard} /> : null}
 
       {viewer === null || workspace?.league == null ? (
         <DataUnavailable
-          detail="Sign in and ensure the current Fantrax league season has been imported."
-          title="Planning workspace unavailable"
+          detail={
+            viewer === null
+              ? 'Sign in with the league owner account to open the planning workspace.'
+              : 'Import the current Fantrax league season to open the planning workspace.'
+          }
+          title={viewer === null ? 'Owner access required' : 'Planning data unavailable'}
         />
       ) : (
         <section className={styles.panel}>

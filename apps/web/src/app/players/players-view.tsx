@@ -120,10 +120,10 @@ export function PlayersView({
                 : `Compare ${season?.seasonKey ?? 'the available'} historical fantasy production with this league's auction prices. Call out expensive names, inexpensive production, and important caveats.`
             }
           >
-            Analyze the board
+            Analyze board
           </AskEveButton>
         }
-        description="Availability-adjusted forecasts and league-scored history alongside the prices this room has actually paid."
+        description="Compare availability-adjusted projections, historical production, and league auction prices."
         title="Player rankings"
       />
 
@@ -243,6 +243,9 @@ export function PlayersView({
             </div>
           </header>
           <div className={styles.tableViewport}>
+            <a className={styles.skipLink} href="#after-season-projections">
+              Skip season projections table
+            </a>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -314,7 +317,7 @@ export function PlayersView({
         </section>
       ) : null}
 
-      <section className={styles.panel} style={{ marginTop: projections ? 16 : 0 }}>
+      <section className={styles.panel} id="after-season-projections">
         <header className={styles.panelHeader}>
           <div>
             <h2>Production and market board</h2>
@@ -373,8 +376,12 @@ export function PlayersView({
             title="Historical rankings unavailable"
           />
         ) : (
-          <div className={styles.tableViewport}>
-            <table className={styles.table}>
+          <>
+            <div className={styles.tableViewport}>
+              <a className={styles.skipLink} href="#after-historical-production">
+                Skip historical production table
+              </a>
+              <table className={styles.table}>
               <thead>
                 <tr>
                   <th scope="col">Rank</th>
@@ -431,14 +438,16 @@ export function PlayersView({
                   );
                 })}
               </tbody>
-            </table>
-            {players.length === 0 ? (
-              <div className={styles.empty}>
-                <strong>No matching player</strong>
-                Try a different search.
-              </div>
-            ) : null}
-          </div>
+              </table>
+              {players.length === 0 ? (
+                <div className={styles.empty}>
+                  <strong>No matching player</strong>
+                  Try a different search.
+                </div>
+              ) : null}
+            </div>
+            <span id="after-historical-production" />
+          </>
         )}
       </section>
     </div>

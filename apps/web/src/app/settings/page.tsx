@@ -33,10 +33,10 @@ export default async function SettingsPage() {
             className={styles.primaryButton}
             prompt="Explain how this league's scoring weights, daily lineups, active slots, bench, and IR should affect future player valuation and projection evaluation."
           >
-            Explain valuation impact
+            Explain impact
           </AskEveButton>
         }
-        description="The versioned rules that drive imports, historical scoring, future projections, and roster valuation."
+        description="The rules that drive scoring, projections, and roster valuation."
         title="League settings"
       />
 
@@ -50,8 +50,8 @@ export default async function SettingsPage() {
           <strong>{rankings?.summary.seasonCount ?? '—'}</strong>
         </article>
         <article className={styles.statCard}>
-          <span>Team seasons</span>
-          <strong>{rosters?.summary.seasonCount ?? '—'}</strong>
+          <span>Roster seasons</span>
+          <strong>{rosters?.summary.seasonCount ?? (viewer === null ? 'Private' : '—')}</strong>
         </article>
         <article className={styles.statCard}>
           <span>Config version</span>
@@ -78,7 +78,7 @@ export default async function SettingsPage() {
               </li>
             ))}
           </ul>
-          <div className={styles.warning} style={{ margin: 14 }}>
+          <div className={`${styles.warning} ${styles.panelCallout}`}>
             <strong>Bonus confirmation</strong>
             Triple-double and double-double bonuses currently stack. Confirm that behavior against
             Fantrax before publishing projection-based rankings.

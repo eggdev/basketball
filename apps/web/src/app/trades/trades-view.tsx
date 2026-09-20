@@ -58,7 +58,7 @@ export function TradesView({
             </AskEveButton>
           ) : null
         }
-        description="Put two historical roster builds side by side and start a grounded trade conversation with Eve."
+        description="Compare two historical roster builds and prepare a grounded trade conversation."
         title="Trade lab"
       />
 

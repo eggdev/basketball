@@ -258,6 +258,7 @@
 
 .menuButton {
   display: none;
+  flex: none;
   align-items: center;
   justify-content: center;
   padding: 7px 9px;
@@ -275,6 +276,7 @@
 }
 
 .chatToggle {
+  flex: none;
   padding: 8px 11px;
   font: inherit;
   font-size: 0.7rem;
@@ -284,6 +286,7 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .chatPanel {
@@ -876,14 +879,28 @@
 
   .menuButton {
     display: flex;
+    width: 40px;
+    height: 40px;
+    padding: 0;
   }
 
   .topbar {
     height: 66px;
+    gap: 10px;
     padding: 0 14px;
+  }
+
+  .chatToggle {
+    min-height: 40px;
   }
 
   .contentColumn {
     height: 100dvh;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar small {
+    display: none;
   }
 }

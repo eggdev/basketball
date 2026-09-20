@@ -125,7 +125,7 @@ export function ManagersView({
             Compare managers
           </AskEveButton>
         }
-        description="Follow the people behind changing team names and learn how each manager approaches the auction."
+        description="Track the people behind changing team names and how they approach the auction."
         title="Manager profiles"
       />
 

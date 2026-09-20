@@ -82,7 +82,7 @@ export function LeagueView({
             Analyze league
           </AskEveButton>
         }
-        description="Regular-season strength, playoff outcomes, weekly consistency, active games, and the auction rosters that produced them."
+        description="Compare regular-season strength, playoff results, and the auction rosters behind them."
         title="League outcomes"
       />
 
@@ -165,6 +165,9 @@ export function LeagueView({
           />
         ) : (
           <div className={styles.tableViewport}>
+            <a className={styles.skipLink} href="#after-league-performance">
+              Skip league performance table
+            </a>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -221,7 +224,7 @@ export function LeagueView({
         )}
       </section>
 
-      <section className={styles.panel}>
+      <section className={styles.panel} id="after-league-performance">
         <header className={styles.panelHeader}>
           <div>
             <h2>Draft snapshots</h2>
@@ -300,7 +303,7 @@ export function LeagueView({
                     </span>
                   </div>
                   {team.roster.length === 0 ? (
-                    <p className={styles.empty}>Roster awaiting import</p>
+                    <p className={styles.emptyInline}>Roster awaiting import</p>
                   ) : (
                     <ol className={styles.rosterList}>
                       {team.roster.map((player) => (

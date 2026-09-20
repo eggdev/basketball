@@ -24,12 +24,12 @@ export default async function ValuationLabPage() {
     return (
       <div className={styles.page}>
         <PageHeader
-          description="Compare auction-price models against completed league seasons without letting future results leak into their predictions."
+          description="Test auction-price models on past seasons without leaking future results."
           title="Valuation calibration"
         />
         <DataUnavailable
-          detail="Sign in to inspect private league history."
-          title="Sign-in required"
+          detail="Sign in with the league owner account to inspect private league history."
+          title="Owner access required"
         />
       </div>
     );
@@ -109,7 +109,7 @@ export default async function ValuationLabPage() {
             </AskEveButton>
           </>
         }
-        description="Walk-forward tests show how each price model would have performed using only information available before that season’s auction."
+        description="Test each price model using only information available before that season’s auction."
         title="Valuation calibration"
       />
 
@@ -160,6 +160,9 @@ export default async function ValuationLabPage() {
                 <span className={`${styles.statusBadge} ${styles.statusReady}`}>{lab.version}</span>
               </header>
               <div className={styles.tableViewport}>
+                <a className={styles.skipLink} href="#after-model-comparison">
+                  Skip model comparison table
+                </a>
                 <table className={styles.table}>
                   <thead>
                     <tr>
@@ -194,6 +197,7 @@ export default async function ValuationLabPage() {
                   </tbody>
                 </table>
               </div>
+              <span id="after-model-comparison" />
             </section>
 
             <div className={styles.splitLayout}>
@@ -205,6 +209,9 @@ export default async function ValuationLabPage() {
                   </div>
                 </header>
                 <div className={styles.tableViewport}>
+                  <a className={styles.skipLink} href="#after-walk-forward-results">
+                    Skip walk-forward results table
+                  </a>
                   <table className={styles.table}>
                     <thead>
                       <tr>
@@ -228,6 +235,7 @@ export default async function ValuationLabPage() {
                     </tbody>
                   </table>
                 </div>
+                <span id="after-walk-forward-results" />
               </section>
 
               <section className={styles.panel}>
@@ -238,6 +246,9 @@ export default async function ValuationLabPage() {
                   </div>
                 </header>
                 <div className={styles.tableViewport}>
+                  <a className={styles.skipLink} href="#after-hindsight-bargains">
+                    Skip hindsight bargains table
+                  </a>
                   <table className={styles.table}>
                     <thead>
                       <tr>
@@ -269,6 +280,7 @@ export default async function ValuationLabPage() {
                     </tbody>
                   </table>
                 </div>
+                <span id="after-hindsight-bargains" />
               </section>
             </div>
 
@@ -284,6 +296,9 @@ export default async function ValuationLabPage() {
                 <span className={styles.badge}>{currentPlayers.length} shown</span>
               </header>
               <div className={styles.tableViewport}>
+                <a className={styles.skipLink} href="#after-calibrated-values">
+                  Skip calibrated values table
+                </a>
                 <table className={styles.table}>
                   <thead>
                     <tr>
@@ -323,6 +338,7 @@ export default async function ValuationLabPage() {
                   </tbody>
                 </table>
               </div>
+              <span id="after-calibrated-values" />
             </section>
 
             <div className={styles.warning}>

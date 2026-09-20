@@ -61,7 +61,7 @@ export default async function ManagerProfilePage({
               <span className={styles.badge}>{member.seasons.length} tracked seasons</span>
             </header>
 
-            <div className={styles.stats} style={{ marginTop: 18 }}>
+            <div className={`${styles.stats} ${styles.profileStats}`}>
               <article className={styles.statCard}>
                 <span>Total purchases</span>
                 <strong>{member.purchaseCount}</strong>

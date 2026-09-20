@@ -33,7 +33,7 @@ export function DataUnavailable({
     <div className={styles.empty}>
       <div>
         <strong>{title}</strong>
-        {detail}
+        <p>{detail}</p>
       </div>
     </div>
   );

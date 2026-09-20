@@ -84,10 +84,10 @@ export function WaiversView({
             context={{ season: seasonKey || null }}
             prompt={`Analyze ${seasonKey || 'historical'} roster activity alongside league outcomes. Compare manager churn, likely adds and drops, and productive players absent from the draft. Identify repeatable associations without describing inferred roster deltas as confirmed transactions.`}
           >
-            Analyze roster activity
+            Analyze activity
           </AskEveButton>
         }
-        description="Study productive players who were absent from historical draft snapshots and shape a future streaming model."
+        description="Find productive players the league left undrafted and study roster-movement patterns."
         title="Waiver research"
       />
 
@@ -132,6 +132,9 @@ export function WaiversView({
               </article>
             </div>
             <div className={styles.tableViewport}>
+              <a className={styles.skipLink} href="#after-manager-activity">
+                Skip manager activity table
+              </a>
               <table className={styles.table}>
                 <thead>
                   <tr>
@@ -172,7 +175,10 @@ export function WaiversView({
               </table>
             </div>
 
-            <div className={styles.tableViewport}>
+            <div className={styles.tableViewport} id="after-manager-activity">
+              <a className={styles.skipLink} href="#after-roster-changes">
+                Skip roster changes table
+              </a>
               <table className={styles.table}>
                 <thead>
                   <tr>
@@ -202,6 +208,7 @@ export function WaiversView({
                 </tbody>
               </table>
             </div>
+            <span id="after-roster-changes" />
           </>
         )}
       </section>
@@ -237,6 +244,9 @@ export function WaiversView({
             ) : null}
           </div>
           <div className={styles.tableViewport}>
+            <a className={styles.skipLink} href="#after-winning-behavior">
+              Skip winning behavior table
+            </a>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -264,6 +274,7 @@ export function WaiversView({
               </tbody>
             </table>
           </div>
+          <span id="after-winning-behavior" />
         </section>
       ) : null}
 
@@ -316,8 +327,12 @@ export function WaiversView({
             title={authenticated ? 'Waiver research unavailable' : 'Owner access required'}
           />
         ) : (
-          <div className={styles.tableViewport}>
-            <table className={styles.table}>
+          <>
+            <div className={styles.tableViewport}>
+              <a className={styles.skipLink} href="#after-undrafted-production">
+                Skip undrafted production table
+              </a>
+              <table className={styles.table}>
               <thead>
                 <tr>
                   <th scope="col">Season rank</th>
@@ -350,14 +365,16 @@ export function WaiversView({
                   );
                 })}
               </tbody>
-            </table>
-            {availablePlayers.length === 0 ? (
-              <div className={styles.empty}>
-                <strong>No matching player</strong>
-                Try another season or search.
-              </div>
-            ) : null}
-          </div>
+              </table>
+              {availablePlayers.length === 0 ? (
+                <div className={styles.empty}>
+                  <strong>No matching player</strong>
+                  Try another season or search.
+                </div>
+              ) : null}
+            </div>
+            <span id="after-undrafted-production" />
+          </>
         )}
       </section>
     </div>

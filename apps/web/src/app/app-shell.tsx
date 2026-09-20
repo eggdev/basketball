@@ -176,28 +176,32 @@ const navigation: ReadonlyArray<NavigationGroup> = [
 
 const routePrompts: Readonly<Record<string, ReadonlyArray<string>>> = {
   '/draft': [
-    'Challenge the assumptions in my active pre-draft scenario.',
-    'Where does current Fantrax ADP diverge most from our league market?',
+    'Challenge my active draft plan.',
+    'Where does Fantrax ADP diverge from our league market?',
   ],
   '/league': [
-    'Compare the latest complete league rosters and identify construction patterns.',
-    'Which teams found the most auction value in the latest draft?',
+    'Find roster-building patterns in the latest complete season.',
+    'Which teams found the best auction value?',
   ],
   '/managers': [
-    'Which managers show the clearest repeat-player preferences?',
+    'Which managers repeat the same player targets?',
     'Compare spending styles across the league.',
   ],
   '/players': [
-    'Compare historical fantasy production with this league’s auction market.',
-    'Which historical performers look inexpensive relative to league prices?',
+    'Compare player production with our auction market.',
+    'Which players look inexpensive in this league?',
+  ],
+  '/settings': [
+    'How do these scoring weights change player value?',
+    'Which roster constraints matter most during the auction?',
   ],
   '/trades': [
-    'Help me compare two rosters for a balanced trade conversation.',
-    'Which teams have complementary roster construction?',
+    'Compare two rosters for a balanced trade.',
+    'Which teams have complementary builds?',
   ],
   '/waivers': [
-    'What should a daily-lineup streaming strategy optimize for?',
-    'Which historically relevant players should stay on a watchlist?',
+    'What should my streaming strategy optimize for?',
+    'Which undrafted performers belong on a watchlist?',
   ],
 };
 
@@ -749,12 +753,12 @@ function AppShellRuntime({
                 ) : agent.data.messages.length === 0 ? (
                   <div className={styles.emptyChat}>
                     <strong>
-                      {isResuming ? 'Restoring this conversation…' : 'Ask from anywhere.'}
+                      {isResuming ? 'Restoring this conversation…' : 'Start with a question'}
                     </strong>
                     <span>
                       {isResuming
                         ? 'Eve is replaying the durable session.'
-                        : 'The current route is attached to each turn so Eve knows what you are reviewing.'}
+                        : 'Eve automatically receives the context from this page.'}
                     </span>
                   </div>
                 ) : (

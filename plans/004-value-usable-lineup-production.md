@@ -5,9 +5,10 @@
 > plan's row in `plans/README.md` when complete.
 >
 > **Drift check (run first)**:
-> `git diff --stat 009198a..HEAD -- packages/fantasy packages/database apps/web/src/lib apps/web/src/app/draft apps/web/src/app/players config/league-format.json`
-> Plans 002 and 003 intentionally change valuation and schedule inputs. Confirm
-> their live types match the assumptions below before implementation.
+> `git diff --stat a02ceb2..HEAD -- packages/fantasy packages/database packages/importer/src/lib/auction-valuation-run.ts packages/importer/scripts/calibrate-auction-values.ts apps/web/src/lib apps/web/src/app/draft apps/web/src/app/players agent config/league-format.json`
+> Plans 002 and 003 are reconciled into this version. Stop if valuation artifact
+> persistence, the promoted-run read model, dated calendar games, or projection
+> calendar provenance change semantically after `a02ceb2`.
 
 ## Status
 
@@ -17,7 +18,14 @@
 - **Depends on**: `plans/002-persist-promote-valuation-runs.md`,
   `plans/003-import-nba-schedules.md`
 - **Category**: direction / valuation model
-- **Planned at**: commit `009198a`, 2026-09-18
+- **Planned at**: commit `a02ceb2`, 2026-09-19
+- **Implementation review**: APPROVED at `afcd3ce`, 2026-09-19. Production
+  migration, candidate creation, value-delta review, and explicit promotion
+  remain rollout work and were not performed by the isolated executor.
+- **Reconciled after Plans 002–003**: immutable valuation candidates now persist
+  through `auction_valuation_runs` / `auction_valuation_players`, projection
+  snapshots carry calendar snapshot provenance, and `latestSeasonCalendar`
+  exposes the individual dated NBA games required by the optimizer.
 
 ## Why this matters
 
@@ -61,8 +69,11 @@ operation reads a database or calls a provider.
 | Purpose | Command | Expected on success |
 |---|---|---|
 | Fantasy tests | `bun nx run fantasy:test -- --run` | all pass |
+| Importer tests | `bun nx run importer:test -- --run` | all pass |
+| Database tests | `bun nx run database:test -- --run` | all pass |
+| Generate migration | `bun nx run database:db-generate` | one additive migration if durable player diagnostics require columns |
 | Web tests | `bun nx run web:test -- --run` | all pass |
-| Typecheck | `bun nx run-many -t typecheck -p fantasy,database,web,agent` | exit 0 |
+| Typecheck | `bun nx run-many -t typecheck -p fantasy,database,importer,web,agent` | exit 0 |
 | Full verification | `bun run check && bun run build` | both exit 0 |
 
 ## Suggested executor toolkit
@@ -87,9 +98,18 @@ operation reads a database or calls a provider.
 - `packages/fantasy/src/index.ts`
 - valuation artifact types added by Plan 002
 - schedule read types added by Plan 003
+- `packages/database/src/lib/schema.ts`
+- `packages/database/src/lib/database.ts`
+- `packages/database/src/lib/database.spec.ts`
+- `packages/database/migrations/00NN_*.sql` and generated metadata, only if
+  required to persist immutable per-player usable-value diagnostics
+- `packages/importer/src/lib/auction-valuation-run.ts`
+- `packages/importer/src/lib/auction-valuation-run.spec.ts`
+- `packages/importer/scripts/calibrate-auction-values.ts`
 - `apps/web/src/lib/create-live-bid-board.ts`
 - `apps/web/src/lib/live-bid-board.ts`
 - `apps/web/src/lib/live-bid-evaluator.ts`
+- `apps/web/src/lib/valuation-lab.ts`
 - `apps/web/src/app/draft/live-bid-panel.tsx`
 - `apps/web/src/app/draft/valuation/page.tsx`
 - `apps/web/src/app/players/players-view.tsx`
@@ -199,13 +219,21 @@ edit or supersede previous artifacts automatically. The valuation lab must show
 legacy and usable-points outputs side by side and explain why price prediction
 metrics and production utility are different axes.
 
+Update the valuation command to load `latestSeasonCalendar(seasonKey)` and the
+checked-in league format, then pass those exact versioned inputs into artifact
+planning. Persist the usable-value diagnostics needed by the promoted read
+model on immutable valuation rows (using an additive migration if the current
+columns cannot represent them); do not recompute them in the web request path.
+
 Because historical daily availability is not yet preserved, do not claim the
 new usable-points basis has a full historical injury backtest. Mark this as a
 current-season production-value experiment and retain the market-price
 walk-forward metrics unchanged.
 
-**Verify**: artifact fingerprint changes with lineup format, streaming slots,
-or schedule snapshot; it stays stable for reordered equivalent inputs.
+**Verify**: importer and database tests prove artifact fingerprint changes with
+lineup format, streaming slots, or schedule snapshot; it stays stable for
+reordered equivalent inputs, and a saved/read candidate preserves the usable
+diagnostics without request-time recomputation.
 
 ### Step 6: Surface usable-value explanations everywhere
 
@@ -246,15 +274,27 @@ action. Document how to roll back to the prior promoted run.
 
 ## Done criteria
 
-- [ ] A pure module returns deterministic daily assignments and usable values.
-- [ ] Multi-position eligibility, 10 slots, bench congestion, streaming reserve,
+- [x] A pure module returns deterministic daily assignments and usable values.
+- [x] Multi-position eligibility, 10 slots, bench congestion, streaming reserve,
   availability, and playoff schedule affect values explicitly.
-- [ ] Auction dollars conserve the exact pool and reserve $1 minimum bids.
-- [ ] Live personal caps use roster-marginal utility without changing hard guards.
-- [ ] Legacy and new value bases remain versioned and comparable.
-- [ ] No new model becomes live without explicit persisted-run promotion.
-- [ ] Live evaluator p95 remains below 300ms on the prepared board benchmark.
-- [ ] `bun run check && bun run build` exits 0.
+- [x] Auction dollars conserve the exact pool and reserve $1 minimum bids.
+- [x] Live personal caps use roster-marginal utility without changing hard guards.
+- [x] Legacy and new value bases remain versioned and comparable.
+- [x] The candidate command consumes the exact dated calendar and persists the
+  usable diagnostics returned by the promoted-run read model.
+- [x] No new model becomes live without explicit persisted-run promotion.
+- [x] Live evaluator p95 remains below 300ms on the prepared board benchmark.
+- [x] `bun run check && bun run build` exits 0.
+
+## Review result
+
+The isolated implementation was approved after one revision round. Review
+caught and corrected exact same-day Fantrax period boundaries, NBA games outside
+the fantasy competition window, single-player concentration classification,
+repeated full-calendar JSON in the projection read query, and misleading usable
+point labels. The final review reran all affected tests without Nx cache, the
+full repository check, the production build, and migration 0012 against a
+disposable PostgreSQL database.
 
 ## STOP conditions
 

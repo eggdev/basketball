@@ -1,7 +1,10 @@
 .page {
+  display: grid;
   width: min(1480px, 100%);
   margin: 0 auto;
   padding: 30px;
+  align-content: start;
+  gap: 16px;
 }
 
 .pageHeader {
@@ -9,7 +12,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 4px;
 }
 
 .pageHeader h1 {
@@ -32,7 +35,9 @@
 .headerActions {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 9px;
 }
 
@@ -98,7 +103,9 @@
 }
 
 .askButton:disabled,
-.cardButton:disabled {
+.cardButton:disabled,
+.primaryButton:disabled,
+.secondaryButton:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -108,6 +115,15 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.page > .stats,
+.page > .notice,
+.page > .warning,
+.page > .success,
+.page > .readinessGrid,
+.page > .liveBidPanel {
+  margin-bottom: 0;
 }
 
 .sectionStack {
@@ -384,6 +400,12 @@
   color: var(--color-ink-muted);
 }
 
+.notice span,
+.warning span,
+.success span {
+  min-width: 0;
+}
+
 .rosterGrid,
 .managerGrid,
 .readinessGrid {
@@ -624,13 +646,23 @@
 
 .empty {
   display: grid;
-  min-height: 260px;
+  min-height: 176px;
   place-content: center;
-  padding: 30px;
+  padding: 24px;
   color: var(--color-ink-subtle);
   font-size: 0.76rem;
   line-height: 1.55;
   text-align: center;
+}
+
+.page > .empty {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+
+.empty > div {
+  max-width: 54ch;
 }
 
 .empty strong {
@@ -638,6 +670,21 @@
   margin-bottom: 5px;
   color: var(--color-ink-muted);
   font-size: 0.88rem;
+}
+
+.empty p {
+  margin: 0;
+}
+
+.emptyInline {
+  margin: 12px 0 0;
+  padding: 18px;
+  border: 1px solid rgb(var(--color-brand-gray-rgb) / 0.09);
+  border-radius: var(--radius-md);
+  background: rgb(0 18 37 / 0.4);
+  color: var(--color-ink-subtle);
+  font-size: 0.7rem;
+  text-align: center;
 }
 
 .managerFacts {
@@ -746,6 +793,10 @@
   padding: 18px;
 }
 
+.profileStats {
+  margin-top: 18px;
+}
+
 .profileHeading {
   align-items: flex-start;
 }
@@ -816,7 +867,7 @@
 }
 
 .readinessGrid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 0;
   margin-bottom: 15px;
 }
@@ -849,6 +900,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.panelCallout {
+  margin: 14px;
 }
 
 .ruleList {
@@ -1197,12 +1252,34 @@
 
 @media (max-width: 680px) {
   .page {
+    gap: 14px;
     padding: 18px 14px 30px;
   }
 
   .pageHeader {
     align-items: flex-start;
     flex-direction: column;
+    gap: 18px;
+    margin-bottom: 2px;
+  }
+
+  .pageHeader h1 {
+    font-size: 1.8rem;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .primaryButton,
+  .secondaryButton,
+  .askButton,
+  .cardButton {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
   }
 
   .rosterGrid,
@@ -1213,11 +1290,29 @@
   .panelHeader {
     align-items: flex-start;
     flex-direction: column;
+    gap: 12px;
+  }
+
+  .notice,
+  .warning,
+  .success {
+    display: grid;
+    gap: 4px;
+    padding: 11px 12px;
   }
 
   .toolbar,
   .field {
     width: 100%;
+  }
+
+  .field input,
+  .field select,
+  .field textarea,
+  .inlineSelect,
+  .reconciliationRow input,
+  .reconciliationRow select {
+    min-height: 42px;
   }
 
   .formGrid,
@@ -1236,6 +1331,11 @@
 
   .tableViewport {
     max-height: none;
+  }
+
+  .empty {
+    min-height: 150px;
+    padding: 22px 18px;
   }
 
   .seasonRow {
