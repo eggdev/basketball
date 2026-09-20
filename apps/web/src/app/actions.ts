@@ -1,15 +1,24 @@
 'use server';
 
-import { Database, databaseLayer, loadDatabaseConfig } from '@fantasy-basketball/database/runtime';
 import {
-  type PreDraftGoal,
-  type PreDraftRiskTolerance,
-  type PreDraftTargetStance,
+  Database,
+  databaseLayer,
+  loadDatabaseConfig,
+  PreDraftScenarioError,
+  type PreDraftScenarioCommand,
+  type PreDraftScenarioCommandResult,
 } from '@fantasy-basketball/database/runtime';
 import { leagueOwnerProfile } from '@fantasy-basketball/fantasy';
 import { Effect } from 'effect';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
+import {
+  parsePreDraftScenarioForm,
+  parsePreDraftTargetForm,
+  type ParsedPreDraftScenarioCommand,
+  type PreDraftScenarioActionState,
+} from '../lib/pre-draft-scenarios';
 import {
   parseTeamReconciliationForm,
   type TeamReconciliationActionState,
@@ -49,75 +58,140 @@ export async function reconcileTeamIdentityAction(
   }
 }
 
-const formText = (formData: FormData, key: string): string =>
-  String(formData.get(key) ?? '').trim();
-
-const formDollars = (formData: FormData, key: string): number => {
-  const value = Number(formText(formData, key));
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${key} must be non-negative`);
-  return Math.round(value * 100);
+const runPreDraftScenarioCommand = async (
+  command: ParsedPreDraftScenarioCommand,
+): Promise<PreDraftScenarioCommandResult> => {
+  const scopedCommand = {
+    ...command,
+    ownerCanonicalKey: leagueOwnerProfile.canonicalKey,
+  } as PreDraftScenarioCommand;
+  const config = await Effect.runPromise(loadDatabaseConfig());
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const database = yield* Database;
+      return yield* database.managePreDraftScenario(scopedCommand);
+    }).pipe(Effect.provide(databaseLayer(config))),
+  );
 };
 
-export async function savePreDraftPlanAction(formData: FormData): Promise<void> {
+const mutatePreDraftScenario = async (
+  formData: FormData,
+  intent: ParsedPreDraftScenarioCommand['intent'],
+): Promise<
+  | { readonly result: PreDraftScenarioCommandResult; readonly success: true }
+  | { readonly state: PreDraftScenarioActionState; readonly success: false }
+> => {
   const viewer = await loadViewer().catch(() => null);
-  if (viewer === null) throw new Error('Sign in as the league owner to save a draft plan.');
-  const primaryGoal = formText(formData, 'primaryGoal') as PreDraftGoal;
-  const riskTolerance = formText(formData, 'riskTolerance') as PreDraftRiskTolerance;
-  if (!['make-playoffs', 'win-championship'].includes(primaryGoal)) {
-    throw new Error('Choose a valid draft goal.');
+  if (viewer === null) {
+    return {
+      state: { message: 'Sign in as the league owner to manage scenarios.', status: 'error' },
+      success: false,
+    };
   }
-  if (!['conservative', 'balanced', 'aggressive'].includes(riskTolerance)) {
-    throw new Error('Choose a valid risk tolerance.');
+  const parsed = parsePreDraftScenarioForm(formData, intent);
+  if (!parsed.success) {
+    return { state: { message: parsed.message, status: 'error' }, success: false };
   }
-  const config = await Effect.runPromise(loadDatabaseConfig());
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const database = yield* Database;
-      return yield* database.savePreDraftPlan({
-        anchorBudgetCents: formDollars(formData, 'anchorBudget'),
-        coreBudgetCents: formDollars(formData, 'coreBudget'),
-        endgameBudgetCents: formDollars(formData, 'endgameBudget'),
-        name: formText(formData, 'name'),
-        notes: formText(formData, 'notes'),
-        ownerCanonicalKey: leagueOwnerProfile.canonicalKey,
-        primaryGoal,
-        riskTolerance,
-        seasonKey: formText(formData, 'seasonKey'),
-        strategyAngle: formText(formData, 'strategyAngle'),
-        streamingSlots: Number(formText(formData, 'streamingSlots')),
-      });
-    }).pipe(Effect.provide(databaseLayer(config))),
-  );
+  try {
+    return { result: await runPreDraftScenarioCommand(parsed.command), success: true };
+  } catch (error) {
+    return {
+      state: {
+        message:
+          error instanceof PreDraftScenarioError
+            ? error.message
+            : 'The scenario could not be saved. Try again.',
+        status: 'error',
+      },
+      success: false,
+    };
+  }
+};
+
+export async function createPreDraftScenarioAction(
+  _previousState: PreDraftScenarioActionState,
+  formData: FormData,
+): Promise<PreDraftScenarioActionState> {
+  const mutation = await mutatePreDraftScenario(formData, 'create');
+  if (!mutation.success) return mutation.state;
   revalidatePath('/draft');
+  redirect(`/draft?plan=${mutation.result.planId}`);
 }
 
-export async function savePreDraftTargetAction(formData: FormData): Promise<void> {
-  const viewer = await loadViewer().catch(() => null);
-  if (viewer === null) throw new Error('Sign in as the league owner to save draft targets.');
-  const stance = formText(formData, 'stance') as PreDraftTargetStance;
-  if (!['avoid', 'target', 'watch'].includes(stance)) throw new Error('Choose a valid stance.');
-  const maxBid = formText(formData, 'maxBid');
-  const maxBidDollars = maxBid === '' ? null : Number(maxBid);
-  const priority = Number(formText(formData, 'priority'));
-  if (
-    (maxBidDollars !== null && (!Number.isFinite(maxBidDollars) || maxBidDollars < 0)) ||
-    !Number.isInteger(priority)
-  ) {
-    throw new Error('Enter a valid maximum bid and priority.');
-  }
-  const config = await Effect.runPromise(loadDatabaseConfig());
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const database = yield* Database;
-      return yield* database.savePreDraftTarget({
-        maxBidCents: maxBidDollars === null ? null : Math.round(maxBidDollars * 100),
-        planId: formText(formData, 'planId'),
-        playerId: formText(formData, 'playerId'),
-        priority,
-        rationale: formText(formData, 'rationale'),
-        stance,
-      });
-    }).pipe(Effect.provide(databaseLayer(config))),
-  );
+export async function duplicatePreDraftScenarioAction(
+  _previousState: PreDraftScenarioActionState,
+  formData: FormData,
+): Promise<PreDraftScenarioActionState> {
+  const mutation = await mutatePreDraftScenario(formData, 'duplicate');
+  if (!mutation.success) return mutation.state;
   revalidatePath('/draft');
+  redirect(`/draft?plan=${mutation.result.planId}`);
+}
+
+export async function updatePreDraftScenarioAction(
+  _previousState: PreDraftScenarioActionState,
+  formData: FormData,
+): Promise<PreDraftScenarioActionState> {
+  const mutation = await mutatePreDraftScenario(formData, 'update');
+  if (!mutation.success) return mutation.state;
+  revalidatePath('/draft');
+  return { message: 'Scenario changes saved.', status: 'success' };
+}
+
+export async function activatePreDraftScenarioAction(
+  _previousState: PreDraftScenarioActionState,
+  formData: FormData,
+): Promise<PreDraftScenarioActionState> {
+  const mutation = await mutatePreDraftScenario(formData, 'activate');
+  if (!mutation.success) return mutation.state;
+  revalidatePath('/draft');
+  redirect(`/draft?plan=${mutation.result.planId}`);
+}
+
+export async function archivePreDraftScenarioAction(
+  _previousState: PreDraftScenarioActionState,
+  formData: FormData,
+): Promise<PreDraftScenarioActionState> {
+  const mutation = await mutatePreDraftScenario(formData, 'archive');
+  if (!mutation.success) return mutation.state;
+  revalidatePath('/draft');
+  redirect(
+    mutation.result.activePlanId === null
+      ? '/draft'
+      : `/draft?plan=${mutation.result.activePlanId}`,
+  );
+}
+
+export async function savePreDraftTargetAction(
+  _previousState: PreDraftScenarioActionState,
+  formData: FormData,
+): Promise<PreDraftScenarioActionState> {
+  const viewer = await loadViewer().catch(() => null);
+  if (viewer === null) {
+    return { message: 'Sign in as the league owner to save targets.', status: 'error' };
+  }
+  const parsed = parsePreDraftTargetForm(formData);
+  if (!parsed.success) return { message: parsed.message, status: 'error' };
+  try {
+    const config = await Effect.runPromise(loadDatabaseConfig());
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const database = yield* Database;
+        return yield* database.savePreDraftTarget({
+          ...parsed.input,
+          ownerCanonicalKey: leagueOwnerProfile.canonicalKey,
+        });
+      }).pipe(Effect.provide(databaseLayer(config))),
+    );
+    revalidatePath('/draft');
+    return { message: 'Target saved to this scenario.', status: 'success' };
+  } catch (error) {
+    return {
+      message:
+        error instanceof PreDraftScenarioError
+          ? error.message
+          : 'The target could not be saved. Try again.',
+      status: 'error',
+    };
+  }
 }

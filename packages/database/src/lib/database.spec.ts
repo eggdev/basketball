@@ -2,12 +2,15 @@ import { Effect, Exit, Redacted } from 'effect';
 
 import {
   buildSeasonCalendarReadModel,
+  copyPreDraftTargets,
   loadDatabaseConfig,
   planAuctionValuationPromotion,
+  selectDefaultPreDraftPlanId,
   serializeAuctionValuationJson,
   validateAuctionValuationArtifact,
   validateAuctionValuationProjectionLink,
   validateAuctionValuationScheduleLink,
+  validatePreDraftScenarioCommand,
   validateSeasonCalendarBatch,
   type AuctionValuationArtifactInput,
   type SeasonCalendarBatch,
@@ -60,6 +63,129 @@ describe('loadDatabaseConfig', () => {
     expect(Exit.isFailure(exit)).toBe(true);
     expect(String(exit)).toContain('DATABASE_URL_UNPOOLED');
     expect(String(exit)).not.toContain('secret');
+  });
+});
+
+const scenarioDetails = {
+  anchorBudgetCents: 8_000,
+  coreBudgetCents: 9_000,
+  endgameBudgetCents: 3_000,
+  name: 'Balanced build',
+  notes: '',
+  primaryGoal: 'make-playoffs' as const,
+  riskTolerance: 'balanced' as const,
+  strategyAngle: 'Preserve flexibility through the middle game.',
+  streamingSlots: 1,
+};
+
+const scenarioPlans = [
+  {
+    createdAt: '2026-09-18T00:00:00.000Z',
+    id: '00000000-0000-4000-8000-000000000101',
+    name: 'Balanced build',
+    status: 'active' as const,
+  },
+  {
+    createdAt: '2026-09-19T00:00:00.000Z',
+    id: '00000000-0000-4000-8000-000000000102',
+    name: 'Stars and streamers',
+    status: 'draft' as const,
+  },
+];
+
+describe('pre-draft scenario lifecycle', () => {
+  it('rejects foreign plan IDs and duplicate names inside an owner-season scope', () => {
+    expect(() =>
+      validatePreDraftScenarioCommand(
+        {
+          intent: 'activate',
+          ownerCanonicalKey: 'clyde',
+          planId: '00000000-0000-4000-8000-000000000999',
+          seasonKey: '2026-27',
+        },
+        { activePlanId: scenarioPlans[0]!.id, plans: scenarioPlans },
+      ),
+    ).toThrow('does not belong to this owner and season');
+
+    expect(() =>
+      validatePreDraftScenarioCommand(
+        {
+          details: { ...scenarioDetails, name: ' balanced BUILD ' },
+          intent: 'create',
+          ownerCanonicalKey: 'clyde',
+          seasonKey: '2026-27',
+        },
+        { activePlanId: scenarioPlans[0]!.id, plans: scenarioPlans },
+      ),
+    ).toThrow('unique scenario name');
+  });
+
+  it('refuses to archive the active plan without a replacement activation', () => {
+    expect(() =>
+      validatePreDraftScenarioCommand(
+        {
+          intent: 'archive',
+          ownerCanonicalKey: 'clyde',
+          planId: scenarioPlans[0]!.id,
+          seasonKey: '2026-27',
+        },
+        { activePlanId: scenarioPlans[0]!.id, plans: scenarioPlans },
+      ),
+    ).toThrow('Make another scenario active');
+
+    expect(() =>
+      validatePreDraftScenarioCommand(
+        {
+          intent: 'archive',
+          ownerCanonicalKey: 'clyde',
+          planId: scenarioPlans[0]!.id,
+          replacementPlanId: scenarioPlans[1]!.id,
+          seasonKey: '2026-27',
+        },
+        { activePlanId: scenarioPlans[0]!.id, plans: scenarioPlans },
+      ),
+    ).not.toThrow();
+  });
+
+  it('chooses a deterministic legacy default without letting a newer draft replace it', () => {
+    expect(selectDefaultPreDraftPlanId(scenarioPlans, null)).toBe(scenarioPlans[0]!.id);
+    expect(selectDefaultPreDraftPlanId(scenarioPlans, scenarioPlans[1]!.id)).toBe(
+      scenarioPlans[1]!.id,
+    );
+    expect(
+      selectDefaultPreDraftPlanId(
+        scenarioPlans.map((plan) => ({ ...plan, status: 'draft' as const })),
+        null,
+      ),
+    ).toBe(scenarioPlans[1]!.id);
+  });
+
+  it('copies targets with new identities while leaving the source unchanged', () => {
+    const source = [
+      {
+        maxBidCents: 7_500,
+        playerId: '00000000-0000-4000-8000-000000000201',
+        playerName: 'Player One',
+        priority: 1,
+        rationale: 'Anchor target',
+        stance: 'target' as const,
+        targetId: '00000000-0000-4000-8000-000000000301',
+      },
+    ];
+    const copied = copyPreDraftTargets(
+      source,
+      scenarioPlans[1]!.id,
+      () => '00000000-0000-4000-8000-000000000302',
+    );
+
+    expect(copied).toEqual([
+      {
+        ...source[0],
+        planId: scenarioPlans[1]!.id,
+        targetId: '00000000-0000-4000-8000-000000000302',
+      },
+    ]);
+    expect(source[0]!.targetId).toBe('00000000-0000-4000-8000-000000000301');
   });
 });
 

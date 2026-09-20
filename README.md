@@ -200,9 +200,17 @@ recommended maximum bid.
 The pre-draft room is anchored to the canonical league owner, Brendan Eggers
 (Clyde), rather than an email address or a historical team name. It persists
 named strategy scenarios, budget guardrails, risk posture, streaming-slot
-intent, and player target/watch/avoid decisions. Eve reloads the active plan as
-turn-scoped system context, so a saved UI change informs the next conversation
-without exposing Better Auth identifiers in the repository.
+intent, and player target/watch/avoid decisions. Exactly one scenario is active
+for a league season; only that active scenario powers the default live bid cap
+and Eve owner context. Selecting another scenario through `/draft?plan=<id>` is
+a preview: edits stay on that immutable plan ID and do not change live
+guardrails until **Make active** is used. Duplicating a scenario copies its
+player targets with new target IDs, while archiving removes a nonactive scenario
+from selection without deleting its history. Two or three available scenarios
+can be compared by budget, risk, streaming intent, stances, and player caps.
+Eve reloads the active plan as turn-scoped system context and receives a named
+preview only for an explicit workshop prompt, without exposing Better Auth
+identifiers in the repository.
 
 Fantrax public ADP is stored as immutable, fingerprinted snapshots. Run
 `bun run adp:validate` to review a response and `bun run adp:import` to commit

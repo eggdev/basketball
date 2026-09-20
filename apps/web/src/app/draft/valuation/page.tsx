@@ -109,7 +109,7 @@ export default async function ValuationLabPage() {
               className={styles.primaryButton}
               context={{
                 modelId: lab?.selectedModelId ?? null,
-                planId: workspace?.plan?.id ?? null,
+                planId: workspace?.activePlan?.id ?? null,
                 season: lab?.current?.seasonKey ?? null,
               }}
               prompt={evePrompt}

@@ -113,7 +113,7 @@ export default defineTool({
     const historicalMarket = context.market.players.find(
       (candidate) => candidate.playerId === player.playerId,
     );
-    const target = context.workspace.plan?.targets.find(
+    const target = context.workspace.activePlan?.targets.find(
       (candidate) => candidate.playerId === player.playerId,
     );
     const valuation =

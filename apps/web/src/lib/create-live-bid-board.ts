@@ -10,7 +10,7 @@ import type { LiveBidBoard } from './live-bid-board';
 export function createLiveBidBoard(input: {
   readonly league: NonNullable<PreDraftWorkspace['league']>;
   readonly market: HistoricalAuctionMarket | null;
-  readonly plan: PreDraftWorkspace['plan'];
+  readonly plan: PreDraftWorkspace['activePlan'];
   readonly projection: LatestProjectionSnapshot;
   readonly valuation: AuctionValuationRun | null;
 }): LiveBidBoard {

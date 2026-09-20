@@ -279,6 +279,309 @@
   padding: 16px;
 }
 
+.scenarioWorkspace {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.scenarioToolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgb(var(--color-brand-gray-rgb) / 0.1);
+}
+
+.scenarioSelect {
+  width: min(420px, 100%);
+}
+
+.scenarioActions {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.scenarioActions form {
+  margin: 0;
+}
+
+.scenarioDisclosure {
+  color: var(--color-ink-muted);
+  font-size: 0.72rem;
+}
+
+.scenarioDisclosure[open] {
+  width: min(420px, 100%);
+}
+
+.scenarioDisclosure summary {
+  padding: 9px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  cursor: pointer;
+  font-weight: 750;
+  list-style-position: inside;
+  transition:
+    border-color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.scenarioDisclosure summary:hover {
+  border-color: var(--color-brand-navy);
+  background: var(--color-surface-3);
+  color: var(--color-ink);
+}
+
+.scenarioDisclosure summary:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 3px;
+}
+
+.scenarioInlineForm {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) max-content;
+  align-items: end;
+  gap: 9px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.scenarioInlineForm > p {
+  grid-column: 1 / -1;
+}
+
+.scenarioActiveMode,
+.scenarioPreviewMode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgb(var(--color-brand-gray-rgb) / 0.1);
+  color: var(--color-ink-muted);
+}
+
+.scenarioActiveMode {
+  background: rgb(99 214 162 / 0.05);
+}
+
+.scenarioPreviewMode {
+  background: rgb(var(--color-brand-orange-rgb) / 0.06);
+}
+
+.scenarioActiveMode > div,
+.scenarioPreviewMode > div {
+  display: grid;
+  gap: 2px;
+}
+
+.scenarioActiveMode strong,
+.scenarioPreviewMode strong {
+  color: var(--color-ink);
+  font-size: 0.72rem;
+}
+
+.scenarioActiveMode span,
+.scenarioPreviewMode span {
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.scenarioComparison {
+  min-width: 0;
+  border-top: 1px solid rgb(var(--color-brand-gray-rgb) / 0.1);
+}
+
+.scenarioComparisonHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--color-surface-2);
+}
+
+.scenarioComparisonHeader h3,
+.scenarioComparisonHeader p {
+  margin: 0;
+}
+
+.scenarioComparisonHeader h3 {
+  color: var(--color-ink);
+  font-size: 0.82rem;
+}
+
+.scenarioComparisonHeader p {
+  margin-top: 3px;
+  color: var(--color-ink-subtle);
+  font-size: 0.64rem;
+}
+
+.comparePicker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.compareChoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-1);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  font-size: 0.64rem;
+}
+
+.compareChoice:has(input:checked) {
+  border-color: var(--color-signal);
+  color: var(--color-ink);
+}
+
+.compareChoice:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.compareChoice input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--color-signal);
+}
+
+.comparisonHint {
+  margin: 0;
+  padding: 15px 16px;
+  color: var(--color-ink-subtle);
+  font-size: 0.68rem;
+}
+
+.comparisonViewport {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.comparisonTable {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  color: var(--color-ink-muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.comparisonTable th,
+.comparisonTable td {
+  width: 29%;
+  padding: 10px 12px;
+  border-right: 1px solid rgb(var(--color-brand-gray-rgb) / 0.08);
+  border-bottom: 1px solid rgb(var(--color-brand-gray-rgb) / 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.comparisonTable th:first-child,
+.comparisonTable td:first-child {
+  width: 13%;
+}
+
+.comparisonTable thead th {
+  background: var(--color-surface-1);
+  color: var(--color-ink);
+  font-size: 0.7rem;
+}
+
+.comparisonTable thead small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-signal);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.comparisonTable tbody th {
+  color: var(--color-ink-subtle);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.comparisonTargets {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comparisonTargets li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.comparisonTargets strong {
+  color: var(--color-ink-muted);
+  font-weight: 650;
+}
+
+.comparisonTargets span {
+  flex: none;
+  color: var(--color-signal);
+  text-transform: capitalize;
+}
+
+.muted {
+  color: var(--color-ink-subtle);
+}
+
+.formError,
+.formSuccess {
+  display: block;
+  margin: 9px 0 0;
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.formSuccess {
+  color: var(--color-success);
+}
+
 .formGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1231,6 +1534,17 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .scenarioToolbar,
+  .scenarioComparisonHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scenarioActions,
+  .comparePicker {
+    justify-content: flex-start;
+  }
+
   .liveBidLayout {
     grid-template-columns: 1fr;
   }
@@ -1318,6 +1632,42 @@
   .formGrid,
   .targetForm {
     grid-template-columns: 1fr;
+  }
+
+  .scenarioToolbar {
+    padding: 12px;
+  }
+
+  .scenarioActions,
+  .scenarioDisclosure,
+  .scenarioDisclosure[open],
+  .scenarioActions > form,
+  .scenarioActions button {
+    width: 100%;
+  }
+
+  .scenarioInlineForm {
+    grid-template-columns: 1fr;
+  }
+
+  .scenarioActiveMode,
+  .scenarioPreviewMode {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 11px 12px;
+  }
+
+  .scenarioComparisonHeader {
+    padding: 12px;
+  }
+
+  .comparePicker {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .compareChoice {
+    min-height: 42px;
   }
 
   .formWide {

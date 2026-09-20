@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -621,7 +622,7 @@ export const preDraftPlans = fantasySchema.table(
       .notNull()
       .references(() => leagueSeasons.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    status: text('status').notNull().default('active'),
+    status: text('status').notNull().default('draft'),
     primaryGoal: text('primary_goal').notNull(),
     strategyAngle: text('strategy_angle').notNull(),
     riskTolerance: text('risk_tolerance').notNull(),
@@ -638,7 +639,31 @@ export const preDraftPlans = fantasySchema.table(
       table.leagueSeasonId,
       table.name,
     ),
+    uniqueIndex('pre_draft_plans_id_member_season_unique').on(
+      table.id,
+      table.leagueMemberId,
+      table.leagueSeasonId,
+    ),
     index('pre_draft_plans_member_season_idx').on(table.leagueMemberId, table.leagueSeasonId),
+  ],
+);
+
+export const preDraftPlanSelections = fantasySchema.table(
+  'pre_draft_plan_selections',
+  {
+    leagueMemberId: uuid('league_member_id').notNull(),
+    leagueSeasonId: uuid('league_season_id').notNull(),
+    activePlanId: uuid('active_plan_id').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.leagueMemberId, table.leagueSeasonId] }),
+    foreignKey({
+      columns: [table.activePlanId, table.leagueMemberId, table.leagueSeasonId],
+      foreignColumns: [preDraftPlans.id, preDraftPlans.leagueMemberId, preDraftPlans.leagueSeasonId],
+      name: 'pre_draft_plan_selections_active_plan_scope_fk',
+    }).onDelete('restrict'),
+    index('pre_draft_plan_selections_active_plan_idx').on(table.activePlanId),
   ],
 );
 

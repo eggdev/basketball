@@ -62,7 +62,7 @@ const run = async () => {
         projection,
         rankings,
         seasonCalendar,
-        streamingSlotsPerTeam: workspace.plan?.streamingSlots ?? 1,
+        streamingSlotsPerTeam: workspace.activePlan?.streamingSlots ?? 1,
       };
     }),
   );

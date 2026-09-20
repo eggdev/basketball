@@ -11,12 +11,15 @@
 
 ## Status
 
+- **State**: DONE — completed 2026-09-20
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: LOW
 - **Depends on**: none
 - **Category**: direction / planning workflow
 - **Planned at**: commit `009198a`, 2026-09-18
+- **Delivered**: additive migration `0013_mighty_skrulls.sql`; production
+  selection materialized for the sole existing 2026–27 plan
 
 ## Why this matters
 
@@ -213,13 +216,13 @@ that only the active plan powers default live recommendations.
 
 ## Done criteria
 
-- [ ] The workspace lists all nondeleted plans and has one explicit active plan.
-- [ ] Create, duplicate, update, activate, and archive enforce owner/season scope.
-- [ ] A query-selected preview survives refresh but does not affect live guards.
-- [ ] Two or three scenarios can be compared on decision-relevant fields.
-- [ ] Eve receives active and preview roles explicitly.
-- [ ] No code selects the active plan via `order by updated_at desc limit 1`.
-- [ ] `bun run check && bun run build` exits 0.
+- [x] The workspace lists all nondeleted plans and has one explicit active plan.
+- [x] Create, duplicate, update, activate, and archive enforce owner/season scope.
+- [x] A query-selected preview survives refresh but does not affect live guards.
+- [x] Two or three scenarios can be compared on decision-relevant fields.
+- [x] Eve receives active and preview roles explicitly.
+- [x] No code selects the active plan via `order by updated_at desc limit 1`.
+- [x] `bun run check && bun run build` exits 0.
 
 ## STOP conditions
 

@@ -7,12 +7,19 @@ import {
 import { leagueOwnerProfile } from '@fantasy-basketball/fantasy';
 import { Effect } from 'effect';
 
-export async function loadPreDraftWorkspace(seasonKey?: string): Promise<PreDraftWorkspace> {
+export async function loadPreDraftWorkspace(
+  seasonKey?: string,
+  requestedPlanId?: string,
+): Promise<PreDraftWorkspace> {
   const config = await Effect.runPromise(loadDatabaseConfig());
   return Effect.runPromise(
     Effect.gen(function* () {
       const database = yield* Database;
-      return yield* database.preDraftWorkspace(leagueOwnerProfile.canonicalKey, seasonKey);
+      return yield* database.preDraftWorkspace(
+        leagueOwnerProfile.canonicalKey,
+        seasonKey,
+        requestedPlanId,
+      );
     }).pipe(Effect.provide(databaseLayer(config))),
   );
 }

@@ -1,5 +1,7 @@
+import { PreDraftScenarioError } from '@fantasy-basketball/database/runtime';
 import { leagueOwnerProfile } from '@fantasy-basketball/fantasy';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { formatPrice, formatSignedPrice } from '../../lib/format';
 import { createLiveBidBoard } from '../../lib/create-live-bid-board';
@@ -10,23 +12,34 @@ import { loadLatestProjectionSnapshot } from '../../lib/latest-projections';
 import { loadPreDraftWorkspace } from '../../lib/pre-draft-workspace';
 import { loadViewer } from '../../lib/viewer';
 import { loadPromotedAuctionValuationRun } from '../../lib/valuation-lab';
-import { savePreDraftPlanAction, savePreDraftTargetAction } from '../actions';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
 import { LiveBidPanel } from './live-bid-panel';
+import { ScenarioTargetWorkspace, ScenarioWorkspace } from './scenario-workspace';
 
 export const dynamic = 'force-dynamic';
 
-const dollars = (cents: number): number => cents / 100;
-
-export default async function DraftPage() {
+export default async function DraftPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ readonly compare?: string; readonly plan?: string }>;
+}) {
+  const query = await searchParams;
+  const requestedPlanId = typeof query.plan === 'string' ? query.plan : undefined;
   const viewer = await loadViewer().catch(() => null);
   const [market, rosterSnapshot, adp, workspace, projection] = await Promise.all([
     loadHistoricalAuctionMarket().catch(() => null),
     viewer === null ? Promise.resolve(null) : loadLeagueRosters().catch(() => null),
     loadLatestAdpSnapshot().catch(() => null),
-    viewer === null ? Promise.resolve(null) : loadPreDraftWorkspace().catch(() => null),
+    viewer === null
+      ? Promise.resolve(null)
+      : loadPreDraftWorkspace(undefined, requestedPlanId).catch((error: unknown) => {
+          if (error instanceof PreDraftScenarioError && error.code === 'plan_not_found') {
+            redirect('/draft');
+          }
+          return null;
+        }),
     viewer === null ? Promise.resolve(null) : loadLatestProjectionSnapshot().catch(() => null),
   ]);
   const valuation =
@@ -35,19 +48,34 @@ export default async function DraftPage() {
       : await loadPromotedAuctionValuationRun(projection.seasonKey).catch(() => null);
   const liveSeason = rosterSnapshot?.seasons[0] ?? null;
   const seasonKey = workspace?.league?.seasonKey ?? liveSeason?.seasonKey ?? '2026-27';
-  const plan = workspace?.plan;
+  const plan = workspace?.selectedPlan;
+  const activePlan = workspace?.activePlan;
   const ownerReady = workspace?.owner !== undefined && workspace.owner !== null;
   const defaults = leagueOwnerProfile.defaultPlan;
   const priceBoard = market?.players.slice(0, 14) ?? [];
   const adpBoard = adp?.players.slice(0, 75) ?? [];
-  const targetIds = new Set(plan?.targets.map((target) => target.playerId) ?? []);
+  const requestedComparePlanIds = [
+    ...new Set(
+      (typeof query.compare === 'string' ? query.compare.split(',') : []).filter(Boolean),
+    ),
+  ];
+  const comparePlanIds =
+    requestedComparePlanIds.length >= 2
+      ? requestedComparePlanIds.slice(0, 3)
+      : activePlan !== undefined &&
+          activePlan !== null &&
+          plan !== undefined &&
+          plan !== null &&
+          activePlan.id !== plan.id
+        ? [activePlan.id, plan.id]
+        : [];
   const liveBidBoard =
     workspace?.league == null || projection === null
       ? null
       : createLiveBidBoard({
           league: workspace.league,
           market,
-          plan: workspace.plan,
+          plan: workspace.activePlan,
           projection,
           valuation,
         });
@@ -58,8 +86,8 @@ export default async function DraftPage() {
   const evePrompt = [
     `Help me, ${leagueOwnerProfile.displayName} (${leagueOwnerProfile.nickname}), refine my ${seasonKey} auction plan.`,
     `My minimum outcome is to ${leagueOwnerProfile.goals.minimumOutcome.toLocaleLowerCase()}, with ${leagueOwnerProfile.goals.primaryOutcome.toLocaleLowerCase()} as the real goal.`,
-    plan
-      ? `The active plan is “${plan.name}”: ${plan.strategyAngle}. Risk is ${plan.riskTolerance}; budgets are ${formatPrice(plan.anchorBudgetCents)} anchors, ${formatPrice(plan.coreBudgetCents)} core, and ${formatPrice(plan.endgameBudgetCents)} endgame, with ${plan.streamingSlots} streaming slot(s).`
+    activePlan
+      ? `The active plan is “${activePlan.name}”: ${activePlan.strategyAngle}. Risk is ${activePlan.riskTolerance}; budgets are ${formatPrice(activePlan.anchorBudgetCents)} anchors, ${formatPrice(activePlan.coreBudgetCents)} core, and ${formatPrice(activePlan.endgameBudgetCents)} endgame, with ${activePlan.streamingSlots} streaming slot(s).`
       : 'Start from the balanced playoff-floor defaults shown in the planning workspace.',
     'Use our historical auction market and current Fantrax ADP. Identify assumptions to test, target/avoid candidates, and where public ADP is likely to diverge from this league.',
   ].join(' ');
@@ -74,7 +102,7 @@ export default async function DraftPage() {
             </Link>
             <AskEveButton
               className={styles.primaryButton}
-              context={{ planId: plan?.id ?? null, season: seasonKey }}
+              context={{ planId: activePlan?.id ?? null, season: seasonKey }}
               prompt={evePrompt}
             >
               Plan with Eve
@@ -149,115 +177,12 @@ export default async function DraftPage() {
           title={viewer === null ? 'Owner access required' : 'Planning data unavailable'}
         />
       ) : (
-        <section className={styles.panel}>
-          <header className={styles.panelHeader}>
-            <div>
-              <h2>{plan?.name ?? defaults.name}</h2>
-              <p>Save a strategy thesis Eve can challenge and use in every draft conversation.</p>
-            </div>
-            <span className={`${styles.statusBadge} ${plan ? styles.statusReady : ''}`}>
-              {plan ? 'Saved' : 'Draft'}
-            </span>
-          </header>
-          <form action={savePreDraftPlanAction} className={styles.planForm}>
-            <input name="seasonKey" type="hidden" value={seasonKey} />
-            <div className={styles.formGrid}>
-              <label className={styles.field}>
-                <span>Scenario name</span>
-                <input defaultValue={plan?.name ?? defaults.name} maxLength={80} name="name" />
-              </label>
-              <label className={styles.field}>
-                <span>Minimum outcome</span>
-                <select defaultValue={plan?.primaryGoal ?? defaults.primaryGoal} name="primaryGoal">
-                  <option value="make-playoffs">Make the playoffs</option>
-                  <option value="win-championship">Win the championship</option>
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span>Risk tolerance</span>
-                <select
-                  defaultValue={plan?.riskTolerance ?? defaults.riskTolerance}
-                  name="riskTolerance"
-                >
-                  <option value="conservative">Conservative</option>
-                  <option value="balanced">Balanced</option>
-                  <option value="aggressive">Aggressive</option>
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span>Streaming slots</span>
-                <input
-                  defaultValue={plan?.streamingSlots ?? defaults.streamingSlots}
-                  max={3}
-                  min={0}
-                  name="streamingSlots"
-                  type="number"
-                />
-              </label>
-              <label className={`${styles.field} ${styles.formWide}`}>
-                <span>Strategy angle</span>
-                <input
-                  defaultValue={plan?.strategyAngle ?? defaults.strategyAngle}
-                  maxLength={160}
-                  name="strategyAngle"
-                />
-              </label>
-              <label className={styles.field}>
-                <span>Anchor budget</span>
-                <input
-                  defaultValue={dollars(plan?.anchorBudgetCents ?? defaults.anchorBudgetCents)}
-                  min={0}
-                  name="anchorBudget"
-                  step="1"
-                  type="number"
-                />
-              </label>
-              <label className={styles.field}>
-                <span>Core budget</span>
-                <input
-                  defaultValue={dollars(plan?.coreBudgetCents ?? defaults.coreBudgetCents)}
-                  min={0}
-                  name="coreBudget"
-                  step="1"
-                  type="number"
-                />
-              </label>
-              <label className={styles.field}>
-                <span>Endgame budget</span>
-                <input
-                  defaultValue={dollars(plan?.endgameBudgetCents ?? defaults.endgameBudgetCents)}
-                  min={0}
-                  name="endgameBudget"
-                  step="1"
-                  type="number"
-                />
-              </label>
-              <label className={`${styles.field} ${styles.formWide}`}>
-                <span>Working notes</span>
-                <textarea
-                  defaultValue={plan?.notes ?? defaults.notes}
-                  maxLength={1_500}
-                  name="notes"
-                  rows={4}
-                />
-              </label>
-            </div>
-            <div className={styles.formActions}>
-              <span>
-                Planned budget:{' '}
-                {formatPrice(
-                  (plan?.anchorBudgetCents ?? defaults.anchorBudgetCents) +
-                    (plan?.coreBudgetCents ?? defaults.coreBudgetCents) +
-                    (plan?.endgameBudgetCents ?? defaults.endgameBudgetCents),
-                )}{' '}
-                · League base {formatPrice(workspace.league.baseBudgetCents)}
-              </span>
-              <button className={styles.primaryButton} type="submit">
-                Save planning context
-              </button>
-            </div>
-          </form>
-        </section>
+        <ScenarioWorkspace
+          comparePlanIds={comparePlanIds}
+          defaults={defaults}
+          seasonKey={seasonKey}
+          workspace={workspace}
+        />
       )}
 
       <div className={styles.splitLayout}>
@@ -325,85 +250,19 @@ export default async function DraftPage() {
         <section className={styles.panel} id="after-fantrax-adp">
           <header className={styles.panelHeader}>
             <div>
-              <h2>Scenario targets</h2>
-              <p>Targets, watches, and avoids stay scoped to the saved plan.</p>
+              <h2>{plan?.name ?? 'Scenario'} targets</h2>
+              <p>
+                Targets, watches, and avoids stay scoped to the selected{' '}
+                {plan?.id === workspace?.activePlanId ? 'active plan' : 'preview'}.
+              </p>
             </div>
             <span className={styles.badge}>{plan?.targets.length ?? 0} saved</span>
           </header>
-          {plan === null || plan === undefined ? (
-            <div className={styles.empty}>
-              <strong>Save the scenario first</strong>
-              The target board will attach player convictions and bid guardrails to it.
-            </div>
-          ) : (
-            <div className={styles.targetWorkspace}>
-              <form action={savePreDraftTargetAction} className={styles.targetForm}>
-                <input name="planId" type="hidden" value={plan.id} />
-                <label className={styles.field}>
-                  <span>Player</span>
-                  <select name="playerId" required>
-                    {adpBoard
-                      .filter((player) => !targetIds.has(player.playerId))
-                      .map((player) => (
-                        <option key={player.playerId} value={player.playerId}>
-                          {player.rank}. {player.playerName} ({player.position})
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <label className={styles.field}>
-                  <span>Stance</span>
-                  <select defaultValue="watch" name="stance">
-                    <option value="target">Target</option>
-                    <option value="watch">Watch</option>
-                    <option value="avoid">Avoid</option>
-                  </select>
-                </label>
-                <label className={styles.field}>
-                  <span>Max bid ($)</span>
-                  <input min={0} name="maxBid" placeholder="Optional" step="1" type="number" />
-                </label>
-                <label className={styles.field}>
-                  <span>Priority</span>
-                  <select defaultValue="3" name="priority">
-                    {[1, 2, 3, 4, 5].map((priority) => (
-                      <option key={priority} value={priority}>
-                        {priority}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className={`${styles.field} ${styles.formWide}`}>
-                  <span>Why this stance?</span>
-                  <input maxLength={240} name="rationale" placeholder="Optional working thesis" />
-                </label>
-                <button className={styles.secondaryButton} type="submit">
-                  Add to scenario
-                </button>
-              </form>
-              {plan.targets.length === 0 ? (
-                <div className={styles.empty}>
-                  <strong>No targets yet</strong>
-                  Use the current public board to record the first player thesis.
-                </div>
-              ) : (
-                <ul className={styles.targetList}>
-                  {plan.targets.map((target) => (
-                    <li key={target.targetId}>
-                      <span>
-                        <strong>{target.playerName}</strong>
-                        <small>{target.rationale || `Priority ${target.priority}`}</small>
-                      </span>
-                      <span>
-                        {target.stance}
-                        {target.maxBidCents === null ? '' : ` · ${formatPrice(target.maxBidCents)}`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          <ScenarioTargetWorkspace
+            adpBoard={adpBoard}
+            plan={plan ?? null}
+            seasonKey={seasonKey}
+          />
         </section>
       </div>
 

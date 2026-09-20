@@ -14,7 +14,7 @@ conditions, and update its row when done.
 | 002 | Persist and promote immutable auction valuation runs | P1 | M | 001 | DONE — approved at `6b87f3d`; SQL adapter lacks an integration harness |
 | 003 | Import versioned NBA schedules and Fantrax playoff periods | P1 | M | 001 | DONE — approved at `0effe41`; live validation passed |
 | 004 | Value usable daily-lineup production | P1 | L | 002, 003 | DONE — integrated at `cf1eb8d`; migration `0012` applied and `usable-lineup-v1` promoted |
-| 005 | Make pre-draft scenarios selectable and comparable | P2 | M | — | TODO |
+| 005 | Make pre-draft scenarios selectable and comparable | P2 | M | — | DONE — migration `0013` applied; explicit active selection materialized |
 | 006 | Learn uncertainty-aware manager demand profiles | P2 | L | 001, 002 | TODO |
 | 007 | Simulate saved auction scenarios | P2 | L | 004, 005, 006 | TODO |
 

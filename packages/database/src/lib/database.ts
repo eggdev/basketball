@@ -60,13 +60,22 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'save_fantrax_adp_snapshot'
     | 'save_league_performance'
     | 'save_league_roster_history'
-    | 'save_pre_draft_plan'
+    | 'manage_pre_draft_scenario'
     | 'save_pre_draft_target'
     | 'save_projection_snapshot'
     | 'save_season_calendar'
     | 'save_auction_valuation_run'
     | 'promote_auction_valuation_run';
   readonly reason?: string;
+}> {}
+
+export class PreDraftScenarioError extends Data.TaggedError('PreDraftScenarioError')<{
+  readonly code:
+    | 'active_archive_refused'
+    | 'duplicate_name'
+    | 'invalid_input'
+    | 'plan_not_found';
+  readonly message: string;
 }> {}
 
 export interface DatabaseHealth {
@@ -982,33 +991,42 @@ export interface LatestAdpSnapshot {
 
 export type PreDraftGoal = 'make-playoffs' | 'win-championship';
 export type PreDraftRiskTolerance = 'conservative' | 'balanced' | 'aggressive';
+export type PreDraftPlanStatus = 'active' | 'archived' | 'draft';
 export type PreDraftTargetStance = 'avoid' | 'target' | 'watch';
 
-export interface PreDraftPlan {
+export interface PreDraftTarget {
+  readonly maxBidCents: number | null;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly priority: number;
+  readonly rationale: string;
+  readonly stance: PreDraftTargetStance;
+  readonly targetId: string;
+}
+
+export interface PreDraftPlanSummary {
   readonly anchorBudgetCents: number;
   readonly coreBudgetCents: number;
+  readonly createdAt: string;
   readonly endgameBudgetCents: number;
   readonly id: string;
   readonly name: string;
-  readonly notes: string;
   readonly primaryGoal: PreDraftGoal;
   readonly riskTolerance: PreDraftRiskTolerance;
-  readonly status: string;
+  readonly status: PreDraftPlanStatus;
   readonly strategyAngle: string;
   readonly streamingSlots: number;
-  readonly targets: ReadonlyArray<{
-    readonly maxBidCents: number | null;
-    readonly playerId: string;
-    readonly playerName: string;
-    readonly priority: number;
-    readonly rationale: string;
-    readonly stance: PreDraftTargetStance;
-    readonly targetId: string;
-  }>;
+  readonly targets: ReadonlyArray<PreDraftTarget>;
   readonly updatedAt: string;
 }
 
+export interface PreDraftPlan extends PreDraftPlanSummary {
+  readonly notes: string;
+}
+
 export interface PreDraftWorkspace {
+  readonly activePlan: PreDraftPlan | null;
+  readonly activePlanId: string | null;
   readonly league: {
     readonly baseBudgetCents: number;
     readonly rosterSize: number;
@@ -1021,31 +1039,205 @@ export interface PreDraftWorkspace {
     readonly memberId: string;
     readonly teamName: string | null;
   } | null;
-  readonly plan: PreDraftPlan | null;
+  readonly plans: ReadonlyArray<PreDraftPlanSummary>;
+  readonly selectedPlan: PreDraftPlan | null;
 }
 
-export interface SavePreDraftPlanInput {
+export interface PreDraftScenarioDetailsInput {
   readonly anchorBudgetCents: number;
   readonly coreBudgetCents: number;
   readonly endgameBudgetCents: number;
   readonly name: string;
   readonly notes: string;
-  readonly ownerCanonicalKey: string;
   readonly primaryGoal: PreDraftGoal;
   readonly riskTolerance: PreDraftRiskTolerance;
-  readonly seasonKey: string;
   readonly strategyAngle: string;
   readonly streamingSlots: number;
 }
 
+interface PreDraftScenarioCommandScope {
+  readonly ownerCanonicalKey: string;
+  readonly seasonKey: string;
+}
+
+export type PreDraftScenarioCommand =
+  | (PreDraftScenarioCommandScope & {
+      readonly details: PreDraftScenarioDetailsInput;
+      readonly intent: 'create';
+    })
+  | (PreDraftScenarioCommandScope & {
+      readonly intent: 'duplicate';
+      readonly name: string;
+      readonly sourcePlanId: string;
+    })
+  | (PreDraftScenarioCommandScope & {
+      readonly details: PreDraftScenarioDetailsInput;
+      readonly intent: 'update';
+      readonly planId: string;
+    })
+  | (PreDraftScenarioCommandScope & {
+      readonly intent: 'activate';
+      readonly planId: string;
+    })
+  | (PreDraftScenarioCommandScope & {
+      readonly intent: 'archive';
+      readonly planId: string;
+      readonly replacementPlanId?: string;
+    });
+
+export interface PreDraftScenarioCommandResult {
+  readonly activePlanId: string | null;
+  readonly planId: string;
+}
+
 export interface SavePreDraftTargetInput {
   readonly maxBidCents: number | null;
+  readonly ownerCanonicalKey: string;
   readonly planId: string;
   readonly playerId: string;
   readonly priority: number;
   readonly rationale: string;
+  readonly seasonKey: string;
   readonly stance: PreDraftTargetStance;
 }
+
+type PreDraftScenarioStatePlan = Pick<
+  PreDraftPlanSummary,
+  'createdAt' | 'id' | 'name' | 'status'
+>;
+
+interface PreDraftScenarioCommandState {
+  readonly activePlanId: string | null;
+  readonly plans: ReadonlyArray<PreDraftScenarioStatePlan>;
+}
+
+export interface PreDraftTargetCopy extends PreDraftTarget {
+  readonly planId: string;
+}
+
+const scenarioError = (
+  code: PreDraftScenarioError['code'],
+  message: string,
+): PreDraftScenarioError => new PreDraftScenarioError({ code, message });
+
+const validatePreDraftScenarioDetails = (details: PreDraftScenarioDetailsInput): void => {
+  const budgets = [
+    details.anchorBudgetCents,
+    details.coreBudgetCents,
+    details.endgameBudgetCents,
+  ];
+  if (
+    details.name.trim().length < 2 ||
+    details.name.trim().length > 80 ||
+    details.strategyAngle.trim().length < 2 ||
+    details.strategyAngle.trim().length > 240 ||
+    details.notes.trim().length > 1_500 ||
+    !Number.isInteger(details.streamingSlots) ||
+    details.streamingSlots < 0 ||
+    details.streamingSlots > 3 ||
+    budgets.some((budget) => !Number.isInteger(budget) || budget < 0)
+  ) {
+    throw scenarioError('invalid_input', 'Enter a valid scenario name, strategy, and budget.');
+  }
+};
+
+const findMutableScenario = (
+  plans: ReadonlyArray<PreDraftScenarioStatePlan>,
+  planId: string,
+): PreDraftScenarioStatePlan => {
+  const plan = plans.find((candidate) => candidate.id === planId && candidate.status !== 'archived');
+  if (plan === undefined) {
+    throw scenarioError(
+      'plan_not_found',
+      'That scenario does not belong to this owner and season, or it has been archived.',
+    );
+  }
+  return plan;
+};
+
+const assertUniqueScenarioName = (
+  plans: ReadonlyArray<PreDraftScenarioStatePlan>,
+  name: string,
+  excludingPlanId?: string,
+): void => {
+  const normalizedName = name.trim().toLocaleLowerCase();
+  if (
+    plans.some(
+      (plan) => plan.id !== excludingPlanId && plan.name.trim().toLocaleLowerCase() === normalizedName,
+    )
+  ) {
+    throw scenarioError('duplicate_name', 'Choose a unique scenario name for this season.');
+  }
+};
+
+/** Returns the persisted selection, or a deterministic legacy fallback without writing it. */
+export const selectDefaultPreDraftPlanId = (
+  plans: ReadonlyArray<PreDraftScenarioStatePlan>,
+  selectedPlanId: string | null,
+): string | null => {
+  const available = plans.filter((plan) => plan.status !== 'archived');
+  if (selectedPlanId !== null && available.some((plan) => plan.id === selectedPlanId)) {
+    return selectedPlanId;
+  }
+  const legacyActive = available.filter((plan) => plan.status === 'active');
+  const candidates = legacyActive.length > 0 ? legacyActive : available;
+  return (
+    [...candidates].sort(
+      (left, right) =>
+        right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id),
+    )[0]?.id ?? null
+  );
+};
+
+/** Validates lifecycle invariants against rows already scoped to one canonical owner and season. */
+export const validatePreDraftScenarioCommand = (
+  command: PreDraftScenarioCommand,
+  state: PreDraftScenarioCommandState,
+): void => {
+  switch (command.intent) {
+    case 'create':
+      validatePreDraftScenarioDetails(command.details);
+      assertUniqueScenarioName(state.plans, command.details.name);
+      return;
+    case 'duplicate':
+      findMutableScenario(state.plans, command.sourcePlanId);
+      if (command.name.trim().length < 2 || command.name.trim().length > 80) {
+        throw scenarioError('invalid_input', 'Enter a scenario name between 2 and 80 characters.');
+      }
+      assertUniqueScenarioName(state.plans, command.name);
+      return;
+    case 'update':
+      findMutableScenario(state.plans, command.planId);
+      validatePreDraftScenarioDetails(command.details);
+      assertUniqueScenarioName(state.plans, command.details.name, command.planId);
+      return;
+    case 'activate':
+      findMutableScenario(state.plans, command.planId);
+      return;
+    case 'archive': {
+      findMutableScenario(state.plans, command.planId);
+      if (state.activePlanId !== command.planId) return;
+      if (command.replacementPlanId === undefined) {
+        throw scenarioError(
+          'active_archive_refused',
+          'Make another scenario active before archiving this one.',
+        );
+      }
+      if (command.replacementPlanId === command.planId) {
+        throw scenarioError('invalid_input', 'Choose a different replacement scenario.');
+      }
+      findMutableScenario(state.plans, command.replacementPlanId);
+    }
+  }
+};
+
+/** Copies target decisions while assigning new immutable target identities. */
+export const copyPreDraftTargets = (
+  targets: ReadonlyArray<PreDraftTarget>,
+  planId: string,
+  makeId: () => string = randomUUID,
+): ReadonlyArray<PreDraftTargetCopy> =>
+  targets.map((target) => ({ ...target, planId, targetId: makeId() }));
 
 export interface AuctionValuationArtifactInput {
   readonly artifactVersion: string;
@@ -1363,7 +1555,8 @@ export interface DatabaseService {
   readonly preDraftWorkspace: (
     ownerCanonicalKey: string,
     seasonKey?: string,
-  ) => Effect.Effect<PreDraftWorkspace, DatabaseUnavailable>;
+    requestedPlanId?: string,
+  ) => Effect.Effect<PreDraftWorkspace, DatabaseUnavailable | PreDraftScenarioError>;
   readonly promotedAuctionValuationRun: (
     seasonKey: string,
   ) => Effect.Effect<AuctionValuationRun | null, DatabaseUnavailable>;
@@ -1412,12 +1605,12 @@ export interface DatabaseService {
   readonly saveLeagueRosterHistory: (
     batch: LeagueRosterHistoryBatch,
   ) => Effect.Effect<LeagueRosterHistoryImportResult, DatabaseUnavailable>;
-  readonly savePreDraftPlan: (
-    input: SavePreDraftPlanInput,
-  ) => Effect.Effect<PreDraftPlan, DatabaseUnavailable>;
+  readonly managePreDraftScenario: (
+    command: PreDraftScenarioCommand,
+  ) => Effect.Effect<PreDraftScenarioCommandResult, DatabaseUnavailable | PreDraftScenarioError>;
   readonly savePreDraftTarget: (
     input: SavePreDraftTargetInput,
-  ) => Effect.Effect<void, DatabaseUnavailable>;
+  ) => Effect.Effect<void, DatabaseUnavailable | PreDraftScenarioError>;
 }
 
 export class Database extends Context.Tag('@fantasy-basketball/database/Database')<
@@ -3281,18 +3474,22 @@ const databaseServiceLayer = Layer.effect(
       ),
     );
 
-    const readPreDraftPlan = (planId: string): Effect.Effect<PreDraftPlan | null, unknown> =>
+    const readPreDraftPlans = (
+      leagueMemberId: string,
+      leagueSeasonId: string,
+    ): Effect.Effect<ReadonlyArray<PreDraftPlan>, unknown> =>
       Effect.gen(function* () {
-        const [plan] = yield* sql<{
+        const planRows = yield* sql<{
           anchor_budget_cents: number;
           core_budget_cents: number;
+          created_at: string;
           endgame_budget_cents: number;
           id: string;
           name: string;
           notes: string;
           primary_goal: PreDraftGoal;
           risk_tolerance: PreDraftRiskTolerance;
-          status: string;
+          status: PreDraftPlanStatus;
           strategy_angle: string;
           streaming_slots: number;
           updated_at: string;
@@ -3309,14 +3506,16 @@ const databaseServiceLayer = Layer.effect(
             endgame_budget_cents,
             streaming_slots,
             notes,
+            created_at::text,
             updated_at::text
           from fantasy.pre_draft_plans
-          where id = ${planId}
+          where league_member_id = ${leagueMemberId} and league_season_id = ${leagueSeasonId}
+          order by (status = 'archived'), updated_at desc, name
         `;
-        if (plan === undefined) return null;
-        const targets = yield* sql<{
+        const targetRows = yield* sql<{
           id: string;
           max_bid_cents: number | null;
+          plan_id: string;
           player_id: string;
           player_name: string;
           priority: number;
@@ -3325,6 +3524,7 @@ const databaseServiceLayer = Layer.effect(
         }>`
           select
             pdt.id,
+            pdt.plan_id,
             pdt.player_id,
             p.canonical_name as player_name,
             pdt.stance,
@@ -3332,23 +3532,15 @@ const databaseServiceLayer = Layer.effect(
             pdt.priority,
             pdt.rationale
           from fantasy.pre_draft_targets pdt
+          join fantasy.pre_draft_plans pdp on pdp.id = pdt.plan_id
           join fantasy.players p on p.id = pdt.player_id
-          where pdt.plan_id = ${planId}
+          where pdp.league_member_id = ${leagueMemberId} and pdp.league_season_id = ${leagueSeasonId}
           order by pdt.priority, p.canonical_name
         `;
-        return {
-          anchorBudgetCents: plan.anchor_budget_cents,
-          coreBudgetCents: plan.core_budget_cents,
-          endgameBudgetCents: plan.endgame_budget_cents,
-          id: plan.id,
-          name: plan.name,
-          notes: plan.notes,
-          primaryGoal: plan.primary_goal,
-          riskTolerance: plan.risk_tolerance,
-          status: plan.status,
-          strategyAngle: plan.strategy_angle,
-          streamingSlots: plan.streaming_slots,
-          targets: targets.map((target) => ({
+        const targetsByPlan = new Map<string, Array<PreDraftTarget>>();
+        for (const target of targetRows) {
+          const targets = targetsByPlan.get(target.plan_id) ?? [];
+          targets.push({
             maxBidCents: target.max_bid_cents,
             playerId: target.player_id,
             playerName: target.player_name,
@@ -3356,15 +3548,44 @@ const databaseServiceLayer = Layer.effect(
             rationale: target.rationale,
             stance: target.stance,
             targetId: target.id,
-          })),
-          updatedAt: plan.updated_at,
-        } satisfies PreDraftPlan;
+          });
+          targetsByPlan.set(target.plan_id, targets);
+        }
+        return planRows.map(
+          (plan): PreDraftPlan => ({
+            anchorBudgetCents: plan.anchor_budget_cents,
+            coreBudgetCents: plan.core_budget_cents,
+            createdAt: plan.created_at,
+            endgameBudgetCents: plan.endgame_budget_cents,
+            id: plan.id,
+            name: plan.name,
+            notes: plan.notes,
+            primaryGoal: plan.primary_goal,
+            riskTolerance: plan.risk_tolerance,
+            status: plan.status,
+            strategyAngle: plan.strategy_angle,
+            streamingSlots: plan.streaming_slots,
+            targets: targetsByPlan.get(plan.id) ?? [],
+            updatedAt: plan.updated_at,
+          }),
+        );
       });
+
+    const summarizePreDraftPlan = ({ notes: _notes, ...plan }: PreDraftPlan): PreDraftPlanSummary =>
+      plan;
+
+    const mapScenarioFailure = (
+      error: unknown,
+      operation: 'manage_pre_draft_scenario' | 'pre_draft_workspace' | 'save_pre_draft_target',
+      message: string,
+    ): DatabaseUnavailable | PreDraftScenarioError =>
+      error instanceof PreDraftScenarioError ? error : databaseUnavailable(operation, message);
 
     const preDraftWorkspace = (
       ownerCanonicalKey: string,
       requestedSeasonKey?: string,
-    ): Effect.Effect<PreDraftWorkspace, DatabaseUnavailable> =>
+      requestedPlanId?: string,
+    ): Effect.Effect<PreDraftWorkspace, DatabaseUnavailable | PreDraftScenarioError> =>
       Effect.gen(function* () {
         const [season] = requestedSeasonKey
           ? yield* sql<{
@@ -3396,7 +3617,14 @@ const databaseServiceLayer = Layer.effect(
               limit 1
             `;
         if (season === undefined || season.source_league_history_id === null) {
-          return { league: null, owner: null, plan: null };
+          return {
+            activePlan: null,
+            activePlanId: null,
+            league: null,
+            owner: null,
+            plans: [],
+            selectedPlan: null,
+          };
         }
 
         const [owner] = yield* sql<{
@@ -3419,171 +3647,309 @@ const databaseServiceLayer = Layer.effect(
             and lm.canonical_key = ${ownerCanonicalKey}
           limit 1
         `;
+        const league = {
+          baseBudgetCents: season.base_budget_cents,
+          rosterSize: season.roster_size,
+          seasonKey: season.season_key,
+          teamCount: season.team_count,
+        };
         if (owner === undefined) {
           return {
-            league: {
-              baseBudgetCents: season.base_budget_cents,
-              rosterSize: season.roster_size,
-              seasonKey: season.season_key,
-              teamCount: season.team_count,
-            },
+            activePlan: null,
+            activePlanId: null,
+            league,
             owner: null,
-            plan: null,
+            plans: [],
+            selectedPlan: null,
           };
         }
 
-        const [planRow] = yield* sql<{ id: string }>`
-          select id
-          from fantasy.pre_draft_plans
-          where
-            league_member_id = ${owner.member_id}
-            and league_season_id = ${season.id}
-            and status = 'active'
-          order by updated_at desc
-          limit 1
+        const plans = yield* readPreDraftPlans(owner.member_id, season.id);
+        const [selection] = yield* sql<{ active_plan_id: string }>`
+          select active_plan_id
+          from fantasy.pre_draft_plan_selections
+          where league_member_id = ${owner.member_id} and league_season_id = ${season.id}
         `;
-        const plan = planRow === undefined ? null : yield* readPreDraftPlan(planRow.id);
+        const activePlanId = selectDefaultPreDraftPlanId(
+          plans,
+          selection?.active_plan_id ?? null,
+        );
+        const activePlan = plans.find((plan) => plan.id === activePlanId) ?? null;
+        const selectedPlan =
+          requestedPlanId === undefined
+            ? activePlan
+            : (plans.find(
+                (plan) => plan.id === requestedPlanId && plan.status !== 'archived',
+              ) ?? null);
+        if (requestedPlanId !== undefined && selectedPlan === null) {
+          return yield* Effect.fail(
+            scenarioError(
+              'plan_not_found',
+              'That scenario does not belong to this owner and season, or it has been archived.',
+            ),
+          );
+        }
         return {
-          league: {
-            baseBudgetCents: season.base_budget_cents,
-            rosterSize: season.roster_size,
-            seasonKey: season.season_key,
-            teamCount: season.team_count,
-          },
+          activePlan,
+          activePlanId,
+          league,
           owner: {
             canonicalKey: owner.canonical_key,
             displayName: owner.display_name,
             memberId: owner.member_id,
             teamName: owner.team_name,
           },
-          plan,
+          plans: plans.map(summarizePreDraftPlan),
+          selectedPlan,
         } satisfies PreDraftWorkspace;
       }).pipe(
-        Effect.mapError(() =>
-          databaseUnavailable('pre_draft_workspace', 'The pre-draft workspace could not be loaded'),
+        Effect.mapError((error) =>
+          mapScenarioFailure(
+            error,
+            'pre_draft_workspace',
+            'The pre-draft workspace could not be loaded',
+          ),
         ),
       );
 
-    const savePreDraftPlan = (
-      input: SavePreDraftPlanInput,
-    ): Effect.Effect<PreDraftPlan, DatabaseUnavailable> => {
+    const managePreDraftScenario = (
+      command: PreDraftScenarioCommand,
+    ): Effect.Effect<
+      PreDraftScenarioCommandResult,
+      DatabaseUnavailable | PreDraftScenarioError
+    > => {
       const operation = Effect.gen(function* () {
-        if (
-          input.name.trim().length < 2 ||
-          input.strategyAngle.trim().length < 2 ||
-          input.streamingSlots < 0 ||
-          input.streamingSlots > 3 ||
-          input.anchorBudgetCents < 0 ||
-          input.coreBudgetCents < 0 ||
-          input.endgameBudgetCents < 0
-        ) {
-          throw new Error('The pre-draft plan is invalid');
-        }
-        const [reference] = yield* sql<{ league_member_id: string; league_season_id: string }>`
+        const [reference] = yield* sql<{
+          league_member_id: string;
+          league_season_id: string;
+        }>`
           select lm.id as league_member_id, ls.id as league_season_id
           from fantasy.league_seasons ls
           join fantasy.league_members lm
             on lm.source_league_history_id = ls.source_league_history_id
           where
             ls.source = 'fantrax'
-            and ls.season_key = ${input.seasonKey}
-            and lm.canonical_key = ${input.ownerCanonicalKey}
+            and ls.season_key = ${command.seasonKey}
+            and lm.canonical_key = ${command.ownerCanonicalKey}
           order by ls.updated_at desc
           limit 1
         `;
-        if (reference === undefined) throw new Error('The owner or league season was not found');
-        const [saved] = yield* sql<{ id: string }>`
-          insert into fantasy.pre_draft_plans
-            (
-              league_member_id,
-              league_season_id,
-              name,
-              status,
-              primary_goal,
-              strategy_angle,
-              risk_tolerance,
-              anchor_budget_cents,
-              core_budget_cents,
-              endgame_budget_cents,
-              streaming_slots,
-              notes
-            )
-          values
-            (
-              ${reference.league_member_id},
-              ${reference.league_season_id},
-              ${input.name.trim()},
-              'active',
-              ${input.primaryGoal},
-              ${input.strategyAngle.trim()},
-              ${input.riskTolerance},
-              ${input.anchorBudgetCents},
-              ${input.coreBudgetCents},
-              ${input.endgameBudgetCents},
-              ${input.streamingSlots},
-              ${input.notes.trim()}
-            )
-          on conflict (league_member_id, league_season_id, name) do update set
-            status = 'active',
-            primary_goal = excluded.primary_goal,
-            strategy_angle = excluded.strategy_angle,
-            risk_tolerance = excluded.risk_tolerance,
-            anchor_budget_cents = excluded.anchor_budget_cents,
-            core_budget_cents = excluded.core_budget_cents,
-            endgame_budget_cents = excluded.endgame_budget_cents,
-            streaming_slots = excluded.streaming_slots,
-            notes = excluded.notes,
-            updated_at = now()
-          returning id
-        `;
-        if (saved === undefined) throw new Error('The pre-draft plan was not saved');
-        const plan = yield* readPreDraftPlan(saved.id);
-        if (plan === null) throw new Error('The saved pre-draft plan could not be loaded');
-        return plan;
-      });
-      return sql
-        .withTransaction(operation)
-        .pipe(
-          Effect.mapError(() =>
-            databaseUnavailable('save_pre_draft_plan', 'The pre-draft plan could not be saved'),
-          ),
+        if (reference === undefined) {
+          return yield* Effect.fail(
+            scenarioError('plan_not_found', 'The owner or league season was not found.'),
+          );
+        }
+        const plans = yield* readPreDraftPlans(
+          reference.league_member_id,
+          reference.league_season_id,
         );
+        const [selection] = yield* sql<{ active_plan_id: string }>`
+          select active_plan_id
+          from fantasy.pre_draft_plan_selections
+          where
+            league_member_id = ${reference.league_member_id}
+            and league_season_id = ${reference.league_season_id}
+          for update
+        `;
+        const activePlanId = selectDefaultPreDraftPlanId(
+          plans,
+          selection?.active_plan_id ?? null,
+        );
+        validatePreDraftScenarioCommand(command, { activePlanId, plans });
+
+        const activate = (planId: string) =>
+          Effect.gen(function* () {
+            yield* sql`
+              update fantasy.pre_draft_plans
+              set status = 'draft', updated_at = now()
+              where
+                league_member_id = ${reference.league_member_id}
+                and league_season_id = ${reference.league_season_id}
+                and status <> 'archived'
+            `;
+            yield* sql`
+              update fantasy.pre_draft_plans
+              set status = 'active', updated_at = now()
+              where
+                id = ${planId}
+                and league_member_id = ${reference.league_member_id}
+                and league_season_id = ${reference.league_season_id}
+            `;
+            yield* sql`
+              insert into fantasy.pre_draft_plan_selections
+                (league_member_id, league_season_id, active_plan_id)
+              values
+                (${reference.league_member_id}, ${reference.league_season_id}, ${planId})
+              on conflict (league_member_id, league_season_id) do update set
+                active_plan_id = excluded.active_plan_id,
+                updated_at = now()
+            `;
+          });
+
+        switch (command.intent) {
+          case 'create': {
+            const planId = randomUUID();
+            const isFirstPlan = plans.length === 0;
+            yield* sql`
+              insert into fantasy.pre_draft_plans
+                (
+                  id, league_member_id, league_season_id, name, status, primary_goal,
+                  strategy_angle, risk_tolerance, anchor_budget_cents, core_budget_cents,
+                  endgame_budget_cents, streaming_slots, notes
+                )
+              values
+                (
+                  ${planId}, ${reference.league_member_id}, ${reference.league_season_id},
+                  ${command.details.name.trim()}, ${isFirstPlan ? 'active' : 'draft'},
+                  ${command.details.primaryGoal}, ${command.details.strategyAngle.trim()},
+                  ${command.details.riskTolerance}, ${command.details.anchorBudgetCents},
+                  ${command.details.coreBudgetCents}, ${command.details.endgameBudgetCents},
+                  ${command.details.streamingSlots}, ${command.details.notes.trim()}
+                )
+            `;
+            if (isFirstPlan) yield* activate(planId);
+            return { activePlanId: isFirstPlan ? planId : activePlanId, planId };
+          }
+          case 'duplicate': {
+            const source = plans.find((plan) => plan.id === command.sourcePlanId)!;
+            const planId = randomUUID();
+            yield* sql`
+              insert into fantasy.pre_draft_plans
+                (
+                  id, league_member_id, league_season_id, name, status, primary_goal,
+                  strategy_angle, risk_tolerance, anchor_budget_cents, core_budget_cents,
+                  endgame_budget_cents, streaming_slots, notes
+                )
+              values
+                (
+                  ${planId}, ${reference.league_member_id}, ${reference.league_season_id},
+                  ${command.name.trim()}, 'draft', ${source.primaryGoal}, ${source.strategyAngle},
+                  ${source.riskTolerance}, ${source.anchorBudgetCents}, ${source.coreBudgetCents},
+                  ${source.endgameBudgetCents}, ${source.streamingSlots}, ${source.notes}
+                )
+            `;
+            for (const target of copyPreDraftTargets(source.targets, planId)) {
+              yield* sql`
+                insert into fantasy.pre_draft_targets
+                  (id, plan_id, player_id, stance, max_bid_cents, priority, rationale)
+                values
+                  (
+                    ${target.targetId}, ${target.planId}, ${target.playerId}, ${target.stance},
+                    ${target.maxBidCents}, ${target.priority}, ${target.rationale}
+                  )
+              `;
+            }
+            return { activePlanId, planId };
+          }
+          case 'update':
+            yield* sql`
+              update fantasy.pre_draft_plans
+              set
+                name = ${command.details.name.trim()},
+                primary_goal = ${command.details.primaryGoal},
+                strategy_angle = ${command.details.strategyAngle.trim()},
+                risk_tolerance = ${command.details.riskTolerance},
+                anchor_budget_cents = ${command.details.anchorBudgetCents},
+                core_budget_cents = ${command.details.coreBudgetCents},
+                endgame_budget_cents = ${command.details.endgameBudgetCents},
+                streaming_slots = ${command.details.streamingSlots},
+                notes = ${command.details.notes.trim()},
+                updated_at = now()
+              where
+                id = ${command.planId}
+                and league_member_id = ${reference.league_member_id}
+                and league_season_id = ${reference.league_season_id}
+            `;
+            return { activePlanId, planId: command.planId };
+          case 'activate':
+            yield* activate(command.planId);
+            return { activePlanId: command.planId, planId: command.planId };
+          case 'archive': {
+            const nextActivePlanId = command.replacementPlanId ?? activePlanId;
+            if (command.replacementPlanId !== undefined) {
+              yield* activate(command.replacementPlanId);
+            }
+            yield* sql`
+              update fantasy.pre_draft_plans
+              set status = 'archived', updated_at = now()
+              where
+                id = ${command.planId}
+                and league_member_id = ${reference.league_member_id}
+                and league_season_id = ${reference.league_season_id}
+            `;
+            return { activePlanId: nextActivePlanId, planId: command.planId };
+          }
+        }
+      });
+      return sql.withTransaction(operation).pipe(
+        Effect.mapError((error) =>
+          mapScenarioFailure(
+            error,
+            'manage_pre_draft_scenario',
+            'The pre-draft scenario could not be saved',
+          ),
+        ),
+      );
     };
 
     const savePreDraftTarget = (
       input: SavePreDraftTargetInput,
-    ): Effect.Effect<void, DatabaseUnavailable> => {
+    ): Effect.Effect<void, DatabaseUnavailable | PreDraftScenarioError> => {
       if (
+        !Number.isInteger(input.priority) ||
         input.priority < 1 ||
         input.priority > 5 ||
-        (input.maxBidCents !== null && input.maxBidCents < 0)
+        (input.maxBidCents !== null &&
+          (!Number.isInteger(input.maxBidCents) || input.maxBidCents < 0))
       ) {
-        return Effect.fail(
-          databaseUnavailable('save_pre_draft_target', 'The pre-draft target is invalid'),
-        );
+        return Effect.fail(scenarioError('invalid_input', 'Enter a valid target bid and priority.'));
       }
-      return sql`
-        insert into fantasy.pre_draft_targets
-          (plan_id, player_id, stance, max_bid_cents, priority, rationale)
-        values
-          (
-            ${input.planId},
-            ${input.playerId},
-            ${input.stance},
-            ${input.maxBidCents},
-            ${input.priority},
-            ${input.rationale.trim()}
-          )
-        on conflict (plan_id, player_id) do update set
-          stance = excluded.stance,
-          max_bid_cents = excluded.max_bid_cents,
-          priority = excluded.priority,
-          rationale = excluded.rationale,
-          updated_at = now()
-      `.pipe(
+      const operation = Effect.gen(function* () {
+        const [plan] = yield* sql<{ id: string }>`
+          select pdp.id
+          from fantasy.pre_draft_plans pdp
+          join fantasy.league_seasons ls on ls.id = pdp.league_season_id
+          join fantasy.league_members lm on lm.id = pdp.league_member_id
+          where
+            pdp.id = ${input.planId}
+            and pdp.status <> 'archived'
+            and ls.source = 'fantrax'
+            and ls.season_key = ${input.seasonKey}
+            and lm.canonical_key = ${input.ownerCanonicalKey}
+          for update
+        `;
+        if (plan === undefined) {
+          return yield* Effect.fail(
+            scenarioError(
+              'plan_not_found',
+              'That scenario does not belong to this owner and season, or it has been archived.',
+            ),
+          );
+        }
+        yield* sql`
+          insert into fantasy.pre_draft_targets
+            (plan_id, player_id, stance, max_bid_cents, priority, rationale)
+          values
+            (
+              ${input.planId}, ${input.playerId}, ${input.stance}, ${input.maxBidCents},
+              ${input.priority}, ${input.rationale.trim()}
+            )
+          on conflict (plan_id, player_id) do update set
+            stance = excluded.stance,
+            max_bid_cents = excluded.max_bid_cents,
+            priority = excluded.priority,
+            rationale = excluded.rationale,
+            updated_at = now()
+        `;
+      });
+      return sql.withTransaction(operation).pipe(
         Effect.asVoid,
-        Effect.mapError(() =>
-          databaseUnavailable('save_pre_draft_target', 'The pre-draft target could not be saved'),
+        Effect.mapError((error) =>
+          mapScenarioFailure(
+            error,
+            'save_pre_draft_target',
+            'The pre-draft target could not be saved',
+          ),
         ),
       );
     };
@@ -5996,6 +6362,7 @@ const databaseServiceLayer = Layer.effect(
       leagueRosterActivity,
       leagueRosterSnapshot,
       leagueTeamHistory,
+      managePreDraftScenario,
       mergePlayerIdentities,
       playerProductionHistory,
       preDraftWorkspace,
@@ -6010,7 +6377,6 @@ const databaseServiceLayer = Layer.effect(
       saveAuctionValuationRun,
       saveLeaguePerformance,
       saveLeagueRosterHistory,
-      savePreDraftPlan,
       savePreDraftTarget,
       saveProjectionSnapshot,
       saveSeasonCalendar,

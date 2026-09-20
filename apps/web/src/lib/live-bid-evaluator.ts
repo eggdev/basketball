@@ -44,7 +44,7 @@ async function judgeWithJev(input: {
   readonly abortSignal?: AbortSignal;
   readonly baseline: LiveBidEvaluation;
   readonly ownedPlayers: ReadonlyArray<LiveBidPlayer>;
-  readonly plan: Awaited<ReturnType<typeof loadPreDraftWorkspace>>['plan'];
+  readonly plan: Awaited<ReturnType<typeof loadPreDraftWorkspace>>['activePlan'];
 }): Promise<LiveBidJudgment> {
   try {
     const timeoutSignal = AbortSignal.timeout(4_000);
@@ -161,7 +161,7 @@ export async function evaluateLiveBidRequest(
   const board = createLiveBidBoard({
     league: workspace.league,
     market,
-    plan: workspace.plan,
+    plan: workspace.activePlan,
     projection,
     valuation,
   });
@@ -174,7 +174,7 @@ export async function evaluateLiveBidRequest(
     abortSignal,
     baseline,
     ownedPlayers,
-    plan: workspace.plan,
+    plan: workspace.activePlan,
   });
 
   return {
