@@ -19,9 +19,12 @@
   `plans/003-import-nba-schedules.md`
 - **Category**: direction / valuation model
 - **Planned at**: commit `a02ceb2`, 2026-09-19
-- **Implementation review**: APPROVED at `afcd3ce`, 2026-09-19. Production
-  migration, candidate creation, value-delta review, and explicit promotion
-  remain rollout work and were not performed by the isolated executor.
+- **Implementation review**: APPROVED at `afcd3ce`, 2026-09-19, and integrated
+  onto `main` at `cf1eb8d`, 2026-09-20.
+- **Production rollout**: COMPLETE, 2026-09-20. Migration `0012` was applied,
+  candidate `c0adf9f2-9be9-4ad4-b5bc-a7173146b02c` was reviewed and promoted,
+  and superseded run `790e08e0-cd49-4813-9dc4-43d977825912` remains the tested
+  rollback target.
 - **Reconciled after Plans 002–003**: immutable valuation candidates now persist
   through `auction_valuation_runs` / `auction_valuation_players`, projection
   snapshots carry calendar snapshot provenance, and `latestSeasonCalendar`
