@@ -9,6 +9,7 @@ import type { PlayerSituation, PlayerSituationBoard } from '@fantasy-basketball/
 import { useMemo, useState } from 'react';
 
 import { formatFantasyPoints, formatPrice, formatSignedPrice } from '../../lib/format';
+import { PlayerCard } from '../player-card';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
@@ -456,14 +457,16 @@ export function PlayersView({
                     <tr key={player.playerId}>
                       <td className={styles.rank}>{player.rank}</td>
                       <th aria-label={player.playerName} scope="row">
-                        <span className={styles.tablePlayer}>
-                          <strong>{player.playerName}</strong>
-                          <small>
-                            {[player.teamAbbreviation, ...player.positions]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </small>
-                        </span>
+                        <PlayerCard
+                          compact
+                          playerId={player.playerId}
+                          playerName={player.playerName}
+                          projection={player}
+                          projectionSeason={projections?.seasonKey}
+                          situation={situations?.players.find(
+                            (candidate) => candidate.playerId === player.playerId,
+                          )}
+                        />
                       </th>
                       <td>{formatFantasyPoints(player.fantasyPoints)}</td>
                       <td>

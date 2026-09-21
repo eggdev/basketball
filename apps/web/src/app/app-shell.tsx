@@ -153,15 +153,16 @@ function NavigationIcon({ name }: { readonly name: NavigationIconName }) {
 
 const navigation: ReadonlyArray<NavigationGroup> = [
   {
-    label: 'Research',
+    label: 'Our team & league',
     links: [
+      { href: '/team', label: 'Team HQ', icon: 'draft' },
       { href: '/league', label: 'League', icon: 'league' },
       { href: '/players', label: 'Players', icon: 'players' },
       { href: '/managers', label: 'Managers', icon: 'managers' },
     ],
   },
   {
-    label: 'Decision rooms',
+    label: 'Make a move',
     links: [
       { href: '/draft', label: 'Draft', icon: 'draft' },
       { href: '/trades', label: 'Trades', icon: 'trades' },
@@ -175,6 +176,10 @@ const navigation: ReadonlyArray<NavigationGroup> = [
 ];
 
 const routePrompts: Readonly<Record<string, ReadonlyArray<string>>> = {
+  '/team': [
+    'What should our team prioritize next?',
+    'Where do we trail the league, and what evidence explains the gap?',
+  ],
   '/draft': [
     'Challenge my active draft plan.',
     'Where does Fantrax ADP diverge from our league market?',
@@ -459,7 +464,7 @@ function AppShellRuntime({
     isCompactLayout,
     () => false,
   );
-  const [desktopChatOpen, setDesktopChatOpen] = useState(true);
+  const [desktopChatOpen, setDesktopChatOpen] = useState(pathname !== '/team');
   const [compactChatOpen, setCompactChatOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);

@@ -4,6 +4,8 @@ import type { LeagueRosterSnapshot } from '@fantasy-basketball/database/runtime'
 import { useMemo, useState } from 'react';
 
 import { formatPrice } from '../../lib/format';
+import { PlayerCard } from '../player-card';
+import playerStyles from '../player-card.module.css';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
@@ -11,24 +13,37 @@ import styles from '../workspace.module.css';
 export function TradesView({
   authenticated,
   snapshot,
+  initialSelection,
 }: {
+  readonly initialSelection?: { season?: string; team?: string; rival?: string };
   readonly authenticated: boolean;
   readonly snapshot: LeagueRosterSnapshot | null;
 }) {
   const initialSeason =
-    snapshot?.summary.latestPopulatedSeason ?? snapshot?.summary.latestSeason ?? '';
+    (snapshot?.seasons.some((season) => season.seasonKey === initialSelection?.season)
+      ? initialSelection?.season
+      : undefined) ??
+    snapshot?.summary.latestPopulatedSeason ??
+    snapshot?.summary.latestSeason ??
+    '';
   const [seasonKey, setSeasonKey] = useState(initialSeason);
   const season = useMemo(
     () => snapshot?.seasons.find((candidate) => candidate.seasonKey === seasonKey) ?? null,
     [seasonKey, snapshot],
   );
+  const initialTeams =
+    snapshot?.seasons.find((candidate) => candidate.seasonKey === initialSeason)?.teams ?? [];
   const [leftTeamId, setLeftTeamId] = useState(
-    snapshot?.seasons.find((candidate) => candidate.seasonKey === initialSeason)?.teams[0]
-      ?.teamSeasonId ?? '',
+    initialTeams.find((team) => team.teamSeasonId === initialSelection?.team)?.teamSeasonId ??
+      snapshot?.seasons.find((candidate) => candidate.seasonKey === initialSeason)?.teams[0]
+        ?.teamSeasonId ??
+      '',
   );
   const [rightTeamId, setRightTeamId] = useState(
-    snapshot?.seasons.find((candidate) => candidate.seasonKey === initialSeason)?.teams[1]
-      ?.teamSeasonId ?? '',
+    initialTeams.find((team) => team.teamSeasonId === initialSelection?.rival)?.teamSeasonId ??
+      snapshot?.seasons.find((candidate) => candidate.seasonKey === initialSeason)?.teams[1]
+        ?.teamSeasonId ??
+      '',
   );
   const leftTeam = season?.teams.find((team) => team.teamSeasonId === leftTeamId) ?? null;
   const rightTeam = season?.teams.find((team) => team.teamSeasonId === rightTeamId) ?? null;
@@ -170,11 +185,10 @@ export function TradesView({
                     </strong>
                   </span>
                 </div>
-                <ol className={styles.rosterList}>
+                <ol className={playerStyles.list}>
                   {team.roster.map((player) => (
                     <li key={player.playerId}>
-                      <span>{player.playerName}</span>
-                      <strong>{formatPrice(player.auctionCostCents)}</strong>
+                      <PlayerCard compact {...player} rosterSeason={seasonKey} />
                     </li>
                   ))}
                 </ol>

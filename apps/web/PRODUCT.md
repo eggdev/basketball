@@ -35,7 +35,8 @@ The product is grounded in one league's reviewed Fantrax history and Brendan's o
 
 ## Capabilities and Constraints
 
-- The routed Next.js application provides League, Players, Managers, Draft, Trades, Waivers, and League Settings workspaces plus a contextual Eve conversation panel.
+- The routed Next.js application opens at Team HQ and provides League, Players, Managers, Draft, Trades, Waivers, and League Settings workspaces plus a contextual Eve conversation panel. Team HQ brings the owner’s draft roster, latest player estimates, observed league comparison lenses, and a selected rival into one view. Its trade link carries the selected season and both teams into trade analysis.
+- Shared player cards provide expandable evidence and availability, opportunity, auction-price, and provenance explanations across Team HQ, projection research, and trade rosters. Historical ownership and current model estimates retain separate season labels.
 - GitHub is the intended sign-in provider. Account creation fails closed unless the returned email is on the owner allowlist.
 - Private league identifiers, manager names, raw exports, normalized output, and provider responses remain local and are not committed.
 - Historical imports are reviewed, fingerprinted, and kept auditable. Player identity merges require explicit human review and are never inferred from similar names.
