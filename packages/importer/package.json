@@ -59,6 +59,15 @@
           "forwardAllArgs": true
         }
       },
+      "advanced-stats-import": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/import-advanced-stats.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
+      },
       "league-performance-import": {
         "executor": "nx:run-commands",
         "cache": false,
@@ -91,6 +100,15 @@
         "cache": false,
         "options": {
           "command": "bun --env-file=.env.local packages/importer/scripts/import-projections.ts",
+          "cwd": ".",
+          "forwardAllArgs": true
+        }
+      },
+      "player-context-import": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/import-player-context.ts",
           "cwd": ".",
           "forwardAllArgs": true
         }

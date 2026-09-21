@@ -45,6 +45,10 @@ uncertainty instead of manufacturing precise personalities from tiny samples.
   epistemic language.
 - Plan 002 provides versioned walk-forward price predictions; only predictions
   made without target-season outcomes may be used as historical price baselines.
+- The league permits an uncontested $0 award to the nominator and requires no
+  cash reserve for open roster spots. Historical winner rows reveal $0 clearing
+  outcomes but not every losing manager's decision to pass; do not present
+  winner-only data as a complete bid log.
 
 The pure deep-module interface should be:
 
@@ -115,7 +119,7 @@ returns a price/demand distribution for simulation, never one deterministic bid.
 ### Step 1: Build a leakage-safe manager-season dataset
 
 Add one database read model containing every resolved manager purchase with
-season, price/base-budget share, purchase or nomination order when present,
+season, price/base-budget share, whether the player cleared at $0, purchase or nomination order when present,
 player ID, repeat-player history available before that season, and the Plan 002
 walk-forward predicted price/range for that season. Join standings and inferred
 roster activity only as descriptive outcomes, not predictive inputs for auction
@@ -134,6 +138,7 @@ than misattributed.
 In `manager-demand.ts`, calculate per manager:
 
 - share of budget in anchor/core/endgame tiers;
+- zero-dollar acquisition share and positive-price clearance share;
 - top-one/top-three spend concentration;
 - roster price entropy or an equivalent stars-and-scrubs measure;
 - price residual versus the leakage-safe market estimate;
@@ -155,15 +160,17 @@ Implement `scoreManagerDemand` using candidate market estimate/tier, current
 manager budget/roster progress, repeat-player flag, and simulation phase. Return
 at minimum:
 
-- participation probability;
-- willingness-to-pay median;
+- positive-bid probability, labeled as a winner-history proxy unless complete
+  bid participation becomes available;
+- probability of a league-prior uncontested $0 clearance;
+- willingness-to-pay median conditional on a positive bid;
 - lower/upper interval;
 - uncertainty/effective sample size;
 - top contributing signals as structured explanations.
 
-Clamp willingness to legal remaining budget/minimum-reserve constraints in the
-simulator, not in this statistical profile. Seed any sampling outside this
-function; scoring the same inputs must be pure.
+Clamp willingness to the legal remaining budget in the simulator, not in this
+statistical profile. Do not reserve cash for unfilled roster spots. Seed any
+sampling outside this function; scoring the same inputs must be pure.
 
 **Verify**: tests prove a repeat target can move a well-supported profile, a
 one-season manager remains close to league prior, missing nomination data does
@@ -175,6 +182,7 @@ For each season after the first, train profiles only on earlier seasons and
 evaluate held-out manager purchases. Report:
 
 - price interval coverage and absolute error versus a league-prior baseline;
+- calibration of $0 versus positive-price clearing outcomes;
 - price-tier calibration;
 - repeat-player precision/recall where meaningful;
 - number of managers/seasons/purchases and missing-data rates.
@@ -188,7 +196,7 @@ prior baseline.
 
 ### Step 5: Surface profiles with strong uncertainty labels
 
-Update manager pages to show price-shape, repeat loyalty, price residual,
+Update manager pages to show price-shape, observed $0 acquisition share, repeat loyalty, price residual,
 timing coverage, and confidence/effective sample. Join playoff outcome and
 roster churn in a separate descriptive section. Use language such as
 `observed`, `association`, and `limited sample`; never `will bid` or `caused`.
@@ -223,6 +231,7 @@ intent.
 - [ ] Individual features shrink toward a league prior based on sample size.
 - [ ] Walk-forward diagnostics compare against a league-only baseline.
 - [ ] Scoring returns a distribution with structured explanations, not a fixed bid.
+- [ ] The model separates $0-clear probability from price conditional on competition.
 - [ ] No unavailable historical ADP/projection/injury feature is fabricated.
 - [ ] Manager UI and Eve disclose effective sample and uncertainty.
 - [ ] `bun run check && bun run build` exits 0.
@@ -233,6 +242,8 @@ intent.
 - Fewer than two prior seasons exist for every held-out evaluation fold.
 - A proposed feature depends on historical data not timestamped before its
   auction.
+- Individual pass/participation behavior is claimed from winner-only rows;
+  without bid logs, keep that uncertainty at the league-prior level.
 - The implementation starts encoding named-manager rules or subjective labels.
 - The model cannot outperform or calibrate comparably to the league prior; in
   that case keep the prior-only model and report the result.

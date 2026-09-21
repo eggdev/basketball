@@ -164,7 +164,7 @@ describe('evaluateLiveBidBoard', () => {
       remainingRosterSpots: 12,
     });
 
-    expect(result.market.projectedValueCents).toBe(39_900);
+    expect(result.market.projectedValueCents).toBe(40_000);
     expect(result.market.usableValueCents).toBe(4_921);
     expect(result.personal).toMatchObject({
       maxBidCents: 4_900,

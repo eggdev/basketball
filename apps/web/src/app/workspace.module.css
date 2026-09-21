@@ -904,6 +904,12 @@
   font-weight: 500;
 }
 
+.evidenceLink {
+  color: var(--color-signal);
+  font-weight: 750;
+  text-decoration: underline;
+}
+
 .rank {
   width: 32px;
   color: var(--color-signal) !important;

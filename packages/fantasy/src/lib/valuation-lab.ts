@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
 
+import { allocateLeagueAuctionPool, LEAGUE_AUCTION_RULES } from './auction-economy';
 import {
   buildUsablePointsBoard,
+  USABLE_POINTS_MODEL_VERSION,
   type UsablePointsBoardInput,
   type UsablePointsBoardPlayer,
 } from './usable-points';
 
 export type AuctionValuationModelId =
   | 'last-price-v1'
-  | 'market-production-50-v1'
-  | 'market-production-75-v1'
+  | 'market-production-50-v2'
+  | 'market-production-75-v2'
   | 'recency-market-v1';
 
 export type AuctionPriceTier = 'anchor' | 'core' | 'endgame';
@@ -60,6 +62,7 @@ export interface AuctionValueSnapshot {
   readonly draftablePlayerCount: number;
   readonly players: ReadonlyArray<AuctionValuePlayer>;
   readonly replacementPointsPerGame: number;
+  readonly zeroDollarPlayerCount: number;
 }
 
 export interface AuctionValuationPrediction {
@@ -147,7 +150,7 @@ export interface AuctionValuationLab {
 }
 
 export interface AuctionValuationArtifact {
-  readonly artifactVersion: 'auction-valuation-artifact-v2';
+  readonly artifactVersion: 'auction-valuation-artifact-v3';
   readonly candidateResults: ReadonlyArray<AuctionValuationModelResult>;
   readonly current: {
     readonly players: ReadonlyArray<CurrentAuctionUsableEstimate>;
@@ -175,6 +178,7 @@ export interface AuctionValuationArtifact {
   readonly selectedModelId: AuctionValuationModelId;
   readonly selectionRule: 'lowest-drafted-player-mae-then-model-id';
   readonly productionValue: {
+    readonly auctionRules: typeof LEAGUE_AUCTION_RULES;
     readonly auctionPoolCents: number;
     readonly draftablePlayerCount: number;
     readonly leagueFormat: {
@@ -183,7 +187,7 @@ export interface AuctionValuationArtifact {
       readonly version: number;
     };
     readonly longTermPlayerCount: number;
-    readonly modelVersion: 'usable-lineup-v1';
+    readonly modelVersion: typeof USABLE_POINTS_MODEL_VERSION;
     readonly schedule: {
       readonly asOf: string;
       readonly fingerprint: string;
@@ -191,6 +195,7 @@ export interface AuctionValuationArtifact {
     };
     readonly seasonCalendar: UsablePointsBoardInput['seasonCalendar'];
     readonly streamingSlotsPerTeam: number;
+    readonly zeroDollarPlayerCount: number;
   };
 }
 
@@ -230,21 +235,20 @@ const MODEL_DEFINITIONS: ReadonlyArray<ModelDefinition> = [
   },
   {
     description: 'Blends prior league prices evenly with lagged production value.',
-    id: 'market-production-50-v1',
+    id: 'market-production-50-v2',
     label: 'Market + production 50/50',
     marketWeight: 0.5,
     strategy: 'weighted-blend',
   },
   {
-    description: 'Leans on prior league prices while reserving 25% for lagged production value.',
-    id: 'market-production-75-v1',
+    description: 'Leans on prior league prices while assigning 25% to lagged production value.',
+    id: 'market-production-75-v2',
     label: 'Market + production 75/25',
     marketWeight: 0.75,
     strategy: 'weighted-blend',
   },
 ];
 
-const MINIMUM_DRAFT_PRICE_CENTS = 100;
 const MINIMUM_ERROR_BAND_CENTS = 300;
 
 const assertPositiveInteger = (value: number, label: string): void => {
@@ -286,8 +290,9 @@ const observedPrice = (season: AuctionValuationSeason, playerId: string): number
 
 /**
  * Converts a points-per-game player pool into dollar values above replacement.
- * Every draftable roster spot reserves the league-minimum $1 bid before the
- * remaining auction pool is allocated by marginal production.
+ * The complete auction pool is allocated by marginal production. Replacement
+ * players may be valued at the league's legal $0 floor; no roster-spot reserve
+ * is removed from the available budget.
  */
 export function allocateAuctionValues(input: {
   readonly baseBudgetCents: number;
@@ -310,51 +315,30 @@ export function allocateAuctionValues(input: {
   const draftablePlayerCount = Math.min(input.teamCount * input.rosterSize, rankedPlayers.length);
   const replacementPointsPerGame =
     rankedPlayers[Math.max(0, draftablePlayerCount - 1)]?.fantasyPointsPerGame ?? 0;
-  const auctionPoolCents = input.teamCount * input.baseBudgetCents;
-  const reservedMinimumsCents = draftablePlayerCount * MINIMUM_DRAFT_PRICE_CENTS;
-  if (auctionPoolCents < reservedMinimumsCents) {
-    throw new RangeError('auction pool cannot fund the minimum bid for every draftable player');
-  }
-  const discretionaryPoolCents = auctionPoolCents - reservedMinimumsCents;
   const marginalPoints = rankedPlayers.map((player, index) =>
     index < draftablePlayerCount
       ? Math.max(0, player.fantasyPointsPerGame - replacementPointsPerGame)
       : 0,
   );
-  const totalMarginalPoints = marginalPoints.reduce((sum, points) => sum + points, 0);
-  const discretionaryDollars = Math.floor(discretionaryPoolCents / 100);
-  const allocationWeights = rankedPlayers.map((_player, index) => {
-    if (index >= draftablePlayerCount) return 0;
-    return totalMarginalPoints === 0 ? 1 : (marginalPoints[index] ?? 0);
+  const allocation = allocateLeagueAuctionPool({
+    baseBudgetCents: input.baseBudgetCents,
+    eligiblePlayerCount: draftablePlayerCount,
+    teamCount: input.teamCount,
+    weights: marginalPoints,
   });
-  const totalAllocationWeight = allocationWeights.reduce((sum, weight) => sum + weight, 0);
-  const exactDollarAllocations = allocationWeights.map((weight) =>
-    totalAllocationWeight === 0 ? 0 : (weight / totalAllocationWeight) * discretionaryDollars,
-  );
-  const wholeDollarAllocations = exactDollarAllocations.map((value) => Math.floor(value));
-  let dollarsToDistribute =
-    discretionaryDollars - wholeDollarAllocations.reduce((sum, value) => sum + value, 0);
-  const remainderOrder = exactDollarAllocations
-    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
-    .filter(({ index }) => index < draftablePlayerCount)
-    .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
-  for (const allocation of remainderOrder) {
-    if (dollarsToDistribute === 0) break;
-    wholeDollarAllocations[allocation.index] = (wholeDollarAllocations[allocation.index] ?? 0) + 1;
-    dollarsToDistribute -= 1;
-  }
+  const players = rankedPlayers.map((player, index) => ({
+    playerId: player.playerId,
+    valueCents: allocation.allocationsCents[index] ?? 0,
+  }));
 
   return {
-    auctionPoolCents,
+    auctionPoolCents: allocation.auctionPoolCents,
     draftablePlayerCount,
-    players: rankedPlayers.map((player, index) => ({
-      playerId: player.playerId,
-      valueCents:
-        index >= draftablePlayerCount
-          ? 0
-          : MINIMUM_DRAFT_PRICE_CENTS + (wholeDollarAllocations[index] ?? 0) * 100,
-    })),
+    players,
     replacementPointsPerGame,
+    zeroDollarPlayerCount: players
+      .slice(0, draftablePlayerCount)
+      .filter((player) => player.valueCents === LEAGUE_AUCTION_RULES.minimumBidCents).length,
   };
 }
 
@@ -691,7 +675,7 @@ export function buildAuctionValuationLab(input: {
       'Rookies and players without prior league or NBA history remain unmodeled until a rookie prior is added; live evaluation falls back to projection value.',
     ],
     methodology:
-      'Each completed season is predicted from earlier seasons only. Models are compared on drafted-player mean absolute error; current projected value is shown separately from the selected model’s expected league price.',
+      'Each completed season is predicted from earlier seasons only. Models are compared on drafted-player mean absolute error; current projected value uses the league’s $0 legal floor with no mandatory roster-slot reserve and remains separate from the selected model’s expected league price.',
     models,
     selectedModelId: selectedModel.id,
     version: 'walk-forward-v1',
@@ -833,7 +817,7 @@ export function buildAuctionValuationArtifact(input: {
     ),
   }));
   const artifactBody = {
-    artifactVersion: 'auction-valuation-artifact-v2' as const,
+    artifactVersion: 'auction-valuation-artifact-v3' as const,
     candidateResults,
     current: currentWithUsable,
     historicalInputs,
@@ -845,14 +829,16 @@ export function buildAuctionValuationArtifact(input: {
     limitations: [
       ...lab.limitations,
       'Usable-lineup value is a current-season production experiment; historical daily availability is not preserved, so it is not an injury backtest or playoff probability.',
+      'A $0 production-value allocation means the player is at the modeled replacement floor; it is not yet a probability that every opponent will pass.',
     ],
-    methodology: `${lab.methodology} Expected league price predicts this league's market behavior; usable-lineup value separately estimates production this roster can capture under daily lineup constraints.`,
+    methodology: `${lab.methodology} Expected league price predicts this league's market behavior; usable-lineup value separately estimates production this roster can capture under daily lineup constraints. The allocation records the league's $0 legal floor and does not reserve cash for open roster spots.`,
     modelVersion: lab.version,
     projection: input.projection,
     seasonKey: current.seasonKey,
     selectedModelId: lab.selectedModelId,
     selectionRule: 'lowest-drafted-player-mae-then-model-id' as const,
     productionValue: {
+      auctionRules: usableBoard.auctionRules,
       auctionPoolCents: usableBoard.auctionPoolCents,
       draftablePlayerCount: usableBoard.draftablePlayerCount,
       leagueFormat: {
@@ -864,6 +850,7 @@ export function buildAuctionValuationArtifact(input: {
       schedule: usableBoard.schedule,
       seasonCalendar: orderedSeasonCalendar,
       streamingSlotsPerTeam: input.productionValue.streamingSlotsPerTeam,
+      zeroDollarPlayerCount: usableBoard.zeroDollarPlayerCount,
     },
   };
   return { ...artifactBody, fingerprint: sha256(artifactBody) };

@@ -43,6 +43,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'latest_adp_snapshot'
     | 'latest_season_calendar'
     | 'latest_projection_snapshot'
+    | 'latest_player_context_snapshot'
     | 'auction_valuation_run'
     | 'promoted_auction_valuation_run'
     | 'league_performance_history'
@@ -54,8 +55,11 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'league_team_history'
     | 'replace_historical_auctions'
     | 'player_production_history'
+    | 'player_advanced_stats_history'
+    | 'player_provider_identities'
     | 'replace_historical_scoring'
     | 'replace_player_production'
+    | 'replace_player_advanced_stats'
     | 'merge_player_identities'
     | 'save_fantrax_adp_snapshot'
     | 'save_league_performance'
@@ -63,6 +67,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'manage_pre_draft_scenario'
     | 'save_pre_draft_target'
     | 'save_projection_snapshot'
+    | 'save_player_context_snapshot'
     | 'save_season_calendar'
     | 'save_auction_valuation_run'
     | 'promote_auction_valuation_run';
@@ -70,11 +75,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
 }> {}
 
 export class PreDraftScenarioError extends Data.TaggedError('PreDraftScenarioError')<{
-  readonly code:
-    | 'active_archive_refused'
-    | 'duplicate_name'
-    | 'invalid_input'
-    | 'plan_not_found';
+  readonly code: 'active_archive_refused' | 'duplicate_name' | 'invalid_input' | 'plan_not_found';
   readonly message: string;
 }> {}
 
@@ -242,6 +243,7 @@ export interface PlayerProjectionReadModel {
     readonly weightedExpectedGames: number;
     readonly weightedExpectedPoints: number;
   } | null;
+  readonly statsPerGame?: Readonly<Record<string, number>>;
   readonly teamAbbreviation: string;
   readonly usableValue?: {
     readonly diagnostics: NonNullable<
@@ -658,6 +660,13 @@ export interface CanonicalPlayer {
   readonly playerId: string;
 }
 
+export interface PlayerProviderIdentity {
+  readonly externalId: string;
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly sourceName: string;
+}
+
 export interface PlayerIdentityMergeResult {
   readonly auditId: string;
   readonly movedReferenceCounts: Readonly<Record<string, number>>;
@@ -680,6 +689,11 @@ export interface PlayerProductionBatch {
     readonly seasonKey: string;
     readonly sourcePayload: Readonly<Record<string, unknown>>;
     readonly stats: Readonly<Record<string, number | null>>;
+    readonly teamStints: ReadonlyArray<{
+      readonly gamesPlayed: number;
+      readonly lastGameDate: string;
+      readonly teamAbbreviation: string;
+    }>;
   }>;
   readonly seasons: ReadonlyArray<string>;
 }
@@ -691,12 +705,107 @@ export interface PlayerProductionImportResult {
   readonly seasonCount: number;
 }
 
+export interface PlayerAdvancedStatsBatch {
+  readonly fingerprint: string;
+  readonly records: ReadonlyArray<{
+    readonly metrics: Readonly<Record<string, number | null>>;
+    readonly playerId: string;
+    readonly providerPlayerId: string;
+    readonly seasonKey: string;
+    readonly sourcePayload: Readonly<Record<string, unknown>>;
+  }>;
+  readonly seasonKeys: ReadonlyArray<string>;
+}
+
+export interface PlayerAdvancedStatsImportResult {
+  readonly ingestionRunId: string;
+  readonly playerSeasonCount: number;
+  readonly seasonCount: number;
+}
+
+export interface PlayerAdvancedStatsHistoryRecord {
+  readonly metrics: Readonly<Record<string, number | null>>;
+  readonly playerId: string;
+  readonly seasonKey: string;
+}
+
 export interface PlayerProductionHistoryRecord {
   readonly gamesPlayed: number;
   readonly playerId: string;
   readonly playerName: string;
   readonly seasonKey: string;
   readonly stats: Readonly<Record<string, number | null>>;
+  readonly teamStints: ReadonlyArray<{
+    readonly gamesPlayed: number;
+    readonly lastGameDate: string;
+    readonly teamAbbreviation: string;
+  }>;
+}
+
+export interface StoredPlayerContext {
+  readonly injury: {
+    readonly sourceUrl: string;
+    readonly status: string | null;
+    readonly summary: string;
+  } | null;
+  readonly movement: {
+    readonly effectiveDate: string | null;
+    readonly fromTeamAbbreviation: string | null;
+    readonly note: string | null;
+    readonly sourceUrl: string;
+    readonly toTeamAbbreviation: string | null;
+    readonly type:
+      | 'draft'
+      | 'free-agent-signing'
+      | 're-signing'
+      | 'returning'
+      | 'trade'
+      | 'two-way'
+      | 'unknown'
+      | 'waiver';
+  } | null;
+  readonly role: {
+    readonly depthRole: string | null;
+    readonly note: string;
+    readonly opportunityDirection: 'down' | 'steady' | 'up' | null;
+    readonly sourceUrl: string;
+  } | null;
+}
+
+export interface PlayerContextSnapshotBatch {
+  readonly asOf: string;
+  readonly fingerprint: string;
+  readonly records: ReadonlyArray<{
+    readonly injury: StoredPlayerContext['injury'];
+    readonly movement: StoredPlayerContext['movement'];
+    readonly playerId: string;
+    readonly playerName: string;
+    readonly role: StoredPlayerContext['role'];
+    readonly sourcePayload: Readonly<Record<string, string>>;
+  }>;
+  readonly seasonKey: string;
+  readonly source: string;
+}
+
+export interface PlayerContextSnapshotImportResult {
+  readonly alreadySaved: boolean;
+  readonly ingestionRunId: string;
+  readonly playerCount: number;
+  readonly snapshotId: string;
+}
+
+export interface PlayerContextSnapshotReadModel {
+  readonly asOf: string;
+  readonly fingerprint: string;
+  readonly players: ReadonlyArray<
+    StoredPlayerContext & {
+      readonly playerId: string;
+      readonly playerName: string;
+    }
+  >;
+  readonly seasonKey: string;
+  readonly snapshotId: string;
+  readonly source: string;
 }
 
 export interface SeasonCalendarBatch {
@@ -1101,10 +1210,7 @@ export interface SavePreDraftTargetInput {
   readonly stance: PreDraftTargetStance;
 }
 
-type PreDraftScenarioStatePlan = Pick<
-  PreDraftPlanSummary,
-  'createdAt' | 'id' | 'name' | 'status'
->;
+type PreDraftScenarioStatePlan = Pick<PreDraftPlanSummary, 'createdAt' | 'id' | 'name' | 'status'>;
 
 interface PreDraftScenarioCommandState {
   readonly activePlanId: string | null;
@@ -1121,11 +1227,7 @@ const scenarioError = (
 ): PreDraftScenarioError => new PreDraftScenarioError({ code, message });
 
 const validatePreDraftScenarioDetails = (details: PreDraftScenarioDetailsInput): void => {
-  const budgets = [
-    details.anchorBudgetCents,
-    details.coreBudgetCents,
-    details.endgameBudgetCents,
-  ];
+  const budgets = [details.anchorBudgetCents, details.coreBudgetCents, details.endgameBudgetCents];
   if (
     details.name.trim().length < 2 ||
     details.name.trim().length > 80 ||
@@ -1145,7 +1247,9 @@ const findMutableScenario = (
   plans: ReadonlyArray<PreDraftScenarioStatePlan>,
   planId: string,
 ): PreDraftScenarioStatePlan => {
-  const plan = plans.find((candidate) => candidate.id === planId && candidate.status !== 'archived');
+  const plan = plans.find(
+    (candidate) => candidate.id === planId && candidate.status !== 'archived',
+  );
   if (plan === undefined) {
     throw scenarioError(
       'plan_not_found',
@@ -1163,7 +1267,8 @@ const assertUniqueScenarioName = (
   const normalizedName = name.trim().toLocaleLowerCase();
   if (
     plans.some(
-      (plan) => plan.id !== excludingPlanId && plan.name.trim().toLocaleLowerCase() === normalizedName,
+      (plan) =>
+        plan.id !== excludingPlanId && plan.name.trim().toLocaleLowerCase() === normalizedName,
     )
   ) {
     throw scenarioError('duplicate_name', 'Choose a unique scenario name for this season.');
@@ -1290,6 +1395,12 @@ export interface AuctionValuationArtifactInput {
     readonly snapshotId: string;
   };
   readonly productionValue: {
+    readonly auctionRules?: {
+      readonly bidIncrementCents: number;
+      readonly minimumBidCents: number;
+      readonly version: string;
+      readonly zeroBidAward: string;
+    };
     readonly auctionPoolCents: number;
     readonly draftablePlayerCount: number;
     readonly leagueFormat: {
@@ -1331,6 +1442,7 @@ export interface AuctionValuationArtifactInput {
       readonly snapshotId: string;
     };
     readonly streamingSlotsPerTeam: number;
+    readonly zeroDollarPlayerCount?: number;
   } | null;
   readonly seasonKey: string;
   readonly selectedModelId: string;
@@ -1398,7 +1510,10 @@ export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtif
     moneyFields.forEach((field) => {
       if (!Number.isSafeInteger(player[field])) throw new Error(`${field} must be integer cents`);
     });
-    if (artifact.artifactVersion === 'auction-valuation-artifact-v2') {
+    if (
+      artifact.artifactVersion === 'auction-valuation-artifact-v2' ||
+      artifact.artifactVersion === 'auction-valuation-artifact-v3'
+    ) {
       if (
         player.usableDiagnostics === null ||
         player.usableValueCents === null ||
@@ -1416,7 +1531,10 @@ export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtif
       });
     }
   });
-  if (artifact.artifactVersion === 'auction-valuation-artifact-v2') {
+  if (
+    artifact.artifactVersion === 'auction-valuation-artifact-v2' ||
+    artifact.artifactVersion === 'auction-valuation-artifact-v3'
+  ) {
     if (artifact.productionValue === null)
       throw new Error('usable production-value provenance is required');
     if (!/^[a-f0-9]{64}$/.test(artifact.productionValue.schedule.fingerprint))
@@ -1441,6 +1559,24 @@ export const validateAuctionValuationArtifact = (artifact: AuctionValuationArtif
     );
     if (usablePool !== artifact.productionValue.auctionPoolCents)
       throw new Error('usable values must conserve the auction pool');
+    if (artifact.artifactVersion === 'auction-valuation-artifact-v3') {
+      if (
+        artifact.productionValue.auctionRules?.minimumBidCents !== 0 ||
+        artifact.productionValue.auctionRules.bidIncrementCents !== 100 ||
+        artifact.productionValue.auctionRules.version !== 'zero-dollar-v1' ||
+        artifact.productionValue.auctionRules.zeroBidAward !== 'nominator-if-no-positive-bid'
+      ) {
+        throw new Error('zero-dollar auction rules are required');
+      }
+      if (
+        !Number.isSafeInteger(artifact.productionValue.zeroDollarPlayerCount) ||
+        (artifact.productionValue.zeroDollarPlayerCount ?? -1) < 0 ||
+        (artifact.productionValue.zeroDollarPlayerCount ?? 0) >
+          artifact.productionValue.draftablePlayerCount
+      ) {
+        throw new Error('zero-dollar player count is invalid');
+      }
+    }
   }
 };
 
@@ -1548,6 +1684,9 @@ export interface DatabaseService {
     LatestProjectionSnapshot | null,
     DatabaseUnavailable
   >;
+  readonly latestPlayerContextSnapshot: (
+    seasonKey: string,
+  ) => Effect.Effect<PlayerContextSnapshotReadModel | null, DatabaseUnavailable>;
   readonly leaguePerformanceHistory: Effect.Effect<LeaguePerformanceHistory, DatabaseUnavailable>;
   readonly leagueRosterActivity: Effect.Effect<LeagueRosterActivityHistory, DatabaseUnavailable>;
   readonly leagueRosterSnapshot: Effect.Effect<LeagueRosterSnapshot, DatabaseUnavailable>;
@@ -1578,6 +1717,13 @@ export interface DatabaseService {
     ReadonlyArray<PlayerProductionHistoryRecord>,
     DatabaseUnavailable
   >;
+  readonly playerAdvancedStatsHistory: Effect.Effect<
+    ReadonlyArray<PlayerAdvancedStatsHistoryRecord>,
+    DatabaseUnavailable
+  >;
+  readonly playerProviderIdentities: (
+    source: string,
+  ) => Effect.Effect<ReadonlyArray<PlayerProviderIdentity>, DatabaseUnavailable>;
   readonly replaceHistoricalAuctions: (
     batch: HistoricalAuctionBatch,
   ) => Effect.Effect<HistoricalAuctionImportResult, DatabaseUnavailable>;
@@ -1587,9 +1733,15 @@ export interface DatabaseService {
   readonly replacePlayerProduction: (
     batch: PlayerProductionBatch,
   ) => Effect.Effect<PlayerProductionImportResult, DatabaseUnavailable>;
+  readonly replacePlayerAdvancedStats: (
+    batch: PlayerAdvancedStatsBatch,
+  ) => Effect.Effect<PlayerAdvancedStatsImportResult, DatabaseUnavailable>;
   readonly saveProjectionSnapshot: (
     batch: ProjectionSnapshotBatch,
   ) => Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable>;
+  readonly savePlayerContextSnapshot: (
+    batch: PlayerContextSnapshotBatch,
+  ) => Effect.Effect<PlayerContextSnapshotImportResult, DatabaseUnavailable>;
   readonly saveSeasonCalendar: (
     batch: SeasonCalendarBatch,
   ) => Effect.Effect<SeasonCalendarImportResult, DatabaseUnavailable>;
@@ -1807,19 +1959,60 @@ const databaseServiceLayer = Layer.effect(
       ),
     );
 
+    const playerProviderIdentities = (
+      source: string,
+    ): Effect.Effect<ReadonlyArray<PlayerProviderIdentity>, DatabaseUnavailable> =>
+      sql<{
+        external_id: string;
+        player_id: string;
+        player_name: string;
+        source_name: string;
+      }>`
+        select
+          pi.external_id,
+          pi.player_id,
+          p.canonical_name as player_name,
+          pi.source_name
+        from fantasy.player_identities pi
+        join fantasy.players p on p.id = pi.player_id
+        where pi.source = ${source}
+        order by p.canonical_name, pi.external_id
+      `.pipe(
+        Effect.map((rows) =>
+          rows.map((row) => ({
+            externalId: row.external_id,
+            playerId: row.player_id,
+            playerName: row.player_name,
+            sourceName: row.source_name,
+          })),
+        ),
+        Effect.mapError(() =>
+          databaseUnavailable(
+            'player_provider_identities',
+            'The provider player identities could not be loaded',
+          ),
+        ),
+      );
+
     const playerProductionHistory = sql<{
       games_played: number;
       player_id: string;
       player_name: string;
       season_key: string;
       stats: Record<string, number | null>;
+      team_stints: ReadonlyArray<{
+        gamesPlayed: number;
+        lastGameDate: string;
+        teamAbbreviation: string;
+      }>;
     }>`
       select
         pss.games_played,
         pss.player_id,
         p.canonical_name as player_name,
         pss.season_key,
-        pss.stats
+        pss.stats,
+        pss.team_stints
       from fantasy.player_season_stats pss
       join fantasy.players p on p.id = pss.player_id
       where
@@ -1835,12 +2028,38 @@ const databaseServiceLayer = Layer.effect(
           playerName: row.player_name,
           seasonKey: row.season_key,
           stats: row.stats,
+          teamStints: row.team_stints,
         })),
       ),
       Effect.mapError(() =>
         databaseUnavailable(
           'player_production_history',
           'The player production history could not be loaded',
+        ),
+      ),
+    );
+
+    const playerAdvancedStatsHistory = sql<{
+      metrics: Record<string, number | null>;
+      player_id: string;
+      season_key: string;
+    }>`
+      select player_id, season_key, stats as metrics
+      from fantasy.player_season_stats
+      where source = 'balldontlie-advanced' and period = 'regular-season'
+      order by season_key, player_id
+    `.pipe(
+      Effect.map((rows) =>
+        rows.map((row) => ({
+          metrics: row.metrics,
+          playerId: row.player_id,
+          seasonKey: row.season_key,
+        })),
+      ),
+      Effect.mapError(() =>
+        databaseUnavailable(
+          'player_advanced_stats_history',
+          'The player advanced-stat history could not be loaded',
         ),
       ),
     );
@@ -2123,6 +2342,7 @@ const databaseServiceLayer = Layer.effect(
         positions: ReadonlyArray<string>;
         rank: number;
         schedule: PlayerProjectionReadModel['schedule'];
+        stats_per_game: Readonly<Record<string, number>>;
         team_abbreviation: string;
         usable_diagnostics: NonNullable<
           AuctionValuationArtifactInput['current']['players'][number]['usableDiagnostics']
@@ -2143,6 +2363,7 @@ const databaseServiceLayer = Layer.effect(
           pp.bonuses,
           pp.availability,
           pp.schedule,
+          pp.stats_per_game,
           avp.usable_value_cents,
           avp.usable_diagnostics,
           avr.production_value ->> 'modelVersion' as valuation_model_version,
@@ -2173,6 +2394,7 @@ const databaseServiceLayer = Layer.effect(
           positions: row.positions,
           rank: row.rank,
           schedule: row.schedule,
+          statsPerGame: row.stats_per_game,
           teamAbbreviation: row.team_abbreviation,
           usableValue:
             row.usable_value_cents === null ||
@@ -2269,6 +2491,61 @@ const databaseServiceLayer = Layer.effect(
         ),
       ),
     );
+
+    const latestPlayerContextSnapshot = (
+      seasonKey: string,
+    ): Effect.Effect<PlayerContextSnapshotReadModel | null, DatabaseUnavailable> =>
+      Effect.gen(function* () {
+        const [snapshot] = yield* sql<{
+          as_of: string;
+          fingerprint: string;
+          id: string;
+          season_key: string;
+          source: string;
+        }>`
+          select id, source, season_key, as_of::text, fingerprint
+          from fantasy.player_context_snapshots
+          where season_key = ${seasonKey}
+          order by as_of desc, created_at desc
+          limit 1
+        `;
+        if (snapshot === undefined) return null;
+
+        const rows = yield* sql<{
+          context: StoredPlayerContext;
+          player_id: string;
+          player_name: string;
+        }>`
+          select
+            pce.player_id,
+            p.canonical_name as player_name,
+            pce.context
+          from fantasy.player_context_entries pce
+          join fantasy.players p on p.id = pce.player_id
+          where pce.snapshot_id = ${snapshot.id}
+          order by p.canonical_name, pce.player_id
+        `;
+
+        return {
+          asOf: new Date(snapshot.as_of).toISOString(),
+          fingerprint: snapshot.fingerprint,
+          players: rows.map((row) => ({
+            ...row.context,
+            playerId: row.player_id,
+            playerName: row.player_name,
+          })),
+          seasonKey: snapshot.season_key,
+          snapshotId: snapshot.id,
+          source: snapshot.source,
+        };
+      }).pipe(
+        Effect.mapError(() =>
+          databaseUnavailable(
+            'latest_player_context_snapshot',
+            'The latest player context snapshot could not be loaded',
+          ),
+        ),
+      );
 
     type AuctionValuationRunRow = {
       artifact_version: string;
@@ -3670,17 +3947,13 @@ const databaseServiceLayer = Layer.effect(
           from fantasy.pre_draft_plan_selections
           where league_member_id = ${owner.member_id} and league_season_id = ${season.id}
         `;
-        const activePlanId = selectDefaultPreDraftPlanId(
-          plans,
-          selection?.active_plan_id ?? null,
-        );
+        const activePlanId = selectDefaultPreDraftPlanId(plans, selection?.active_plan_id ?? null);
         const activePlan = plans.find((plan) => plan.id === activePlanId) ?? null;
         const selectedPlan =
           requestedPlanId === undefined
             ? activePlan
-            : (plans.find(
-                (plan) => plan.id === requestedPlanId && plan.status !== 'archived',
-              ) ?? null);
+            : (plans.find((plan) => plan.id === requestedPlanId && plan.status !== 'archived') ??
+              null);
         if (requestedPlanId !== undefined && selectedPlan === null) {
           return yield* Effect.fail(
             scenarioError(
@@ -3751,10 +4024,7 @@ const databaseServiceLayer = Layer.effect(
             and league_season_id = ${reference.league_season_id}
           for update
         `;
-        const activePlanId = selectDefaultPreDraftPlanId(
-          plans,
-          selection?.active_plan_id ?? null,
-        );
+        const activePlanId = selectDefaultPreDraftPlanId(plans, selection?.active_plan_id ?? null);
         validatePreDraftScenarioCommand(command, { activePlanId, plans });
 
         const activate = (planId: string) =>
@@ -3881,15 +4151,17 @@ const databaseServiceLayer = Layer.effect(
           }
         }
       });
-      return sql.withTransaction(operation).pipe(
-        Effect.mapError((error) =>
-          mapScenarioFailure(
-            error,
-            'manage_pre_draft_scenario',
-            'The pre-draft scenario could not be saved',
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError((error) =>
+            mapScenarioFailure(
+              error,
+              'manage_pre_draft_scenario',
+              'The pre-draft scenario could not be saved',
+            ),
           ),
-        ),
-      );
+        );
     };
 
     const savePreDraftTarget = (
@@ -3902,7 +4174,9 @@ const databaseServiceLayer = Layer.effect(
         (input.maxBidCents !== null &&
           (!Number.isInteger(input.maxBidCents) || input.maxBidCents < 0))
       ) {
-        return Effect.fail(scenarioError('invalid_input', 'Enter a valid target bid and priority.'));
+        return Effect.fail(
+          scenarioError('invalid_input', 'Enter a valid target bid and priority.'),
+        );
       }
       const operation = Effect.gen(function* () {
         const [plan] = yield* sql<{ id: string }>`
@@ -4678,6 +4952,93 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const replacePlayerAdvancedStats = (
+      batch: PlayerAdvancedStatsBatch,
+    ): Effect.Effect<PlayerAdvancedStatsImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, status, record_count, details)
+          values
+            (
+              'balldontlie',
+              'season-advanced-stats',
+              'running',
+              ${batch.records.length},
+              ${sql.json({ fingerprint: batch.fingerprint, seasonCount: batch.seasonKeys.length })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) throw new Error('Advanced-stat ingestion was not created');
+
+        if (batch.seasonKeys.length > 0) {
+          yield* sql`
+            delete from fantasy.player_season_stats
+            where
+              source = 'balldontlie-advanced'
+              and period = 'regular-season'
+              and season_key in ${sql.in(batch.seasonKeys)}
+          `;
+        }
+        for (const record of batch.records) {
+          const [player] = yield* sql<{ id: string }>`
+            select id from fantasy.players where id = ${record.playerId}
+          `;
+          if (player === undefined)
+            throw new Error(`Unknown advanced-stat player ${record.playerId}`);
+        }
+
+        const sourceRows = batch.records.map((record) => ({
+          captured_at: new Date(),
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: record.sourcePayload,
+          source_record_id: `${record.seasonKey}:${record.providerPlayerId}:advanced`,
+        }));
+        if (sourceRows.length > 0) {
+          yield* sql`insert into fantasy.source_records ${sql.insert(sourceRows)}`;
+          yield* sql`
+            insert into fantasy.player_season_stats ${sql.insert(
+              batch.records.map((record, index) => ({
+                games_played: null,
+                period: 'regular-season',
+                player_id: record.playerId,
+                season_key: record.seasonKey,
+                source: 'balldontlie-advanced',
+                source_record_id: sourceRows[index]!.id,
+                stats: record.metrics,
+                team_stints: [],
+                updated_at: new Date(),
+              })),
+            )}
+          `;
+        }
+
+        yield* sql`
+          update fantasy.ingestion_runs
+          set status = 'completed', finished_at = now()
+          where id = ${ingestionRun.id}
+        `;
+        return {
+          ingestionRunId: ingestionRun.id,
+          playerSeasonCount: batch.records.length,
+          seasonCount: batch.seasonKeys.length,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError((cause) =>
+            databaseUnavailable(
+              'replace_player_advanced_stats',
+              'The player advanced-stat import could not be completed',
+              cause,
+            ),
+          ),
+        );
+    };
+
     const replacePlayerProduction = (
       batch: PlayerProductionBatch,
     ): Effect.Effect<PlayerProductionImportResult, DatabaseUnavailable> => {
@@ -4804,6 +5165,7 @@ const databaseServiceLayer = Layer.effect(
             source: 'balldontlie',
             source_record_id: sourceRecord.id,
             stats: record.stats,
+            team_stints: record.teamStints,
             updated_at: new Date(),
           };
         });
@@ -5917,6 +6279,124 @@ const databaseServiceLayer = Layer.effect(
         );
     };
 
+    const savePlayerContextSnapshot = (
+      batch: PlayerContextSnapshotBatch,
+    ): Effect.Effect<PlayerContextSnapshotImportResult, DatabaseUnavailable> => {
+      const operation = Effect.gen(function* () {
+        const [existingSnapshot] = yield* sql<{
+          ingestion_run_id: string;
+          player_count: number;
+          snapshot_id: string;
+        }>`
+          select
+            pcs.id as snapshot_id,
+            pcs.ingestion_run_id,
+            pcs.player_count
+          from fantasy.player_context_snapshots pcs
+          where pcs.fingerprint = ${batch.fingerprint}
+        `;
+        if (existingSnapshot !== undefined) {
+          return {
+            alreadySaved: true,
+            ingestionRunId: existingSnapshot.ingestion_run_id,
+            playerCount: existingSnapshot.player_count,
+            snapshotId: existingSnapshot.snapshot_id,
+          };
+        }
+
+        const [ingestionRun] = yield* sql<{ id: string }>`
+          insert into fantasy.ingestion_runs
+            (source, resource, season_key, status, record_count, details)
+          values
+            (
+              ${batch.source},
+              'player-context',
+              ${batch.seasonKey},
+              'running',
+              ${batch.records.length},
+              ${sql.json({ asOf: batch.asOf, fingerprint: batch.fingerprint })}
+            )
+          returning id
+        `;
+        if (ingestionRun === undefined) throw new Error('Player context ingestion was not created');
+
+        for (const record of batch.records) {
+          const [player] = yield* sql<{ id: string }>`
+            select id from fantasy.players where id = ${record.playerId}
+          `;
+          if (player === undefined) throw new Error(`Unknown context player ${record.playerId}`);
+        }
+
+        const [snapshot] = yield* sql<{ id: string }>`
+          insert into fantasy.player_context_snapshots
+            (ingestion_run_id, source, season_key, as_of, fingerprint, player_count)
+          values
+            (
+              ${ingestionRun.id},
+              ${batch.source},
+              ${batch.seasonKey},
+              ${new Date(batch.asOf)},
+              ${batch.fingerprint},
+              ${batch.records.length}
+            )
+          returning id
+        `;
+        if (snapshot === undefined) throw new Error('Player context snapshot was not created');
+
+        const sourceRows = batch.records.map((record) => ({
+          captured_at: new Date(batch.asOf),
+          id: randomUUID(),
+          ingestion_run_id: ingestionRun.id,
+          payload: record.sourcePayload,
+          source_record_id: `${batch.seasonKey}:${record.playerId}`,
+        }));
+        if (sourceRows.length > 0) {
+          yield* sql`insert into fantasy.source_records ${sql.insert(sourceRows)}`;
+          yield* sql`
+            insert into fantasy.player_context_entries ${sql.insert(
+              batch.records.map((record, index) => ({
+                context: {
+                  injury: record.injury,
+                  movement: record.movement,
+                  role: record.role,
+                },
+                player_id: record.playerId,
+                snapshot_id: snapshot.id,
+                source_record_id: sourceRows[index]!.id,
+              })),
+            )}
+          `;
+        }
+
+        yield* sql`
+          update fantasy.ingestion_runs
+          set
+            status = 'completed',
+            finished_at = now(),
+            details = details || ${sql.json({ snapshotId: snapshot.id })}
+          where id = ${ingestionRun.id}
+        `;
+        return {
+          alreadySaved: false,
+          ingestionRunId: ingestionRun.id,
+          playerCount: batch.records.length,
+          snapshotId: snapshot.id,
+        };
+      });
+
+      return sql
+        .withTransaction(operation)
+        .pipe(
+          Effect.mapError((cause) =>
+            databaseUnavailable(
+              'save_player_context_snapshot',
+              'The player context snapshot could not be saved',
+              cause,
+            ),
+          ),
+        );
+    };
+
     const saveProjectionSnapshot = (
       batch: ProjectionSnapshotBatch,
     ): Effect.Effect<ProjectionSnapshotImportResult, DatabaseUnavailable> => {
@@ -6356,6 +6836,7 @@ const databaseServiceLayer = Layer.effect(
       historicalAuctionMarket,
       historicalRankings,
       latestAdpSnapshot,
+      latestPlayerContextSnapshot,
       latestProjectionSnapshot,
       latestSeasonCalendar,
       leaguePerformanceHistory,
@@ -6364,6 +6845,8 @@ const databaseServiceLayer = Layer.effect(
       leagueTeamHistory,
       managePreDraftScenario,
       mergePlayerIdentities,
+      playerAdvancedStatsHistory,
+      playerProviderIdentities,
       playerProductionHistory,
       preDraftWorkspace,
       promoteAuctionValuationRun,
@@ -6372,12 +6855,14 @@ const databaseServiceLayer = Layer.effect(
       reconcileLeagueTeamIdentity,
       replaceHistoricalAuctions,
       replaceHistoricalScoring,
+      replacePlayerAdvancedStats,
       replacePlayerProduction,
       saveFantraxAdpSnapshot,
       saveAuctionValuationRun,
       saveLeaguePerformance,
       saveLeagueRosterHistory,
       savePreDraftTarget,
+      savePlayerContextSnapshot,
       saveProjectionSnapshot,
       saveSeasonCalendar,
     });

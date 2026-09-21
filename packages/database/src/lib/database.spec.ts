@@ -370,6 +370,40 @@ describe('validateAuctionValuationArtifact', () => {
       }),
     ).toThrow('Fantrax scoring periods');
   });
+
+  it('requires explicit zero-dollar rules on v3 artifacts', () => {
+    const v3 = {
+      ...artifact(),
+      artifactVersion: 'auction-valuation-artifact-v3',
+      productionValue: {
+        ...artifact().productionValue!,
+        auctionRules: {
+          bidIncrementCents: 100,
+          minimumBidCents: 0,
+          version: 'zero-dollar-v1',
+          zeroBidAward: 'nominator-if-no-positive-bid',
+        },
+        zeroDollarPlayerCount: 0,
+      },
+    };
+
+    expect(() => validateAuctionValuationArtifact(v3)).not.toThrow();
+    expect(() =>
+      validateAuctionValuationArtifact({
+        ...v3,
+        productionValue: { ...v3.productionValue, auctionRules: undefined },
+      }),
+    ).toThrow('zero-dollar auction rules');
+    expect(() =>
+      validateAuctionValuationArtifact({
+        ...v3,
+        productionValue: {
+          ...v3.productionValue,
+          auctionRules: { ...v3.productionValue.auctionRules, version: 'unknown' },
+        },
+      }),
+    ).toThrow('zero-dollar auction rules');
+  });
 });
 
 describe('serializeAuctionValuationJson', () => {

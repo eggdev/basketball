@@ -350,10 +350,13 @@ explicitly promoted, snapshot-compatible selection feeds the draft UI and Eve's
 live-bid tool.
 
 The live draft room keeps the legacy global points-per-game value available for
-comparison and adds the versioned `usable-lineup-v1` experiment. That model
+comparison and adds the versioned `usable-lineup-v2` experiment. That model
 optimizes daily position eligibility against the dated NBA schedule, accounts
 for availability, lineup congestion, playoff-period weights, and the reserved
-streaming slot, and conserves the exact auction pool after $1 minimum bids.
+streaming slot, and conserves the exact auction pool with the league's legal $0
+floor. No cash is reserved for unfilled roster spots: a $0 nomination is awarded
+to the nominator when every other manager passes. Retaining $1 or more remains
+useful strategic leverage for beating a zero-dollar field, not a legal reserve.
 Calibrated market price remains a prediction of what this league may pay;
 usable value is separate production utility. Brendan's personal cap uses the
 candidate's marginal optimized value on the currently owned roster when the
@@ -373,6 +376,17 @@ it live: an operator must review it and explicitly promote its run ID. To roll
 back, promote the previous compatible run again. The model is not yet a
 historical injury backtest or playoff-probability model because daily historical
 availability is not preserved.
+
+The player workspace also has a versioned situation-intelligence layer. It
+compares the current projection with the latest completed season, preserves NBA
+team stints and their last game dates, flags new teams, ranks overlapping
+projected teammates, and derives a labeled box-score opportunity proxy. Reviewed
+movement, injury, and depth-role facts require source URLs, are linked from the
+player board, and remain separate from inference. Optional
+BALLDONTLIE GOAT imports add namespaced usage, touches, dribbles, passing,
+secondary-assist, drive, speed, and hustle metrics. Low games played is never
+silently described as an injury, and an unclassified team change is never
+silently described as a trade.
 
 The scoring configuration currently models triple-double and double-double
 bonuses as cumulative. That behavior is explicit and tested, but should be

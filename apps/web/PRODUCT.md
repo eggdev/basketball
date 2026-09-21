@@ -23,11 +23,15 @@ The product is grounded in one league's reviewed Fantrax history and Brendan's o
 ## Operating Context
 
 - Brendan prepares named pre-draft scenarios with budget guardrails, risk posture, streaming-slot intent, and player target, watch, or avoid decisions.
-- During the auction, the live draft room tracks nominations, purchases, remaining budgets, roster needs, and a deterministic maximum bid; AI evaluation may explain the decision but does not replace the numeric cap.
+- During the auction, the live draft room tracks nominations, purchases (including uncontested $0 awards), remaining budgets, roster needs, and a deterministic maximum bid; AI evaluation may explain the decision but does not replace the numeric cap.
 - Research views compare historical league performance, manager behavior, player production, league auction prices, Fantrax ADP, roster construction, and inferred ownership changes.
+- Player research compares this season with the latest completed NBA season,
+  including sourced movement/injury/depth-role facts, team and position
+  competition, and prior-season advanced role indicators. Unverified team
+  changes and limited seasons remain explicitly unclassified.
 - Trade analysis begins with roster comparisons and must disclose when it only has draft-day snapshots rather than current ownership, injuries, transactions, or rest-of-season projections.
 - Waiver research uses daily roster snapshots to infer adds, drops, and team changes. Fantrax does not expose waiver priority, FAAB, trade packages, or authoritative transaction labels through the available data.
-- League rules use daily lineup changes, ten active slots, three reserve slots within a 13-player roster limit, and one additional IR slot.
+- League rules use daily lineup changes, ten active slots, three reserve slots within a 13-player roster limit, and one additional IR slot. Auction bids have a $0 legal floor and $1 increments; no cash reserve is required for unfilled roster spots.
 
 ## Capabilities and Constraints
 

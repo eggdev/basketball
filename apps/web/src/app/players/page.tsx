@@ -1,6 +1,7 @@
 import { loadHistoricalAuctionMarket } from '../../lib/historical-auction-market';
 import { loadHistoricalRankings } from '../../lib/historical-rankings';
 import { loadLatestProjectionSnapshot } from '../../lib/latest-projections';
+import { loadPlayerSituationBoard } from '../../lib/player-situations';
 import { PlayersView } from './players-view';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,15 @@ export default async function PlayersPage() {
     loadLatestProjectionSnapshot().catch(() => null),
     loadHistoricalRankings().catch(() => null),
   ]);
+  const situations =
+    projections === null ? null : await loadPlayerSituationBoard(projections).catch(() => null);
 
-  return <PlayersView market={market} projections={projections} rankings={rankings} />;
+  return (
+    <PlayersView
+      market={market}
+      projections={projections}
+      rankings={rankings}
+      situations={situations}
+    />
+  );
 }

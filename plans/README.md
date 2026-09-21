@@ -8,15 +8,16 @@ conditions, and update its row when done.
 
 ## Execution order and status
 
-| Plan | Title | Priority | Effort | Depends on | Status |
-|---|---|---:|---:|---|---|
-| 001 | Reconcile canonical player identities transactionally | P1 | M | — | DONE — reviewed at `da6932d`; 12 live merges audited |
-| 002 | Persist and promote immutable auction valuation runs | P1 | M | 001 | DONE — approved at `6b87f3d`; SQL adapter lacks an integration harness |
-| 003 | Import versioned NBA schedules and Fantrax playoff periods | P1 | M | 001 | DONE — approved at `0effe41`; live validation passed |
-| 004 | Value usable daily-lineup production | P1 | L | 002, 003 | DONE — integrated at `cf1eb8d`; migration `0012` applied and `usable-lineup-v1` promoted |
-| 005 | Make pre-draft scenarios selectable and comparable | P2 | M | — | DONE — migration `0013` applied; explicit active selection materialized |
-| 006 | Learn uncertainty-aware manager demand profiles | P2 | L | 001, 002 | TODO |
-| 007 | Simulate saved auction scenarios | P2 | L | 004, 005, 006 | TODO |
+| Plan | Title                                                      | Priority | Effort | Depends on    | Status                                                                                       |
+| ---- | ---------------------------------------------------------- | -------: | -----: | ------------- | -------------------------------------------------------------------------------------------- |
+| 001  | Reconcile canonical player identities transactionally      |       P1 |      M | —             | DONE — reviewed at `da6932d`; 12 live merges audited                                         |
+| 002  | Persist and promote immutable auction valuation runs       |       P1 |      M | 001           | DONE — approved at `6b87f3d`; SQL adapter lacks an integration harness                       |
+| 003  | Import versioned NBA schedules and Fantrax playoff periods |       P1 |      M | 001           | DONE — approved at `0effe41`; live validation passed                                         |
+| 004  | Value usable daily-lineup production                       |       P1 |      L | 002, 003      | DONE — v1 promoted; zero-dollar `usable-lineup-v2` correction implemented, promotion pending |
+| 005  | Make pre-draft scenarios selectable and comparable         |       P2 |      M | —             | DONE — migration `0013` applied; explicit active selection materialized                      |
+| 006  | Learn uncertainty-aware manager demand profiles            |       P2 |      L | 001, 002      | TODO                                                                                         |
+| 007  | Simulate saved auction scenarios                           |       P2 |      L | 004, 005, 006 | TODO                                                                                         |
+| 008  | Understand current player situations                       |       P1 |      L | 003           | IN PROGRESS — mechanism implemented; live data bootstrap pending                             |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED` (with a one-line
 reason), or `REJECTED` (with a one-line rationale).
@@ -37,6 +38,8 @@ reason), or `REJECTED` (with a one-line rationale).
 - 007 is last because it combines promoted values, usable-points outputs,
   selected plans, and manager profiles. It must report distributions rather
   than a single predicted draft.
+- 008 is independent of opponent-demand simulation. It should land before live
+  draft analysis relies on offseason movement, injury, or depth-chart claims.
 
 ## Deep-module seams
 
@@ -48,6 +51,9 @@ reason), or `REJECTED` (with a one-line rationale).
   calculation; daily assignment machinery stays internal.
 - Auction simulation accepts one versioned input and returns one distributional
   result; bidding turns and random sampling stay internal.
+- Player situations expose one evidence-aware board; provider metric sets,
+  reviewed qualitative facts, opportunity derivation, and competition ranking
+  remain inside the module.
 
 ## Findings considered and rejected
 

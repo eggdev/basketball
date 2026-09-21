@@ -1,9 +1,12 @@
 import type { AvailabilityTier } from './projections';
+import { LEAGUE_AUCTION_RULES } from './auction-economy';
 import { allocateAuctionValues } from './valuation-lab';
 
 export type LiveBidPriceSignal = 'at-value' | 'over-value' | 'under-value';
 export type LiveBidAction = 'caution' | 'keep-bidding' | 'review' | 'stop';
 export type LiveBidRosterFit = 'fills-need' | 'neutral' | 'redundant';
+
+export const GLOBAL_FPPG_MODEL_VERSION = 'global-fppg-v2' as const;
 
 export interface LiveBidPlayer {
   readonly availabilityTier: AvailabilityTier;
@@ -73,7 +76,10 @@ export interface LiveBidEvaluationInput {
 export interface LiveBidEvaluation {
   readonly action: LiveBidAction;
   readonly budget: {
+    readonly bidIncrementCents: number;
+    readonly legalBidFloorCents: number;
     readonly maximumLegalBidCents: number;
+    readonly positiveBidLeverage: boolean;
     readonly remainingBudgetCents: number;
     readonly remainingRosterSpots: number;
   };
@@ -107,7 +113,7 @@ export interface LiveBidEvaluation {
     readonly maxBidCents: number;
     readonly maxBidSource: 'model' | 'saved-target';
     readonly targetStance: LiveBidTarget['stance'] | null;
-    readonly valueBasis: 'global-fppg-v1' | 'roster-marginal-usable-lineup-v1';
+    readonly valueBasis: typeof GLOBAL_FPPG_MODEL_VERSION | `roster-marginal-${string}`;
   };
   readonly player: {
     readonly id: string;
@@ -283,6 +289,7 @@ export function evaluateLiveBid(input: LiveBidEvaluationInput): LiveBidEvaluatio
         ? `The personal cap adjusts projection value for ${player.availabilityTier} availability and ${rosterFit.replace('-', ' ')} roster fit.`
         : `The personal cap uses ${input.rosterMarginalValue.marginalRegularSeasonPoints.toFixed(1)} roster-marginal points from ${input.rosterMarginalValue.modelVersion}.`
       : 'The saved scenario max bid is the personal cap.',
+    'A $0 nomination can still win if every other manager passes; no budget reserve is legally required for open roster spots.',
   ];
   if (input.target?.stance === 'avoid') {
     reasons.push('The active pre-draft scenario marks this player as an avoid.');
@@ -291,7 +298,11 @@ export function evaluateLiveBid(input: LiveBidEvaluationInput): LiveBidEvaluatio
   return {
     action,
     budget: {
+      bidIncrementCents: LEAGUE_AUCTION_RULES.bidIncrementCents,
+      legalBidFloorCents: LEAGUE_AUCTION_RULES.minimumBidCents,
       maximumLegalBidCents,
+      positiveBidLeverage:
+        input.remainingBudgetCents >= LEAGUE_AUCTION_RULES.bidIncrementCents,
       remainingBudgetCents: input.remainingBudgetCents,
       remainingRosterSpots: input.remainingRosterSpots,
     },
@@ -322,13 +333,15 @@ export function evaluateLiveBid(input: LiveBidEvaluationInput): LiveBidEvaluatio
       usableValueCents: input.rosterMarginalValue?.valueCents ?? null,
     },
     methodology:
-      'Projection value and calibrated league price remain separate market signals. When usable-lineup context is present, the personal cap uses roster-marginal production; otherwise it uses the global points-per-game basis. The personal cap is deterministic and is never set by an AI judgment.',
+      'Projection value and calibrated league price remain separate market signals. The legal bid floor is $0, with no mandatory cash reserve for open roster spots; retaining cash is optional leverage for beating other zero-dollar bidders. When usable-lineup context is present, the personal cap uses roster-marginal production; otherwise it uses the global points-per-game basis. The personal cap is deterministic and is never set by an AI judgment.',
     personal: {
       maxBidCents,
       maxBidSource,
       targetStance: input.target?.stance ?? null,
       valueBasis:
-        input.rosterMarginalValue == null ? 'global-fppg-v1' : 'roster-marginal-usable-lineup-v1',
+        input.rosterMarginalValue == null
+          ? GLOBAL_FPPG_MODEL_VERSION
+          : `roster-marginal-${input.rosterMarginalValue.modelVersion}`,
     },
     player: { id: player.playerId, name: player.playerName },
     reasons,

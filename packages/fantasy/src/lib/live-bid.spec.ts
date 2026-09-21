@@ -64,8 +64,8 @@ describe('evaluateLiveBid', () => {
 
     expect(evaluation.impact.replacementPointsPerGame).toBe(19);
     expect(evaluation.impact.marginalPointsPerGame).toBe(16);
-    expect(evaluation.market.projectedValueCents).toBe(28_900);
-    expect(evaluation.market.expectedPriceCents).toBe(28_900);
+    expect(evaluation.market.projectedValueCents).toBe(29_091);
+    expect(evaluation.market.expectedPriceCents).toBe(29_091);
     expect(evaluation.market.priceSignal).toBe('under-value');
     expect(evaluation.action).toBe('keep-bidding');
   });
@@ -79,8 +79,9 @@ describe('evaluateLiveBid', () => {
     });
 
     expect(emptyRoster.personal).toMatchObject({
-      maxBidCents: 29_800,
+      maxBidCents: 30_000,
       maxBidSource: 'model',
+      valueBasis: 'global-fppg-v2',
     });
     expect(partiallyFilled.impact.rosterFit).toBe('fills-need');
     expect(partiallyFilled.personal.maxBidCents).toBe(7_500);
@@ -97,7 +98,7 @@ describe('evaluateLiveBid', () => {
       },
     });
 
-    expect(evaluation.market.projectedValueCents).toBe(28_900);
+    expect(evaluation.market.projectedValueCents).toBe(29_091);
     expect(evaluation.market.expectedPriceCents).toBe(5_000);
     expect(evaluation.market.fairLowCents).toBe(4_200);
     expect(evaluation.market.fairHighCents).toBe(5_800);
@@ -130,7 +131,7 @@ describe('evaluateLiveBid', () => {
       },
     });
 
-    expect(evaluation.market.projectedValueCents).toBe(28_900);
+    expect(evaluation.market.projectedValueCents).toBe(29_091);
     expect(evaluation.market.usableValueCents).toBe(5_000);
     expect(evaluation.personal).toMatchObject({
       maxBidCents: 5_000,
@@ -179,6 +180,25 @@ describe('evaluateLiveBid', () => {
       targetStance: 'target',
     });
     expect(evaluation.action).toBe('stop');
+  });
+
+  it('treats zero as the legal floor and cash as optional positive-bid leverage', () => {
+    const withCash = evaluate({ currentPriceCents: 0, remainingBudgetCents: 200 });
+    const withoutCash = evaluate({ currentPriceCents: 0, remainingBudgetCents: 0 });
+
+    expect(withCash.budget).toMatchObject({
+      bidIncrementCents: 100,
+      legalBidFloorCents: 0,
+      positiveBidLeverage: true,
+    });
+    expect(withoutCash.budget).toMatchObject({
+      legalBidFloorCents: 0,
+      maximumLegalBidCents: 0,
+      positiveBidLeverage: false,
+    });
+    expect(withoutCash.reasons).toContain(
+      'A $0 nomination can still win if every other manager passes; no budget reserve is legally required for open roster spots.',
+    );
   });
 
   it('stops on an avoid even when the bid is below value', () => {

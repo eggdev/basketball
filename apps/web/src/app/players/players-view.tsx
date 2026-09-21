@@ -5,6 +5,7 @@ import type {
   HistoricalRankingSnapshot,
   LatestProjectionSnapshot,
 } from '@fantasy-basketball/database/runtime';
+import type { PlayerSituation, PlayerSituationBoard } from '@fantasy-basketball/fantasy';
 import { useMemo, useState } from 'react';
 
 import { formatFantasyPoints, formatPrice, formatSignedPrice } from '../../lib/format';
@@ -27,10 +28,12 @@ export function PlayersView({
   market,
   projections,
   rankings,
+  situations,
 }: {
   readonly market: HistoricalAuctionMarket | null;
   readonly projections?: LatestProjectionSnapshot | null;
   readonly rankings: HistoricalRankingSnapshot | null;
+  readonly situations?: PlayerSituationBoard | null;
 }) {
   const [seasonKey, setSeasonKey] = useState(rankings?.summary.latestSeason ?? '');
   const [query, setQuery] = useState('');
@@ -106,6 +109,28 @@ export function PlayersView({
       ? season.players.reduce((total, player) => total + player.fantasyPointsPerGame, 0) /
         season.players.length
       : 0;
+  const situationTone = (direction: PlayerSituation['opportunity']['direction']) =>
+    direction === 'up' ? styles.positive : direction === 'down' ? styles.negative : styles.neutral;
+  const advancedSummary = (player: PlayerSituation): string => {
+    const metrics = [
+      player.advanced.usagePercentage === null
+        ? null
+        : `${(player.advanced.usagePercentage * 100).toFixed(1)}% usage`,
+      player.advanced.touchesPerGame === null
+        ? null
+        : `${player.advanced.touchesPerGame.toFixed(1)} touches`,
+      player.advanced.dribblesPerTouch === null
+        ? null
+        : `${player.advanced.dribblesPerTouch.toFixed(1)} dribbles/touch`,
+      player.advanced.potentialAssistsPerGame === null
+        ? null
+        : `${player.advanced.potentialAssistsPerGame.toFixed(1)} potential AST`,
+      player.advanced.secondaryAssistsPerGame === null
+        ? null
+        : `${player.advanced.secondaryAssistsPerGame.toFixed(1)} hockey AST`,
+    ].filter((metric): metric is string => metric !== null);
+    return metrics.length === 0 ? 'Advanced import pending' : metrics.join(' · ');
+  };
 
   return (
     <div className={styles.page}>
@@ -209,6 +234,148 @@ export function PlayersView({
             <span>Historical purchases</span>
             <strong>{market?.summary.purchaseCount ?? '—'}</strong>
           </article>
+        </section>
+      ) : null}
+
+      {situations && situations.players.length > 0 ? (
+        <section className={styles.panel}>
+          <header className={styles.panelHeader}>
+            <div>
+              <h2>Situation intelligence</h2>
+              <p>
+                This season versus the latest prior season · context as of{' '}
+                {situations.asOf.slice(0, 10)} · {situations.summary.newTeamPlayerCount} new teams ·{' '}
+                {situations.summary.opportunityUpPlayerCount} opportunity risers ·{' '}
+                {situations.summary.advancedStatPlayerCount} advanced-stat profiles
+              </p>
+            </div>
+            <span className={`${styles.statusBadge} ${styles.statusReady}`}>
+              Evidence separated
+            </span>
+          </header>
+          <div className={styles.tableViewport}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th scope="col">Player</th>
+                  <th scope="col">Team movement</th>
+                  <th scope="col">Opportunity</th>
+                  <th scope="col">Prior role indicators</th>
+                  <th scope="col">Rotation competition</th>
+                  <th scope="col">Availability context</th>
+                </tr>
+              </thead>
+              <tbody>
+                {situations.players.map((player) => (
+                  <tr key={player.playerId}>
+                    <th
+                      aria-label={`${player.playerName}, ${player.positions.join(', ')}`}
+                      scope="row"
+                    >
+                      <span className={styles.tablePlayer}>
+                        <strong>{player.playerName}</strong>
+                        <small>{player.positions.join(' · ')}</small>
+                      </span>
+                    </th>
+                    <td
+                      aria-label={`${player.playerName} team movement: ${player.previousTeamAbbreviation ?? 'no prior team'} to ${player.currentTeamAbbreviation}`}
+                    >
+                      <span className={styles.tablePlayer}>
+                        <strong>
+                          {player.previousTeamAbbreviation ?? 'No prior team'} →{' '}
+                          {player.currentTeamAbbreviation}
+                        </strong>
+                        <small>
+                          {player.movement.isNewTeam
+                            ? player.movement.type === 'unknown'
+                              ? 'Type unverified'
+                              : player.movement.type.replaceAll('-', ' ')
+                            : 'Returning team'}
+                          {player.movement.note ? ` · ${player.movement.note}` : null}
+                          {player.movement.sourceUrl ? (
+                            <>
+                              {' · '}
+                              <a
+                                className={styles.evidenceLink}
+                                href={player.movement.sourceUrl}
+                                rel="noreferrer noopener"
+                                target="_blank"
+                              >
+                                Source
+                              </a>
+                            </>
+                          ) : null}
+                        </small>
+                      </span>
+                    </td>
+                    <td
+                      aria-label={`${player.playerName} opportunity: ${player.opportunity.direction}`}
+                      className={situationTone(player.opportunity.direction)}
+                    >
+                      <span className={styles.tablePlayer}>
+                        <strong>{player.opportunity.direction}</strong>
+                        <small>
+                          {player.opportunity.deltaPercent === null
+                            ? player.opportunity.source.replaceAll('-', ' ')
+                            : `${player.opportunity.deltaPercent > 0 ? '+' : ''}${Math.round(
+                                player.opportunity.deltaPercent * 100,
+                              )}% box-score proxy`}
+                        </small>
+                        {player.role ? (
+                          <small>
+                            {player.role.depthRole ?? 'Reviewed role'} · {player.role.note} ·{' '}
+                            <a
+                              className={styles.evidenceLink}
+                              href={player.role.sourceUrl}
+                              rel="noreferrer noopener"
+                              target="_blank"
+                            >
+                              Source
+                            </a>
+                          </small>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td>{advancedSummary(player)}</td>
+                    <td aria-label={`${player.playerName} rotation competition`}>
+                      {player.competition.length === 0
+                        ? 'No overlapping projection'
+                        : player.competition.map((candidate) => candidate.playerName).join(', ')}
+                    </td>
+                    <td aria-label={`${player.playerName} availability context`}>
+                      <span className={styles.tablePlayer}>
+                        <strong>
+                          {player.injury?.status ??
+                            (player.availability.wasLimitedLastSeason
+                              ? `${player.availability.previousGames} GP last season`
+                              : `${player.availability.expectedGames.toFixed(1)} projected games`)}
+                        </strong>
+                        <small>
+                          {player.injury?.summary ??
+                            (player.availability.wasLimitedLastSeason
+                              ? 'Cause not attributed without evidence'
+                              : 'No sourced injury context')}
+                          {player.injury ? (
+                            <>
+                              {' · '}
+                              <a
+                                className={styles.evidenceLink}
+                                href={player.injury.sourceUrl}
+                                rel="noreferrer noopener"
+                                target="_blank"
+                              >
+                                Source
+                              </a>
+                            </>
+                          ) : null}
+                        </small>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
@@ -417,62 +584,62 @@ export function PlayersView({
                 Skip historical production table
               </a>
               <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th scope="col">Rank</th>
-                  <th scope="col">Player</th>
-                  <th scope="col">Fantasy points</th>
-                  <th scope="col">FP/G</th>
-                  <th scope="col">Games</th>
-                  <th scope="col">Draft cost</th>
-                  <th scope="col">Expected market</th>
-                  <th scope="col">Vs. expected</th>
-                </tr>
-              </thead>
-              <tbody>
-                {players.map((player) => {
-                  const marketPlayer = marketByPlayer.get(player.playerId);
-                  const delta =
-                    player.auctionCostCents === null || marketPlayer === undefined
-                      ? null
-                      : player.auctionCostCents - marketPlayer.expectedPriceCents;
-                  return (
-                    <tr key={player.playerId}>
-                      <td className={styles.rank}>{player.rank}</td>
-                      <th aria-label={player.playerName} scope="row">
-                        <span className={styles.tablePlayer}>
-                          <strong>{player.playerName}</strong>
-                          <small>
-                            {marketPlayer
-                              ? `${marketPlayer.seasonsDrafted} league drafts`
-                              : 'No auction history'}
-                          </small>
-                        </span>
-                      </th>
-                      <td>{formatFantasyPoints(player.fantasyPoints)}</td>
-                      <td>{formatFantasyPoints(player.fantasyPointsPerGame)}</td>
-                      <td>{player.gamesPlayed}</td>
-                      <td>
-                        {player.auctionCostCents === null
-                          ? 'Undrafted'
-                          : formatPrice(player.auctionCostCents)}
-                      </td>
-                      <td>{marketPlayer ? formatPrice(marketPlayer.expectedPriceCents) : '—'}</td>
-                      <td
-                        className={
-                          delta === null || delta === 0
-                            ? styles.neutral
-                            : delta < 0
-                              ? styles.positive
-                              : styles.negative
-                        }
-                      >
-                        {delta === null ? '—' : formatSignedPrice(delta)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                <thead>
+                  <tr>
+                    <th scope="col">Rank</th>
+                    <th scope="col">Player</th>
+                    <th scope="col">Fantasy points</th>
+                    <th scope="col">FP/G</th>
+                    <th scope="col">Games</th>
+                    <th scope="col">Draft cost</th>
+                    <th scope="col">Expected market</th>
+                    <th scope="col">Vs. expected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {players.map((player) => {
+                    const marketPlayer = marketByPlayer.get(player.playerId);
+                    const delta =
+                      player.auctionCostCents === null || marketPlayer === undefined
+                        ? null
+                        : player.auctionCostCents - marketPlayer.expectedPriceCents;
+                    return (
+                      <tr key={player.playerId}>
+                        <td className={styles.rank}>{player.rank}</td>
+                        <th aria-label={player.playerName} scope="row">
+                          <span className={styles.tablePlayer}>
+                            <strong>{player.playerName}</strong>
+                            <small>
+                              {marketPlayer
+                                ? `${marketPlayer.seasonsDrafted} league drafts`
+                                : 'No auction history'}
+                            </small>
+                          </span>
+                        </th>
+                        <td>{formatFantasyPoints(player.fantasyPoints)}</td>
+                        <td>{formatFantasyPoints(player.fantasyPointsPerGame)}</td>
+                        <td>{player.gamesPlayed}</td>
+                        <td>
+                          {player.auctionCostCents === null
+                            ? 'Undrafted'
+                            : formatPrice(player.auctionCostCents)}
+                        </td>
+                        <td>{marketPlayer ? formatPrice(marketPlayer.expectedPriceCents) : '—'}</td>
+                        <td
+                          className={
+                            delta === null || delta === 0
+                              ? styles.neutral
+                              : delta < 0
+                                ? styles.positive
+                                : styles.negative
+                          }
+                        >
+                          {delta === null ? '—' : formatSignedPrice(delta)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
               {players.length === 0 ? (
                 <div className={styles.empty}>

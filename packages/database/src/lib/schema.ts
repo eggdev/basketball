@@ -564,6 +564,69 @@ export const playerProjections = fantasySchema.table(
   ],
 );
 
+interface PlayerContextJson {
+  readonly injury: {
+    readonly sourceUrl: string;
+    readonly status: string | null;
+    readonly summary: string;
+  } | null;
+  readonly movement: {
+    readonly effectiveDate: string | null;
+    readonly fromTeamAbbreviation: string | null;
+    readonly note: string | null;
+    readonly sourceUrl: string;
+    readonly toTeamAbbreviation: string | null;
+    readonly type: string;
+  } | null;
+  readonly role: {
+    readonly depthRole: string | null;
+    readonly note: string;
+    readonly opportunityDirection: 'down' | 'steady' | 'up' | null;
+    readonly sourceUrl: string;
+  } | null;
+}
+
+export const playerContextSnapshots = fantasySchema.table(
+  'player_context_snapshots',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ingestionRunId: uuid('ingestion_run_id')
+      .notNull()
+      .references(() => ingestionRuns.id, { onDelete: 'restrict' }),
+    source: text('source').notNull(),
+    seasonKey: text('season_key').notNull(),
+    asOf: timestamp('as_of', { withTimezone: true }).notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    playerCount: integer('player_count').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('player_context_snapshots_fingerprint_unique').on(table.fingerprint),
+    index('player_context_snapshots_season_as_of_idx').on(table.seasonKey, table.asOf),
+  ],
+);
+
+export const playerContextEntries = fantasySchema.table(
+  'player_context_entries',
+  {
+    snapshotId: uuid('snapshot_id')
+      .notNull()
+      .references(() => playerContextSnapshots.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'cascade' }),
+    sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
+      onDelete: 'set null',
+    }),
+    context: jsonb('context').$type<PlayerContextJson>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.snapshotId, table.playerId] }),
+    index('player_context_entries_player_idx').on(table.playerId),
+  ],
+);
+
 export const adpSnapshots = fantasySchema.table(
   'adp_snapshots',
   {
@@ -660,7 +723,11 @@ export const preDraftPlanSelections = fantasySchema.table(
     primaryKey({ columns: [table.leagueMemberId, table.leagueSeasonId] }),
     foreignKey({
       columns: [table.activePlanId, table.leagueMemberId, table.leagueSeasonId],
-      foreignColumns: [preDraftPlans.id, preDraftPlans.leagueMemberId, preDraftPlans.leagueSeasonId],
+      foreignColumns: [
+        preDraftPlans.id,
+        preDraftPlans.leagueMemberId,
+        preDraftPlans.leagueSeasonId,
+      ],
       name: 'pre_draft_plan_selections_active_plan_scope_fk',
     }).onDelete('restrict'),
     index('pre_draft_plan_selections_active_plan_idx').on(table.activePlanId),
@@ -700,6 +767,12 @@ export const playerSeasonStats = fantasySchema.table(
     period: text('period').notNull().default('regular-season'),
     gamesPlayed: integer('games_played'),
     stats: jsonb('stats').$type<Record<string, number | null>>().notNull(),
+    teamStints: jsonb('team_stints')
+      .$type<
+        ReadonlyArray<{ gamesPlayed: number; lastGameDate: string; teamAbbreviation: string }>
+      >()
+      .notNull()
+      .default([]),
     sourceRecordId: uuid('source_record_id').references(() => sourceRecords.id, {
       onDelete: 'set null',
     }),
@@ -812,6 +885,12 @@ export const auctionValuationRuns = fantasySchema.table(
     methodology: text('methodology').notNull(),
     limitations: jsonb('limitations').$type<ReadonlyArray<string>>().notNull(),
     productionValue: jsonb('production_value').$type<{
+      auctionRules?: {
+        bidIncrementCents: number;
+        minimumBidCents: number;
+        version: string;
+        zeroBidAward: string;
+      };
       auctionPoolCents: number;
       draftablePlayerCount: number;
       leagueFormat: {
@@ -824,6 +903,7 @@ export const auctionValuationRuns = fantasySchema.table(
       schedule: { asOf: string; fingerprint: string; snapshotId: string };
       seasonCalendar: Record<string, unknown>;
       streamingSlotsPerTeam: number;
+      zeroDollarPlayerCount?: number;
     }>(),
     status: text('status').notNull().default('candidate'),
     promotedAt: timestamp('promoted_at', { withTimezone: true }),

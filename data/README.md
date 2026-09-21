@@ -125,3 +125,43 @@ Calendar refreshes are immutable. A postponed or rescheduled game produces a new
 snapshot and projection imports retain the exact snapshot ID and fingerprint they
 used. The persisted read model keeps individual game timestamps as well as team
 counts so later lineup optimization does not have to reconstruct dates from totals.
+
+## Player situation evidence
+
+Situation intelligence combines two independently reviewable inputs.
+
+BALLDONTLIE advanced season averages require the GOAT tier and a configured
+`BALLDONTLIE_API_KEY`. The importer fetches general advanced/usage, tracking
+passing, drives, possessions, speed/distance, and hustle metric sets. Provider
+responses remain in the ignored cache and normalized metrics keep their source
+namespace.
+
+```sh
+bun run advanced-stats:validate -- --seasons=2025
+bun run advanced-stats:import -- --seasons=2025
+```
+
+Reviewed qualitative facts live at `raw/player-context/2026-27.csv`. The file is
+private and ignored. Accepted columns are:
+
+`PLAYER`, `PLAYER_ID`, `MOVEMENT_TYPE`, `FROM_TEAM`, `TO_TEAM`,
+`EFFECTIVE_DATE`, `MOVEMENT_NOTE`, `MOVEMENT_SOURCE_URL`, `INJURY_STATUS`,
+`INJURY_SUMMARY`, `INJURY_SOURCE_URL`, `DEPTH_ROLE`,
+`OPPORTUNITY_DIRECTION`, `ROLE_NOTE`, and `ROLE_SOURCE_URL`.
+
+`MOVEMENT_TYPE` accepts `trade`, `free-agent-signing`, `re-signing`, `waiver`,
+`two-way`, `draft`, `returning`, or `unknown`. Opportunity accepts `up`,
+`steady`, or `down`. Every populated movement, injury, or role group requires
+its own HTTP(S) source URL. Validate before committing the immutable snapshot:
+
+```sh
+bun run player-context:validate
+bun run player-context:import
+```
+
+After migration 0014 is applied, re-run the base production import once so its
+historical game records populate NBA team stints and each stint's last game
+date. The comparison uses the team where the player finished the prior season,
+not merely the team for which he played the most games. A team change can then
+be detected without a reviewed CSV, but its transaction type remains `unknown`
+until a sourced context row supplies the classification.

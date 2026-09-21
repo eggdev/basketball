@@ -99,7 +99,7 @@ const season = (
 });
 
 describe('allocateAuctionValues', () => {
-  it('reserves minimum bids and allocates the rest above replacement', () => {
+  it('allows zero-dollar replacement players and allocates the full pool above replacement', () => {
     const result = allocateAuctionValues({
       baseBudgetCents: 10_000,
       players: season('2024-25', [null, null, null, null], [40, 30, 20, 10]).players,
@@ -109,7 +109,8 @@ describe('allocateAuctionValues', () => {
 
     expect(result.replacementPointsPerGame).toBe(10);
     expect(result.players.reduce((sum, player) => sum + player.valueCents, 0)).toBe(20_000);
-    expect(result.players.at(-1)?.valueCents).toBe(100);
+    expect(result.players.at(-1)?.valueCents).toBe(0);
+    expect(result.zeroDollarPlayerCount).toBe(1);
   });
 
   it('conserves the complete auction pool for the legacy global basis', () => {
@@ -354,7 +355,8 @@ describe('buildAuctionValuationArtifact', () => {
     expect(changedStreaming.fingerprint).not.toBe(first.fingerprint);
     expect(changedSchedule.fingerprint).not.toBe(first.fingerprint);
     expect(first.productionValue).toMatchObject({
-      modelVersion: 'usable-lineup-v1',
+      auctionRules: { minimumBidCents: 0, zeroBidAward: 'nominator-if-no-positive-bid' },
+      modelVersion: 'usable-lineup-v2',
       schedule: { fingerprint: 'calendar-fingerprint-1' },
     });
   });

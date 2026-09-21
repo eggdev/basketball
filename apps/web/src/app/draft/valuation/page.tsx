@@ -158,6 +158,12 @@ export default async function ValuationLabPage() {
                 <span>Fair-range coverage</span>
                 <strong>{percentage(selectedModel.metrics.fairRangeCoverageRate)}</strong>
               </article>
+              {usableRun?.productionValue?.zeroDollarPlayerCount === undefined ? null : (
+                <article className={styles.statCard}>
+                  <span>Modeled $0 tier</span>
+                  <strong>{usableRun.productionValue.zeroDollarPlayerCount} players</strong>
+                </article>
+              )}
             </section>
 
             <section className={styles.panel}>

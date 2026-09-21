@@ -9,6 +9,8 @@
   "scripts": {
     "adp:import": "nx run importer:adp-import -- --commit",
     "adp:validate": "nx run importer:adp-import",
+    "advanced-stats:import": "nx run importer:advanced-stats-import -- --commit",
+    "advanced-stats:validate": "nx run importer:advanced-stats-import",
     "build": "nx run web:build",
     "check": "bun run typecheck && bun run test && bun run lint && bun run test:python",
     "data:import": "nx run importer:data-import -- --commit",
@@ -22,6 +24,8 @@
     "performance:validate": "nx run importer:league-performance-import",
     "players:reconcile": "bun nx run importer:player-reconcile",
     "players:reconcile:commit": "bun nx run importer:player-reconcile -- --commit",
+    "player-context:import": "nx run importer:player-context-import -- --commit",
+    "player-context:validate": "nx run importer:player-context-import",
     "rosters:import": "nx run importer:roster-history-import -- --commit",
     "rosters:validate": "nx run importer:roster-history-import",
     "production:import": "nx run importer:production-import -- --commit",

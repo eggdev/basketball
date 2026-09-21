@@ -1,6 +1,7 @@
 import type { LeagueLineupSlot } from './league-format';
+import { allocateLeagueAuctionPool, LEAGUE_AUCTION_RULES } from './auction-economy';
 
-export const USABLE_POINTS_MODEL_VERSION = 'usable-lineup-v1' as const;
+export const USABLE_POINTS_MODEL_VERSION = 'usable-lineup-v2' as const;
 
 export interface UsablePointsPlayer {
   readonly availabilityRate: number;
@@ -70,6 +71,7 @@ export interface UsablePointsBoardPlayer extends UsablePointsPlayer {
 }
 
 export interface UsablePointsBoard {
+  readonly auctionRules: typeof LEAGUE_AUCTION_RULES;
   readonly auctionPoolCents: number;
   readonly dailyAssignments: ReadonlyArray<DailyLineupAssignment>;
   readonly draftablePlayerCount: number;
@@ -88,6 +90,7 @@ export interface UsablePointsBoard {
   };
   readonly streamingReserveCount: number;
   readonly totalAllocatedCents: number;
+  readonly zeroDollarPlayerCount: number;
 }
 
 export interface RosterCandidateInput {
@@ -373,7 +376,6 @@ export function buildUsablePointsBoard(input: UsablePointsBoardInput): UsablePoi
   );
   const replacementUsablePoints =
     longTermPlayerCount === 0 ? 0 : (ranked[longTermPlayerCount - 1]?.usablePoints ?? 0);
-  const auctionPoolCents = input.teamCount * input.baseBudgetCents;
   const playersWithReplacement = ranked.map(
     (candidate, index): Omit<UsablePointsBoardPlayer, 'valueCents'> => ({
       ...candidate,
@@ -383,44 +385,25 @@ export function buildUsablePointsBoard(input: UsablePointsBoardInput): UsablePoi
           : 0,
     }),
   );
-  const reservedMinimumsCents = draftablePlayerCount * 100;
-  if (reservedMinimumsCents > auctionPoolCents) {
-    throw new RangeError('auction pool cannot fund the minimum bid for every draftable player');
-  }
-  const discretionaryPoolCents = auctionPoolCents - reservedMinimumsCents;
   const marginalWeights = playersWithReplacement.map((candidate, index) =>
     index < longTermPlayerCount ? candidate.positionalReplacementDelta : 0,
   );
-  const totalMarginalWeight = marginalWeights.reduce((total, weight) => total + weight, 0);
-  const allocationWeights = marginalWeights.map((weight, index) =>
-    index >= longTermPlayerCount ? 0 : totalMarginalWeight === 0 ? 1 : weight,
-  );
-  const totalAllocationWeight = allocationWeights.reduce((total, weight) => total + weight, 0);
-  const exactAllocations = allocationWeights.map((weight) =>
-    totalAllocationWeight === 0 ? 0 : (weight / totalAllocationWeight) * discretionaryPoolCents,
-  );
-  const discretionaryAllocations = exactAllocations.map(Math.floor);
-  let remainingCents =
-    discretionaryPoolCents - discretionaryAllocations.reduce((total, cents) => total + cents, 0);
-  const remainderOrder = exactAllocations
-    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
-    .filter(({ index }) => index < longTermPlayerCount)
-    .sort((left, right) => right.remainder - left.remainder || left.index - right.index);
-  for (const allocation of remainderOrder) {
-    if (remainingCents === 0) break;
-    discretionaryAllocations[allocation.index] =
-      (discretionaryAllocations[allocation.index] ?? 0) + 1;
-    remainingCents -= 1;
-  }
+  const allocation = allocateLeagueAuctionPool({
+    baseBudgetCents: input.baseBudgetCents,
+    eligiblePlayerCount: longTermPlayerCount,
+    teamCount: input.teamCount,
+    weights: marginalWeights,
+  });
   const players = playersWithReplacement.map(
     (candidate, index): UsablePointsBoardPlayer => ({
       ...candidate,
-      valueCents: index < draftablePlayerCount ? 100 + (discretionaryAllocations[index] ?? 0) : 0,
+      valueCents: allocation.allocationsCents[index] ?? 0,
     }),
   );
 
   return {
-    auctionPoolCents,
+    auctionRules: LEAGUE_AUCTION_RULES,
+    auctionPoolCents: allocation.auctionPoolCents,
     dailyAssignments,
     draftablePlayerCount,
     leagueFormat: {
@@ -437,7 +420,10 @@ export function buildUsablePointsBoard(input: UsablePointsBoardInput): UsablePoi
       snapshotId: input.seasonCalendar.snapshotId,
     },
     streamingReserveCount,
-    totalAllocatedCents: players.reduce((total, candidate) => total + candidate.valueCents, 0),
+    totalAllocatedCents: allocation.totalAllocatedCents,
+    zeroDollarPlayerCount: players
+      .slice(0, draftablePlayerCount)
+      .filter((player) => player.valueCents === LEAGUE_AUCTION_RULES.minimumBidCents).length,
   };
 }
 

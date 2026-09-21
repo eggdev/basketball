@@ -61,12 +61,14 @@ const gameStat = (
   values: Partial<Record<ProductionStatKey, number>>,
 ): ProductionGameStat => ({
   externalId: id,
+  gameDate: `2025-01-${id.padStart(2, '0')}`,
   gameId: `game-${id}`,
   playerExternalId,
   playerName,
   season: 2024,
   sourcePayload: { id },
   stats: stats(values),
+  teamAbbreviation: playerExternalId === '246' ? 'DEN' : 'OKC',
 });
 
 const makeProvider = (
@@ -175,6 +177,51 @@ describe('makeBallDontLieProvider', () => {
       await rm(cacheDirectory, { force: true, recursive: true });
     }
   });
+
+  it('retains each game date so the prior season ending team is identifiable', async () => {
+    const cacheDirectory = await mkdtemp(join(tmpdir(), 'basketball-bdl-stats-'));
+    const statFields = Object.fromEntries(
+      productionStatKeys
+        .filter((key) => key !== 'minutes')
+        .map((key) => [key, key === 'pts' ? 20 : 0]),
+    );
+    const fetchImplementation = (async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              ...statFields,
+              game: { date: '2025-04-13', id: 100, season: 2024 },
+              id: 200,
+              min: '30:00',
+              player: { first_name: 'Nikola', id: 246, last_name: 'Jokic' },
+              team: { abbreviation: 'DEN' },
+            },
+          ],
+          meta: { per_page: 100 },
+        }),
+        { status: 200 },
+      )) as typeof globalThis.fetch;
+
+    try {
+      const records = await Effect.runPromise(
+        makeBallDontLieProvider({
+          apiKey: Redacted.make('secret-key'),
+          cacheDirectory,
+          fetch: fetchImplementation,
+          initialRequestsPerMinute: 60_000,
+        }).listRegularSeasonStats(['246'], [2024]),
+      );
+
+      expect(records[0]).toMatchObject({
+        gameDate: '2025-04-13',
+        playerExternalId: '246',
+        teamAbbreviation: 'DEN',
+      });
+    } finally {
+      await rm(cacheDirectory, { force: true, recursive: true });
+    }
+  });
 });
 
 describe('collectPlayerProduction', () => {
@@ -257,6 +304,9 @@ describe('collectPlayerProduction', () => {
       reb: 20,
       triple_double: 1,
     });
+    expect(jokic?.teamStints).toEqual([
+      { gamesPlayed: 2, lastGameDate: '2025-01-02', teamAbbreviation: 'DEN' },
+    ]);
     const shai = plan.records.find((record) => record.fantraxId === 'fantrax-sga');
     expect(shai?.gamesPlayed).toBe(1);
     expect(plan.fingerprint).toMatch(/^[a-f0-9]{64}$/);

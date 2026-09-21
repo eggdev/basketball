@@ -183,12 +183,14 @@ team/roster counts, projected players, and streaming-slot count. Calculate:
 - congestion/bench loss;
 - positional scarcity/replacement delta;
 - availability exposure;
-- dollar value while reserving every draftable roster spot's $1 minimum.
+- dollar value using the league's legal $0 floor without a mandatory
+  roster-slot cash reserve.
 
 For the league-wide board, allocate aggregate daily slot capacity as
 `teamCount * slot.maxActive`. Reserve configured streaming slots per team from
 long-term roster valuation rather than assigning their season-long value to a
-single drafted player. Preserve auction-pool conservation exactly in cents.
+single drafted player. Preserve auction-pool conservation exactly in cents;
+streaming and replacement-level players may carry a $0 allocation.
 
 Give the basis a new explicit version such as `usable-lineup-v1`. Keep
 `global-fppg-v1` callable for comparison and rollback.
@@ -206,8 +208,10 @@ playoff-weighted marginal points, days benched, filled slot needs, and
 concentration risk. Never estimate this by adding standalone player value.
 
 Update `evaluateLiveBid` input so personal cap calculation can consume the
-candidate's roster-marginal value while hard budget/minimum-slot guards remain
-unchanged. Deterministic hard stops still own all dollar decisions; Jev may only
+candidate's roster-marginal value while hard budget guards remain unchanged.
+No guard may reserve cash for open roster spots: the legal floor is $0 and cash
+retention is a strategic preference. Deterministic hard stops still own all
+dollar decisions; Jev may only
 downgrade qualitative fit as before.
 
 **Verify**: `bun nx run fantasy:test -- --run` -> a strong but redundant guard
@@ -280,7 +284,8 @@ action. Document how to roll back to the prior promoted run.
 - [x] A pure module returns deterministic daily assignments and usable values.
 - [x] Multi-position eligibility, 10 slots, bench congestion, streaming reserve,
   availability, and playoff schedule affect values explicitly.
-- [x] Auction dollars conserve the exact pool and reserve $1 minimum bids.
+- [x] Auction dollars conserve the exact pool with a $0 legal floor and no
+  mandatory roster-slot reserve.
 - [x] Live personal caps use roster-marginal utility without changing hard guards.
 - [x] Legacy and new value bases remain versioned and comparable.
 - [x] The candidate command consumes the exact dated calendar and persists the
@@ -298,6 +303,13 @@ repeated full-calendar JSON in the projection read query, and misleading usable
 point labels. The final review reran all affected tests without Nx cache, the
 full repository check, the production build, and migration 0012 against a
 disposable PostgreSQL database.
+
+## Zero-dollar rules correction
+
+On 2026-09-20 the league's legal $0 bid was confirmed. The duplicated $1-floor
+allocation was replaced by the shared `zero-dollar-v1` auction-economy module,
+and the usable basis advanced to `usable-lineup-v2`. Existing v1 artifacts stay
+immutable and require an explicit v2 candidate promotion to replace them.
 
 ## STOP conditions
 

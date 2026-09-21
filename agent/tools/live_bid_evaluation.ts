@@ -25,6 +25,7 @@ const outputSchema = z.object({
   fairRangeDollars: z.object({ high: z.number(), low: z.number() }),
   fantasyPointsPerGame: z.number(),
   historicalExpectedPriceDollars: z.number().nullable(),
+  legalBidFloorDollars: z.number(),
   marketExpectedPriceDollars: z.number(),
   marketModelId: z.string().nullable(),
   marketPriceSource: z.enum(['calibrated-model', 'historical-average', 'projection-value']),
@@ -34,6 +35,7 @@ const outputSchema = z.object({
   playerName: z.string(),
   positions: z.array(z.string()),
   priceSignal: z.enum(['at-value', 'over-value', 'under-value']),
+  positiveBidLeverage: z.boolean(),
   projectedValueDollars: z.number(),
   projectionAsOf: z.string(),
   reasons: z.array(z.string()),
@@ -240,6 +242,7 @@ export default defineTool({
         evaluation.market.historicalExpectedPriceCents === null
           ? null
           : toDollars(evaluation.market.historicalExpectedPriceCents),
+      legalBidFloorDollars: toDollars(evaluation.budget.legalBidFloorCents),
       marketExpectedPriceDollars: toDollars(evaluation.market.expectedPriceCents),
       marketModelId: evaluation.market.calibrationModelId,
       marketPriceSource: evaluation.market.priceSource,
@@ -249,6 +252,7 @@ export default defineTool({
       playerName: evaluation.player.name,
       positions: [...evaluation.impact.positions],
       priceSignal: evaluation.market.priceSignal,
+      positiveBidLeverage: evaluation.budget.positiveBidLeverage,
       projectedValueDollars: toDollars(evaluation.market.projectedValueCents),
       projectionAsOf: context.projection.asOf,
       reasons: [...evaluation.reasons],

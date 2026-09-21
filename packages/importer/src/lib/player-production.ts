@@ -20,12 +20,14 @@ export interface ProductionProviderPlayer {
 
 export interface ProductionGameStat {
   readonly externalId: string;
+  readonly gameDate: string;
   readonly gameId: string;
   readonly playerExternalId: string;
   readonly playerName: string;
   readonly season: number;
   readonly sourcePayload: Readonly<Record<string, unknown>>;
   readonly stats: Readonly<Record<ProductionStatKey, number>>;
+  readonly teamAbbreviation: string;
 }
 
 export interface BallDontLieRegularSeasonGame {
@@ -87,6 +89,11 @@ export interface PlayerProductionRecord {
   readonly seasonKey: string;
   readonly sourcePayload: Readonly<Record<string, unknown>>;
   readonly stats: Readonly<Record<string, number | null>>;
+  readonly teamStints: ReadonlyArray<{
+    readonly gamesPlayed: number;
+    readonly lastGameDate: string;
+    readonly teamAbbreviation: string;
+  }>;
 }
 
 export interface PlayerProductionIdentity {
@@ -137,7 +144,7 @@ export interface BallDontLieProgress {
   readonly cacheHit: boolean;
   readonly page: number;
   readonly recordCount: number;
-  readonly resource: 'games' | 'players' | 'stats';
+  readonly resource: 'advanced' | 'games' | 'players' | 'stats';
 }
 
 export interface BallDontLieScheduleProvider<Error> {
@@ -335,9 +342,14 @@ const parseProviderPlayer = (value: unknown): ProductionProviderPlayer => {
 const parseGameStat = (value: unknown): ProductionGameStat => {
   const record = requiredObject(value, 'stat');
   const player = requiredObject(record['player'], 'stat.player');
+  const team = requiredObject(record['team'], 'stat.team');
   const game = requiredObject(record['game'], 'stat.game');
   const season = finiteNumber(game['season'], 'stat.game.season');
   if (!Number.isSafeInteger(season)) throw new Error('stat.game.season must be an integer');
+  const gameDate = requiredString(game['date'], 'stat.game.date');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(gameDate) || Number.isNaN(Date.parse(`${gameDate}T00:00:00Z`))) {
+    throw new Error('stat.game.date must use YYYY-MM-DD');
+  }
 
   const stats = Object.fromEntries(
     productionStatKeys.map((key) => [
@@ -348,6 +360,7 @@ const parseGameStat = (value: unknown): ProductionGameStat => {
 
   return {
     externalId: requiredIdentifier(record['id'], 'stat.id'),
+    gameDate,
     gameId: requiredIdentifier(game['id'], 'stat.game.id'),
     playerExternalId: requiredIdentifier(player['id'], 'stat.player.id'),
     playerName: `${requiredString(player['first_name'], 'stat.player.first_name')} ${requiredString(
@@ -357,6 +370,7 @@ const parseGameStat = (value: unknown): ProductionGameStat => {
     season,
     sourcePayload: record,
     stats,
+    teamAbbreviation: requiredString(team['abbreviation'], 'stat.team.abbreviation'),
   };
 };
 
@@ -716,6 +730,26 @@ const aggregateStats = (
           seasonType: 'regular',
         },
         stats: totals,
+        teamStints: [
+          ...seasonRecords.reduce((teams, record) => {
+            const stint = teams.get(record.teamAbbreviation);
+            teams.set(record.teamAbbreviation, {
+              gamesPlayed: (stint?.gamesPlayed ?? 0) + 1,
+              lastGameDate:
+                stint === undefined || record.gameDate > stint.lastGameDate
+                  ? record.gameDate
+                  : stint.lastGameDate,
+            });
+            return teams;
+          }, new Map<string, { gamesPlayed: number; lastGameDate: string }>()),
+        ]
+          .map(([teamAbbreviation, stint]) => ({ ...stint, teamAbbreviation }))
+          .sort(
+            (left, right) =>
+              right.lastGameDate.localeCompare(left.lastGameDate) ||
+              right.gamesPlayed - left.gamesPlayed ||
+              left.teamAbbreviation.localeCompare(right.teamAbbreviation),
+          ),
       };
     });
 };
@@ -834,6 +868,7 @@ export const collectPlayerProduction = <Error>(options: {
             seasonKey: record.seasonKey,
             sourcePayload: record.sourcePayload,
             stats: record.stats,
+            teamStints: record.teamStints,
           })),
           seasons: seasonKeys,
         }),

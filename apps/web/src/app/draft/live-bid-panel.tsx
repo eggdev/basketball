@@ -370,6 +370,18 @@ export function LiveBidPanel({ board }: { readonly board: LiveBidBoard }) {
                   <dd>{formatPrice(evaluation.personal.maxBidCents)}</dd>
                 </div>
                 <div>
+                  <dt>Legal bid floor</dt>
+                  <dd>{formatPrice(evaluation.budget.legalBidFloorCents)} · uncontested</dd>
+                </div>
+                <div>
+                  <dt>Cash leverage</dt>
+                  <dd>
+                    {evaluation.budget.positiveBidLeverage
+                      ? `${formatPrice(evaluation.budget.remainingBudgetCents)} available`
+                      : '$0 bids only'}
+                  </dd>
+                </div>
+                <div>
                   <dt>Projection value</dt>
                   <dd>{formatPrice(evaluation.market.projectedValueCents)}</dd>
                 </div>

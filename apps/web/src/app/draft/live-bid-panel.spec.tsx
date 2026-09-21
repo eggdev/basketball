@@ -136,4 +136,15 @@ describe('LiveBidPanel', () => {
     expect(screen.getByText('Roster marginal')).toBeTruthy();
     expect(screen.getAllByText(/usable-lineup-v1/)).toHaveLength(2);
   });
+
+  it('records an uncontested player at zero dollars without reducing the budget', () => {
+    render(<LiveBidPanel board={board} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Evaluate live bid' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record win at $0' }));
+
+    expect(screen.getAllByText('Anchor Guard').length).toBeGreaterThan(0);
+    expect((screen.getByLabelText('Budget left ($)') as HTMLInputElement).value).toBe('200');
+    expect((screen.getByLabelText('Roster spots left') as HTMLInputElement).value).toBe('0');
+  });
 });

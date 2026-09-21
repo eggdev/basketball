@@ -1,4 +1,5 @@
 import type { LatestProjectionSnapshot } from '@fantasy-basketball/database/runtime';
+import { buildPlayerSituationBoard } from '@fantasy-basketball/fantasy';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { vi } from 'vitest';
@@ -139,5 +140,86 @@ describe('PlayersView season calendar freshness', () => {
     expect(html).toContain('Calendar Pending');
     expect(html).toContain('playoff schedule pending');
     expect(html).toContain('>Pending<');
+  });
+
+  it('separates verified movement, opportunity, competition, and injury evidence', () => {
+    const situations = buildPlayerSituationBoard({
+      advancedHistory: [
+        {
+          metrics: {
+            'general.advanced.usg_pct': 0.31,
+            'tracking.passing.secondary_ast': 0.7,
+          },
+          playerId: 'player-1',
+          seasonKey: '2025-26',
+        },
+      ],
+      asOf: '2026-09-21T00:00:00.000Z',
+      contexts: [
+        {
+          injury: {
+            sourceUrl: 'https://example.com/injury',
+            status: 'Healthy',
+            summary: 'Cleared after offseason rehabilitation.',
+          },
+          movement: {
+            effectiveDate: '2026-07-06',
+            fromTeamAbbreviation: 'MIN',
+            note: null,
+            sourceUrl: 'https://example.com/trade',
+            toTeamAbbreviation: 'DEN',
+            type: 'trade',
+          },
+          playerId: 'player-1',
+          role: {
+            depthRole: 'starter',
+            note: 'More creation responsibility.',
+            opportunityDirection: 'up',
+            sourceUrl: 'https://example.com/depth',
+          },
+        },
+      ],
+      productionHistory: [
+        {
+          gamesPlayed: 40,
+          playerId: 'player-1',
+          seasonKey: '2025-26',
+          stats: { ast: 200, fga: 500, fta: 100, turnover: 80 },
+          teamStints: [{ gamesPlayed: 40, teamAbbreviation: 'MIN' }],
+        },
+      ],
+      projections: [
+        {
+          availability: { expectedGames: 72 },
+          fantasyPointsPerGame: 41.667,
+          playerId: 'player-1',
+          playerName: 'Nikola Jokic',
+          positions: ['C'],
+          statsPerGame: {
+            assists: 8,
+            fieldGoalsAttempted: 18,
+            freeThrowsAttempted: 6,
+            turnovers: 3,
+          },
+          teamAbbreviation: 'DEN',
+        },
+      ],
+      seasonKey: '2026-27',
+    });
+    const html = renderToStaticMarkup(
+      <PlayersView
+        market={null}
+        projections={projection('current')}
+        rankings={null}
+        situations={situations}
+      />,
+    );
+
+    expect(html).toContain('Situation intelligence');
+    expect(html).toContain('MIN');
+    expect(html).toContain('trade');
+    expect(html).toContain('31.0% usage');
+    expect(html).toContain('0.7 hockey AST');
+    expect(html).toContain('Cleared after offseason rehabilitation.');
   });
 });

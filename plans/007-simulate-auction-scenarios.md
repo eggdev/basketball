@@ -121,7 +121,9 @@ Define immutable input/output types and internal state transitions for:
 - legal winner/price resolution;
 - player removal from the pool;
 - team budget and roster updates;
-- $1 minimum reserve for every remaining roster spot;
+- a $0 legal floor with $1 positive-bid increments and no mandatory reserve for
+  remaining roster spots;
+- an uncontested $0 award to the nominating manager when every opponent passes;
 - completion when all standard roster spots are filled or no legal award
   remains.
 
@@ -130,8 +132,8 @@ same fingerprinted input must return byte-equivalent results. Sort managers and
 players by stable IDs before random draws so database order cannot alter a run.
 
 **Verify**: `bun nx run fantasy:test -- --run` -> state-machine tests prove no
-duplicate players, negative budgets, overfilled rosters, or unfunded remaining
-spots.
+duplicate players, negative budgets, or overfilled rosters; teams with $0 and
+open roster spots remain legal participants for uncontested awards.
 
 ### Step 2: Implement bidding and nomination behavior
 
@@ -144,13 +146,16 @@ For each nominated player:
   streaming-slot intent as constraints/signals;
 - resolve a winning price using an explicitly documented second-price-like or
   ascending-bid rule that never exceeds the winner's sampled willingness.
+- if every manager declines a positive bid, award the player to the nominator
+  for $0 without changing that team's budget.
 
 When historical nomination coverage is inadequate, use a league-prior/random
 nomination policy and label it. Do not invent manager-specific nomination
 preferences.
 
-**Verify**: fixtures cover one bidder, tied bidders, target max bid, avoid
-stance, exhausted tier budget, no legal bidder, and deterministic tie-breaking.
+**Verify**: fixtures cover an all-pass $0 award, one positive bidder, tied
+bidders, target max bid, avoid stance, managers with $0 budgets, no roster
+capacity, and deterministic tie-breaking.
 
 ### Step 3: Aggregate Monte Carlo scenario outcomes
 
@@ -159,7 +164,8 @@ Run a configurable number of iterations and return distributions for:
 - total usable regular-season and playoff-weighted roster value;
 - projected availability/fragility concentration;
 - target acquisition and avoid-player rates;
-- spend by budget tier, final unspent budget, and streaming slots preserved;
+- spend by budget tier, $0 acquisitions, final unspent budget, positive-bid
+  leverage, and streaming slots preserved;
 - position/lineup coverage and congestion loss;
 - downside percentiles and common fallback players;
 - representative best/median/worst traces selected deterministically.
@@ -238,7 +244,8 @@ deployment limit with headroom.
 ## Done criteria
 
 - [ ] Same seed and input fingerprint produce identical results.
-- [ ] Every simulated draft obeys player uniqueness, roster size, budgets, and minimum reserves.
+- [ ] Every simulated draft obeys player uniqueness, roster size, budgets, the
+  $0 award rule, and $1 positive-bid increments without inventing a reserve.
 - [ ] Opponent bids sample Plan 006 distributions and preserve their uncertainty.
 - [ ] Results report distributions, target rates, fallback paths, and downside.
 - [ ] No output is labeled playoff/championship probability.

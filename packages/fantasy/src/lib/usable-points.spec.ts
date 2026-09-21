@@ -230,7 +230,9 @@ describe('buildUsablePointsBoard league value', () => {
     expect(result.auctionPoolCents).toBe(20_001);
     expect(result.totalAllocatedCents).toBe(20_001);
     expect(result.players.reduce((sum, candidate) => sum + candidate.valueCents, 0)).toBe(20_001);
-    expect(result.players.filter((candidate) => candidate.valueCents > 0)).toHaveLength(3);
+    expect(result.players.filter((candidate) => candidate.valueCents > 0)).toHaveLength(2);
+    expect(result.zeroDollarPlayerCount).toBe(1);
+    expect(result.auctionRules.minimumBidCents).toBe(0);
   });
 
   it('changes replacement value when a constrained position fills a required slot', () => {
