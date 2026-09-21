@@ -1,0 +1,722 @@
+[
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 418,
+    "snippet": "border-radius: 7px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "7px",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 437,
+    "snippet": "border-radius: 9px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "9px",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 504,
+    "snippet": "border-radius: 11px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "11px",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 578,
+    "snippet": "font-size: 1rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1rem",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 708,
+    "snippet": "border-radius: 9px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "9px",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-color",
+    "name": "Color outside DESIGN.md",
+    "description": "A literal color is outside the DESIGN.md palette and sidecar tonal ramps. This may be legitimate, but it should be an intentional design-system addition rather than drift.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 709,
+    "snippet": "Undocumented color rgb(112 28 35 / 0.16) is outside DESIGN.md colors",
+    "advisory": true,
+    "ignoreValue": "rgb(112 28 35 / 0.16)",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 731,
+    "snippet": "border-radius: 7px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "7px",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-color",
+    "name": "Color outside DESIGN.md",
+    "description": "A literal color is outside the DESIGN.md palette and sidecar tonal ramps. This may be legitimate, but it should be an intentional design-system addition rather than drift.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 732,
+    "snippet": "Undocumented color rgb(112 28 35 / 0.24) is outside DESIGN.md colors",
+    "advisory": true,
+    "ignoreValue": "rgb(112 28 35 / 0.24)",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 792,
+    "snippet": "border-radius: 10px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "10px",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/app-shell.module.css",
+    "line": 808,
+    "snippet": "border-radius: 9px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "9px",
+    "importedBy": [
+      "app-shell.tsx",
+      "chat-markdown.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/player-card.module.css",
+    "line": 33,
+    "snippet": "font-size: 0.88rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "0.88rem",
+    "importedBy": [
+      "player-card.tsx",
+      "trades-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/player-card.module.css",
+    "line": 138,
+    "snippet": "border-radius: 5px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "5px",
+    "importedBy": [
+      "player-card.tsx",
+      "trades-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-color",
+    "name": "Color outside DESIGN.md",
+    "description": "A literal color is outside the DESIGN.md palette and sidecar tonal ramps. This may be legitimate, but it should be an intentional design-system addition rather than drift.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/player-card.module.css",
+    "line": 252,
+    "snippet": "Undocumented color rgb(244 211 123 / 0.12) is outside DESIGN.md colors",
+    "advisory": true,
+    "ignoreValue": "rgb(244 211 123 / 0.12)",
+    "importedBy": [
+      "player-card.tsx",
+      "trades-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 16,
+    "snippet": "font-size: 2rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "2rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 90,
+    "snippet": "font-size: 1.2rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.2rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 98,
+    "snippet": "font-size: 1.3rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.3rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 122,
+    "snippet": "font-size: 1.65rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.65rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 132,
+    "snippet": "font-size: 1.15rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.15rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 265,
+    "snippet": "border-radius: 2px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "2px",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 271,
+    "snippet": "border-radius: 2px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "2px",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 296,
+    "snippet": "font-size: 1rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 398,
+    "snippet": "font-size: 0.87rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "0.87rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/team/team-hq.module.css",
+    "line": 421,
+    "snippet": "font-size: 1.6rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.6rem",
+    "importedBy": [
+      "draft-prep-hq.tsx",
+      "team-hq.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workflow.module.css",
+    "line": 82,
+    "snippet": "font-size: 1.2rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.2rem",
+    "importedBy": [
+      "draft-workflow.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "managers-view.tsx",
+      "season-experience.tsx",
+      "page.tsx",
+      "draft-prep-hq.tsx",
+      "view-switcher.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workflow.module.css",
+    "line": 109,
+    "snippet": "font-size: 0.88rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "0.88rem",
+    "importedBy": [
+      "draft-workflow.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "managers-view.tsx",
+      "season-experience.tsx",
+      "page.tsx",
+      "draft-prep-hq.tsx",
+      "view-switcher.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workflow.module.css",
+    "line": 187,
+    "snippet": "font-size: 1.2rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.2rem",
+    "importedBy": [
+      "draft-workflow.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "managers-view.tsx",
+      "season-experience.tsx",
+      "page.tsx",
+      "draft-prep-hq.tsx",
+      "view-switcher.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 21,
+    "snippet": "font-size: 2rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "2rem",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 172,
+    "snippet": "font-size: 1.28rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.28rem",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 531,
+    "snippet": "font-size: 0.56rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "0.56rem",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 839,
+    "snippet": "border-radius: 7px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "7px",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 981,
+    "snippet": "font-size: 0.88rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "0.88rem",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 1055,
+    "snippet": "border-radius: 9px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "9px",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 1120,
+    "snippet": "font-size: 1.3rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1.3rem",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 1142,
+    "snippet": "border-radius: 9px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "9px",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-radius",
+    "name": "Radius outside DESIGN.md",
+    "description": "A border-radius value is outside the DESIGN.md rounded scale. Use a documented radius token or update the design system if the new shape is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 1254,
+    "snippet": "border-radius: 9px is outside the DESIGN.md rounded scale",
+    "advisory": true,
+    "ignoreValue": "9px",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 1358,
+    "snippet": "font-size: 1rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "1rem",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  },
+  {
+    "antipattern": "design-system-font-size",
+    "name": "Font size outside DESIGN.md",
+    "description": "A literal font-size is off the type ramp documented in DESIGN.md typography. Use a documented size step or update the design system if the new step is intentional.",
+    "severity": "advisory",
+    "category": "quality",
+    "file": "/Users/clyde/dev/basketball/apps/web/src/app/workspace.module.css",
+    "line": 1519,
+    "snippet": "font-size: 0.57rem is off the DESIGN.md type ramp",
+    "advisory": true,
+    "ignoreValue": "0.57rem",
+    "importedBy": [
+      "live-bid-panel.tsx",
+      "page.tsx",
+      "scenario-workspace.tsx",
+      "page.tsx",
+      "league-view.tsx",
+      "page.tsx",
+      "managers-view.tsx",
+      "page-header.tsx",
+      "players-view.tsx",
+      "page.tsx",
+      "trades-view.tsx",
+      "waivers-view.tsx"
+    ]
+  }
+]

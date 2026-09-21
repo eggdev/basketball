@@ -4,11 +4,20 @@ import type { PlayerProjectionReadModel } from '@fantasy-basketball/database/run
 import type { PlayerSituation } from '@fantasy-basketball/fantasy';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { projectionTier, durabilityTone, roleTone, type SignalTone } from '../lib/player-signals';
 import { formatPrice } from '../lib/format';
 import { AskEveButton } from './app-shell';
 import styles from './player-card.module.css';
 
-export type PlayerSignal = 'availability' | 'opportunity' | 'value' | 'evidence';
+export type PlayerSignal =
+  | 'availability'
+  | 'opportunity'
+  | 'value'
+  | 'evidence'
+  | 'movement'
+  | 'tier'
+  | 'decline'
+  | 'role';
 export function SignalIcon({ kind }: { kind: PlayerSignal }) {
   return (
     <svg
@@ -20,7 +29,18 @@ export function SignalIcon({ kind }: { kind: PlayerSignal }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {kind === 'availability' ? (
+      {kind === 'decline' ? (
+        <path d="m4 7 6 6 4-3 6 9M14 19h6v-6" />
+      ) : kind === 'role' ? (
+        <>
+          <circle cx="12" cy="7" r="3" />
+          <path d="M5 21v-3a7 7 0 0 1 14 0v3M5 17h14" />
+        </>
+      ) : kind === 'movement' ? (
+        <>
+          <path d="M4 8h14m-4-4 4 4-4 4M20 16H6m4-4-4 4 4 4" />
+        </>
+      ) : kind === 'availability' ? (
         <>
           <path d="M12 3 4 6v6c0 4 8 9 8 9s8-5 8-9V6z" />
           <path d="m8 12 3 3 5-6" />
@@ -47,7 +67,11 @@ export function PlayerRead({
   kind,
   label,
   detail,
+  tone = 'neutral',
+  glyph,
 }: {
+  tone?: SignalTone;
+  glyph?: string;
   kind: PlayerSignal;
   label: string;
   detail: string;
@@ -118,7 +142,13 @@ export function PlayerRead({
     });
   }, [open]);
   return (
-    <span className={styles.signal} data-open={open} onMouseEnter={show} onMouseLeave={leave}>
+    <span
+      className={styles.signal}
+      data-tone={tone}
+      data-open={open}
+      onMouseEnter={show}
+      onMouseLeave={leave}
+    >
       <button
         ref={trigger}
         type="button"
@@ -134,7 +164,9 @@ export function PlayerRead({
           }
         }}
       >
-        <SignalIcon kind={kind} />
+        <span className={styles.signalGlyph} aria-hidden="true">
+          {glyph ?? <SignalIcon kind={kind} />}
+        </span>
       </button>
       {open ? (
         createPortal(
@@ -273,7 +305,33 @@ export function PlayerCard({
         </span>
         <div className={styles.signals} aria-label={`${playerName} signals`}>
           <PlayerRead
+            kind="tier"
+            glyph={projectionTier(projection?.rank).label}
+            tone={projectionTier(projection?.rank).tone}
+            label={`Tier ${projectionTier(projection?.rank).label}`}
+            detail={`${projectionSeason ?? 'Latest projection'} · ${projectionTier(projection?.rank).detail}`}
+          />
+          <PlayerRead
+            kind="movement"
+            tone={situation?.movement.isNewTeam ? 'info' : 'neutral'}
+            label={
+              situation?.movement.isNewTeam
+                ? 'New NBA team'
+                : situation?.previousTeamAbbreviation === situation?.currentTeamAbbreviation &&
+                    situation?.previousTeamAbbreviation
+                  ? 'Returning NBA team'
+                  : 'Team movement unknown'
+            }
+            detail={
+              situation
+                ? `${situation.previousTeamAbbreviation ?? 'Prior team unknown'} → ${situation.currentTeamAbbreviation}. ${situation.movement.note ?? situation.movement.type}. A change of team is not automatically an improvement.`
+                : 'No team movement evidence available.'
+            }
+          />
+
+          <PlayerRead
             kind="availability"
+            tone={durabilityTone(projection?.availability.tier)}
             label={availability}
             detail={
               projection
@@ -282,7 +340,14 @@ export function PlayerCard({
             }
           />
           <PlayerRead
-            kind="opportunity"
+            kind={
+              situation?.opportunity.direction === 'up'
+                ? 'opportunity'
+                : situation?.opportunity.direction === 'down'
+                  ? 'decline'
+                  : 'role'
+            }
+            tone={roleTone(situation?.opportunity.direction)}
             label={opportunity}
             detail={
               situation
@@ -307,5 +372,85 @@ export function PlayerCard({
         </div>
       </div>
     </article>
+  );
+}
+
+export function DraftPlayerSignals({
+  rank,
+  availabilityTier,
+  season,
+  situation,
+}: {
+  rank?: number;
+  availabilityTier?: string;
+  season: string;
+  situation?: PlayerSituation | null;
+}) {
+  const tier = projectionTier(rank);
+  return (
+    <div className={styles.signals}>
+      <PlayerRead
+        kind="tier"
+        glyph={tier.label}
+        tone={tier.tone}
+        label={`Tier ${tier.label}`}
+        detail={`${season} · ${tier.detail}`}
+      />
+      <PlayerRead
+        kind="availability"
+        tone={durabilityTone(availabilityTier)}
+        label={availabilityTier ? `${availabilityTier} availability` : 'Availability unknown'}
+        detail="Model-estimated durability; not live injury clearance. Green: durable. Amber: managed. Red: fragile."
+      />
+      <PlayerRead
+        kind="movement"
+        tone={situation?.movement.isNewTeam ? 'info' : 'neutral'}
+        label={
+          situation?.movement.isNewTeam
+            ? 'New NBA team'
+            : situation?.previousTeamAbbreviation === situation?.currentTeamAbbreviation &&
+                situation?.previousTeamAbbreviation
+              ? 'Returning NBA team'
+              : 'Team movement unknown'
+        }
+        detail={
+          situation
+            ? `${situation.previousTeamAbbreviation ?? 'Unknown'} → ${situation.currentTeamAbbreviation}. ${situation.movement.note ?? situation.movement.type}`
+            : 'Team-change evidence unavailable.'
+        }
+      />
+      <PlayerRead
+        kind={
+          situation?.opportunity.direction === 'up'
+            ? 'opportunity'
+            : situation?.opportunity.direction === 'down'
+              ? 'decline'
+              : 'role'
+        }
+        tone={roleTone(situation?.opportunity.direction)}
+        label={`Role ${situation?.opportunity.direction ?? 'unknown'}`}
+        detail={
+          situation?.role?.note ??
+          (situation
+            ? `${situation.opportunity.source}: ${situation.opportunity.direction}. This is an estimate.`
+            : 'No role evidence available.')
+        }
+      />
+    </div>
+  );
+}
+export function PlayerSignalLegend() {
+  return (
+    <div className={styles.legend}>
+      <span data-tone="elite">S 1–12</span>
+      <span data-tone="positive">A 13–36</span>
+      <span data-tone="info">B 37–72</span>
+      <span>C 73–120 · D 121+</span>
+      <span data-tone="positive">Durable / role up</span>
+      <span data-tone="caution">Managed / uncertain</span>
+      <span data-tone="negative">Fragile / role down</span>
+      <span data-tone="info">New team</span>
+      <span>Gray: unchanged or unknown · open the read for evidence.</span>
+    </div>
   );
 }

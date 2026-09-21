@@ -9,7 +9,8 @@ import type { PlayerSituation, PlayerSituationBoard } from '@fantasy-basketball/
 import { useMemo, useState } from 'react';
 
 import { formatFantasyPoints, formatPrice, formatSignedPrice } from '../../lib/format';
-import { PlayerCard } from '../player-card';
+import { ViewSwitcher } from '../view-switcher';
+import { PlayerCard, PlayerSignalLegend } from '../player-card';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
@@ -36,6 +37,9 @@ export function PlayersView({
   readonly rankings: HistoricalRankingSnapshot | null;
   readonly situations?: PlayerSituationBoard | null;
 }) {
+  const [view, setView] = useState<'projections' | 'situations' | 'history'>(
+    projections ? 'projections' : situations ? 'situations' : 'history',
+  );
   const [seasonKey, setSeasonKey] = useState(rankings?.summary.latestSeason ?? '');
   const [query, setQuery] = useState('');
   const [projectionQuery, setProjectionQuery] = useState('');
@@ -157,6 +161,31 @@ export function PlayersView({
         title="Player rankings"
       />
 
+      <ViewSwitcher
+        label="Player research views"
+        value={view}
+        onChange={setView}
+        options={[
+          { value: 'projections', label: 'Draft board' },
+          { value: 'situations', label: 'Team & role changes' },
+          { value: 'history', label: 'Past production' },
+        ]}
+      />
+      <PlayerSignalLegend />
+
+      {view === 'projections' && !projections ? (
+        <DataUnavailable
+          title="Draft projections unavailable"
+          detail="Upcoming estimates have not loaded. Use Past production for historical research."
+        />
+      ) : null}
+      {view === 'situations' && !situations ? (
+        <DataUnavailable
+          title="Situation evidence unavailable"
+          detail="Team and role changes need projection and context evidence before they can be classified."
+        />
+      ) : null}
+
       {projections ? (
         <div className={styles.notice}>
           <strong>{projections.seasonKey} forecast</strong>
@@ -199,7 +228,11 @@ export function PlayersView({
       )}
 
       {projections ? (
-        <section aria-label="Projection summary" className={styles.stats}>
+        <section
+          hidden={view !== 'projections'}
+          aria-label="Projection summary"
+          className={styles.stats}
+        >
           <article className={styles.statCard}>
             <span>Projection season</span>
             <strong>{projections.seasonKey}</strong>
@@ -218,7 +251,7 @@ export function PlayersView({
           </article>
         </section>
       ) : season ? (
-        <section aria-label="Ranking summary" className={styles.stats}>
+        <section hidden={view !== 'history'} aria-label="Ranking summary" className={styles.stats}>
           <article className={styles.statCard}>
             <span>Scored seasons</span>
             <strong>{rankings?.summary.seasonCount ?? 0}</strong>
@@ -239,7 +272,7 @@ export function PlayersView({
       ) : null}
 
       {situations && situations.players.length > 0 ? (
-        <section className={styles.panel}>
+        <section hidden={view !== 'situations'} className={styles.panel}>
           <header className={styles.panelHeader}>
             <div>
               <h2>Situation intelligence</h2>
@@ -273,10 +306,16 @@ export function PlayersView({
                       aria-label={`${player.playerName}, ${player.positions.join(', ')}`}
                       scope="row"
                     >
-                      <span className={styles.tablePlayer}>
-                        <strong>{player.playerName}</strong>
-                        <small>{player.positions.join(' · ')}</small>
-                      </span>
+                      <PlayerCard
+                        compact
+                        playerId={player.playerId}
+                        playerName={player.playerName}
+                        projection={projections?.players.find(
+                          (candidate) => candidate.playerId === player.playerId,
+                        )}
+                        projectionSeason={projections?.seasonKey}
+                        situation={player}
+                      />
                     </th>
                     <td
                       aria-label={`${player.playerName} team movement: ${player.previousTeamAbbreviation ?? 'no prior team'} to ${player.currentTeamAbbreviation}`}
@@ -381,7 +420,7 @@ export function PlayersView({
       ) : null}
 
       {projections ? (
-        <section className={styles.panel}>
+        <section hidden={view !== 'projections'} className={styles.panel}>
           <header className={styles.panelHeader}>
             <div>
               <h2>Season projection board</h2>
@@ -522,7 +561,7 @@ export function PlayersView({
         </section>
       ) : null}
 
-      <section className={styles.panel} id="after-season-projections">
+      <section hidden={view !== 'history'} className={styles.panel} id="after-season-projections">
         <header className={styles.panelHeader}>
           <div>
             <h2>Production and market board</h2>

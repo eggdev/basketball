@@ -1,4 +1,6 @@
 import './global.css';
+import { resolveSeasonExperience } from '../lib/season-experience';
+import { SeasonExperienceProvider } from './season-experience';
 
 import { AppShell } from './app-shell';
 import { loadViewer } from '../lib/viewer';
@@ -14,7 +16,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body>
-        <AppShell viewer={viewer}>{children}</AppShell>
+        <SeasonExperienceProvider experience={resolveSeasonExperience()}><AppShell viewer={viewer}>{children}</AppShell></SeasonExperienceProvider>
       </body>
     </html>
   );

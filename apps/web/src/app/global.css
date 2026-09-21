@@ -25,6 +25,8 @@
   --color-signal-soft: #ffb172;
   --color-success: #63d6a2;
   --color-danger: #ff8f92;
+  --color-info: #85caff;
+  --color-tier-elite: #f4d37b;
 
   --font-ui:
     Inter,
@@ -149,3 +151,5 @@ button:disabled {
     animation-iteration-count: 1 !important;
   }
 }
+
+[hidden] { display: none !important; }

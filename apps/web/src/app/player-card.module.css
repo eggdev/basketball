@@ -212,3 +212,53 @@
 .signals .signal {
   position: static;
 }
+.signalGlyph {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.signal[data-tone='positive'] button,
+.legend [data-tone='positive'] {
+  color: var(--color-success);
+}
+.signal[data-tone='caution'] button,
+.legend [data-tone='caution'] {
+  color: var(--color-signal-soft);
+}
+.signal[data-tone='negative'] button,
+.legend [data-tone='negative'] {
+  color: var(--color-danger);
+}
+.signal[data-tone='info'] button,
+.legend [data-tone='info'] {
+  color: var(--color-info);
+}
+.signal[data-tone='elite'] button,
+.legend [data-tone='elite'] {
+  color: var(--color-tier-elite);
+}
+.signal[data-tone='positive'] .signalGlyph {
+  background: rgb(99 214 162 / 0.1);
+  border-radius: 4px;
+}
+.signal[data-tone='negative'] .signalGlyph {
+  background: rgb(255 143 146 / 0.1);
+  border-radius: 4px;
+}
+.signal[data-tone='elite'] .signalGlyph {
+  background: rgb(244 211 123 / 0.12);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--color-ink-muted);
+  padding: 12px 0;
+}

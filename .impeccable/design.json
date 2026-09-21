@@ -1,9 +1,39 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-21T11:25:41.820792Z",
+  "generatedAt": "2026-09-21T12:05:39.239651+00:00",
   "title": "Design System: Fantasy Basketball Draft Room",
   "extensions": {
     "colorMeta": {
+      "tier-elite": {
+        "role": "secondary",
+        "displayName": "Elite Gold",
+        "canonical": "#f4d37b",
+        "tonalRamp": [
+          "#29200a",
+          "#443614",
+          "#665222",
+          "#8a7133",
+          "#b1954e",
+          "#f4d37b",
+          "#f9e4aa",
+          "#fff9e8"
+        ]
+      },
+      "info": {
+        "role": "secondary",
+        "displayName": "Evidence Blue",
+        "canonical": "#85caff",
+        "tonalRamp": [
+          "#071e2f",
+          "#10364c",
+          "#20516e",
+          "#376e91",
+          "#538db5",
+          "#85caff",
+          "#b9dfff",
+          "#eef8ff"
+        ]
+      },
       "brand-navy": {
         "role": "primary",
         "displayName": "Court Navy",
@@ -259,13 +289,13 @@
       "Continuous matte-navy frame with a narrow navigation rail, broad evidence workspace, and spatially stable Eve rail.",
       "Compact neutral typography, tight tracking, and tabular numerals for scan-heavy league evidence.",
       "Tonal depth and hairline borders instead of ambient shadows, glow, gradients, or a white SaaS card grid.",
-      "Restrained orange decision signals, with green and red reserved for outcome semantics.",
+      "Restrained orange decision signals, with labeled semantic colors for player evidence and projection tiers.",
       "Evidence caveats remain visible wherever data is inferred, incomplete, unavailable, or degraded."
     ],
     "rules": [
-      { "name": "The One Navy Family Rule", "body": "Blue surfaces stay inside the Court Navy tonal family; do not introduce an independent blue accent.", "section": "colors" },
+      { "name": "The One Navy Family Rule", "body": "Blue surfaces stay inside the Court Navy tonal family. Evidence Blue is reserved for compact labeled player signals.", "section": "colors" },
       { "name": "The Decision Signal Rule", "body": "Draft Orange appears at active, selected, focused, or decisive moments. It must not become ambient decoration or a general-purpose fill.", "section": "colors" },
-      { "name": "The Evidence Color Rule", "body": "Green and red describe verified state or outcome, never decorative mood; uncertainty and missing evidence remain neutral or orange-caveated.", "section": "colors" },
+      { "name": "The Evidence Color Rule", "body": "Semantic color describes a labeled state, model estimate, or projection rank band, never decorative mood. Missing evidence stays neutral; model-estimated durability is not live injury clearance.", "section": "colors" },
       { "name": "The No Hero Type Rule", "body": "Operative screens begin with a clear page title, not a marketing headline; display type never overwhelms the evidence below it.", "section": "typography" },
       { "name": "The Tabular Evidence Rule", "body": "Prices, ranks, budgets, scores, and rule values use tabular numerals whenever they appear in columns or changing readouts.", "section": "typography" },
       { "name": "The Stable Frame Rule", "body": "Eve joins or overlays the instrument frame without reordering navigation or displacing the owner's current evidence context.", "section": "layout" },

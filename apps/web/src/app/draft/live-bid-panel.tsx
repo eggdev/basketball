@@ -10,6 +10,8 @@ import {
   type LiveBidDecision,
   type LiveBidRequest,
 } from '../../lib/live-bid-board';
+import { DraftPlayerSignals } from '../player-card';
+import type { PlayerSituationBoard } from '@fantasy-basketball/fantasy';
 import { AskEveButton } from '../app-shell';
 import styles from '../workspace.module.css';
 
@@ -85,7 +87,13 @@ const saveSession = (session: DraftSession): void => {
   window.dispatchEvent(new Event(storageKey));
 };
 
-export function LiveBidPanel({ board }: { readonly board: LiveBidBoard }) {
+export function LiveBidPanel({
+  board,
+  situations,
+}: {
+  readonly board: LiveBidBoard;
+  readonly situations?: PlayerSituationBoard | null;
+}) {
   const { players } = board;
   const initialSession = useMemo<DraftSession>(
     () => ({
@@ -336,6 +344,16 @@ export function LiveBidPanel({ board }: { readonly board: LiveBidBoard }) {
           {evaluation === null ? (
             <div className={styles.liveBidEmpty}>
               <strong>{selectedPlayer?.playerName ?? 'No player selected'}</strong>
+              {selectedPlayer ? (
+                <DraftPlayerSignals
+                  rank={selectedPlayer.rank}
+                  availabilityTier={selectedPlayer.availabilityTier}
+                  season={board.projection.seasonKey}
+                  situation={situations?.players.find(
+                    (player) => player.playerId === selectedPlayer.playerId,
+                  )}
+                />
+              ) : null}
               Enter the current bid to compare league market price, projected value, and your
               roster-specific cap.
             </div>

@@ -115,6 +115,7 @@ export async function createPreDraftScenarioAction(
   const mutation = await mutatePreDraftScenario(formData, 'create');
   if (!mutation.success) return mutation.state;
   revalidatePath('/draft');
+  revalidatePath('/team');
   redirect(`/draft?plan=${mutation.result.planId}`);
 }
 
@@ -125,6 +126,7 @@ export async function duplicatePreDraftScenarioAction(
   const mutation = await mutatePreDraftScenario(formData, 'duplicate');
   if (!mutation.success) return mutation.state;
   revalidatePath('/draft');
+  revalidatePath('/team');
   redirect(`/draft?plan=${mutation.result.planId}`);
 }
 
@@ -135,6 +137,7 @@ export async function updatePreDraftScenarioAction(
   const mutation = await mutatePreDraftScenario(formData, 'update');
   if (!mutation.success) return mutation.state;
   revalidatePath('/draft');
+  revalidatePath('/team');
   return { message: 'Scenario changes saved.', status: 'success' };
 }
 
@@ -145,6 +148,7 @@ export async function activatePreDraftScenarioAction(
   const mutation = await mutatePreDraftScenario(formData, 'activate');
   if (!mutation.success) return mutation.state;
   revalidatePath('/draft');
+  revalidatePath('/team');
   redirect(`/draft?plan=${mutation.result.planId}`);
 }
 
@@ -155,6 +159,7 @@ export async function archivePreDraftScenarioAction(
   const mutation = await mutatePreDraftScenario(formData, 'archive');
   if (!mutation.success) return mutation.state;
   revalidatePath('/draft');
+  revalidatePath('/team');
   redirect(
     mutation.result.activePlanId === null
       ? '/draft'
@@ -184,6 +189,7 @@ export async function savePreDraftTargetAction(
       }).pipe(Effect.provide(databaseLayer(config))),
     );
     revalidatePath('/draft');
+    revalidatePath('/team');
     return { message: 'Target saved to this scenario.', status: 'success' };
   } catch (error) {
     return {

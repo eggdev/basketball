@@ -10,6 +10,8 @@ import { loadViewer } from '../../lib/viewer';
 import { AskEveButton } from '../app-shell';
 import { PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
+import flow from '../workflow.module.css';
+import { SeasonCalendarStatus } from '../season-experience';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,24 +42,28 @@ export default async function SettingsPage() {
         title="League settings"
       />
 
-      <section aria-label="Data pipeline summary" className={styles.stats}>
-        <article className={styles.statCard}>
-          <span>Auction seasons</span>
-          <strong>{market?.summary.seasonCount ?? '—'}</strong>
-        </article>
-        <article className={styles.statCard}>
-          <span>Scored seasons</span>
-          <strong>{rankings?.summary.seasonCount ?? '—'}</strong>
-        </article>
-        <article className={styles.statCard}>
-          <span>Roster seasons</span>
-          <strong>{rosters?.summary.seasonCount ?? (viewer === null ? 'Private' : '—')}</strong>
-        </article>
-        <article className={styles.statCard}>
-          <span>Config version</span>
-          <strong>v{Math.max(scoringConfig.version, format.version)}</strong>
-        </article>
-      </section>
+      <SeasonCalendarStatus />
+      <details className={flow.sourceNotes}>
+        <summary>Data coverage</summary>
+        <section aria-label="Data pipeline summary" className={styles.stats}>
+          <article className={styles.statCard}>
+            <span>Auction seasons</span>
+            <strong>{market?.summary.seasonCount ?? '—'}</strong>
+          </article>
+          <article className={styles.statCard}>
+            <span>Scored seasons</span>
+            <strong>{rankings?.summary.seasonCount ?? '—'}</strong>
+          </article>
+          <article className={styles.statCard}>
+            <span>Roster seasons</span>
+            <strong>{rosters?.summary.seasonCount ?? (viewer === null ? 'Private' : '—')}</strong>
+          </article>
+          <article className={styles.statCard}>
+            <span>Config version</span>
+            <strong>v{Math.max(scoringConfig.version, format.version)}</strong>
+          </article>
+        </section>
+      </details>
 
       <div className={styles.settingsGrid}>
         <section className={styles.panel}>

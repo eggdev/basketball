@@ -8,6 +8,7 @@ import type {
 import { useMemo, useState } from 'react';
 
 import { formatPrice } from '../../lib/format';
+import { ViewSwitcher } from '../view-switcher';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
@@ -21,6 +22,7 @@ export function LeagueView({
   readonly performance: LeaguePerformanceHistory | null;
   readonly snapshot: LeagueRosterSnapshot | null;
 }) {
+  const [view, setView] = useState<'results' | 'rosters'>('results');
   const [seasonKey, setSeasonKey] = useState(
     performance?.summary.latestSeason ??
       snapshot?.summary.latestPopulatedSeason ??
@@ -86,8 +88,18 @@ export function LeagueView({
         title="League outcomes"
       />
 
+      <ViewSwitcher
+        label="League research views"
+        value={view}
+        onChange={setView}
+        options={[
+          { value: 'results', label: 'Outcomes & strength' },
+          { value: 'rosters', label: 'Draft construction' },
+        ]}
+      />
+
       {performanceSeason ? (
-        <section aria-label="League summary" className={styles.stats}>
+        <section hidden={view !== 'results'} aria-label="League summary" className={styles.stats}>
           <article className={styles.statCard}>
             <span>Playoff champion</span>
             <strong>{performanceSeason.champion?.managerName ?? '—'}</strong>
@@ -154,7 +166,11 @@ export function LeagueView({
           ) : null}
         </header>
 
-        {performanceSeason === null ? (
+        {view === 'rosters' ? (
+          <p className={styles.notice}>
+            Choose a season above to explore its auction rosters below.
+          </p>
+        ) : performanceSeason === null ? (
           <DataUnavailable
             detail={
               authenticated

@@ -22,7 +22,8 @@ The product is grounded in one league's reviewed Fantrax history and Brendan's o
 
 ## Operating Context
 
-- Brendan prepares named pre-draft scenarios with budget guardrails, risk posture, streaming-slot intent, and player target, watch, or avoid decisions.
+- After the NBA Finals finish and until the league opens, the default experience is draft preparation. Automatic mode follows reviewed annual boundaries in `config/season-experience.json`, not a live Finals-results feed. Missing or stale boundaries fall back to preparation with a confirmation notice. The owner can choose preparation or Season & history using a browser-local preference.
+- Brendan follows an editable four-stage process: shape the plan, build the shortlist, review alternatives, and draft day. Named scenarios hold strategy, goal, risk posture, anchor/core/endgame budgets, streaming-slot intent, notes, and player target/watch/avoid decisions with optional bid limits.
 - During the auction, the live draft room tracks nominations, purchases (including uncontested $0 awards), remaining budgets, roster needs, and a deterministic maximum bid; AI evaluation may explain the decision but does not replace the numeric cap.
 - Research views compare historical league performance, manager behavior, player production, league auction prices, Fantrax ADP, roster construction, and inferred ownership changes.
 - Player research compares this season with the latest completed NBA season,
@@ -35,8 +36,9 @@ The product is grounded in one league's reviewed Fantrax history and Brendan's o
 
 ## Capabilities and Constraints
 
-- The routed Next.js application opens at Team HQ and provides League, Players, Managers, Draft, Trades, Waivers, and League Settings workspaces plus a contextual Eve conversation panel. Team HQ brings the owner’s draft roster, latest player estimates, observed league comparison lenses, and a selected rival into one view. Its trade link carries the selected season and both teams into trade analysis.
-- Shared player cards provide expandable evidence and availability, opportunity, auction-price, and provenance explanations across Team HQ, projection research, and trade rosters. Historical ownership and current model estimates retain separate season labels.
+- The routed Next.js application opens at season-aware Team HQ and provides League, Players, Managers, Draft, Trades, Waivers, and League Settings workspaces plus a contextual Eve conversation panel. Preparation HQ leads with the upcoming season, saved plan, next planning steps, and player scouting. Related research views explain how their evidence supports the plan. Season & history retains the owner’s draft roster, observed league comparison lenses, and selected rival; its trade link carries the selected season and both teams into trade analysis.
+- Shared player cards provide expandable evidence and labeled, colored signals for projection rank tier, durability, sourced team movement, and role direction alongside auction-price and provenance explanations. S/A/B/C/D are projection rank bands, not certainty grades or bid recommendations. Historical ownership and model estimates retain separate season labels; old projections never populate upcoming-season scouting as if current.
+- Draft stage changes keep form panels mounted so unsaved inputs survive movement between stages. The URL carries the step and selected-plan context; route changes synchronize the visible step. Saving and activating scenarios are explicit owner actions. Live manual purchases remain browser-local.
 - GitHub is the intended sign-in provider. Account creation fails closed unless the returned email is on the owner allowlist.
 - Private league identifiers, manager names, raw exports, normalized output, and provider responses remain local and are not committed.
 - Historical imports are reviewed, fingerprinted, and kept auditable. Player identity merges require explicit human review and are never inferred from similar names.

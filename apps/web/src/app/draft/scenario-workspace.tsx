@@ -8,7 +8,7 @@ import type {
   PreDraftScenarioDetailsInput,
   PreDraftWorkspace,
 } from '@fantasy-basketball/database/runtime';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -24,6 +24,7 @@ import {
 } from '../actions';
 import { AskEveButton } from '../app-shell';
 import styles from '../workspace.module.css';
+import flow from '../workflow.module.css';
 
 interface AdpOption {
   readonly playerId: string;
@@ -68,10 +69,18 @@ function ActionMessage({ state }: { readonly state: PreDraftScenarioActionState 
 function ScenarioDetailsFields({
   details,
   hidden = false,
+  budgetCents = 20000,
 }: {
   readonly details: PreDraftScenarioDetailsInput;
   readonly hidden?: boolean;
+  readonly budgetCents?: number;
 }) {
+  const [budgets, setBudgets] = useState([
+    details.anchorBudgetCents / 100,
+    details.coreBudgetCents / 100,
+    details.endgameBudgetCents / 100,
+  ]);
+  const allocated = budgets.reduce((total, amount) => total + amount, 0);
   if (hidden) {
     return (
       <>
@@ -88,78 +97,128 @@ function ScenarioDetailsFields({
   }
   return (
     <>
-      <label className={styles.field}>
-        <span>Scenario name</span>
-        <input defaultValue={details.name} maxLength={80} name="name" required />
-      </label>
-      <label className={`${styles.field} ${styles.formWide}`}>
-        <span>Strategy angle</span>
-        <input
-          defaultValue={details.strategyAngle}
-          maxLength={240}
-          name="strategyAngle"
-          required
-        />
-      </label>
-      <label className={styles.field}>
-        <span>Minimum outcome</span>
-        <select defaultValue={details.primaryGoal} name="primaryGoal">
-          <option value="make-playoffs">Make the playoffs</option>
-          <option value="win-championship">Win the championship</option>
-        </select>
-      </label>
-      <label className={styles.field}>
-        <span>Risk tolerance</span>
-        <select defaultValue={details.riskTolerance} name="riskTolerance">
-          <option value="conservative">Conservative</option>
-          <option value="balanced">Balanced</option>
-          <option value="aggressive">Aggressive</option>
-        </select>
-      </label>
-      <label className={styles.field}>
-        <span>Anchor budget ($)</span>
-        <input
-          defaultValue={details.anchorBudgetCents / 100}
-          min={0}
-          name="anchorBudget"
-          step="0.01"
-          type="number"
-        />
-      </label>
-      <label className={styles.field}>
-        <span>Core budget ($)</span>
-        <input
-          defaultValue={details.coreBudgetCents / 100}
-          min={0}
-          name="coreBudget"
-          step="0.01"
-          type="number"
-        />
-      </label>
-      <label className={styles.field}>
-        <span>Endgame budget ($)</span>
-        <input
-          defaultValue={details.endgameBudgetCents / 100}
-          min={0}
-          name="endgameBudget"
-          step="0.01"
-          type="number"
-        />
-      </label>
-      <label className={styles.field}>
-        <span>Streaming slots</span>
-        <input
-          defaultValue={details.streamingSlots}
-          max={3}
-          min={0}
-          name="streamingSlots"
-          type="number"
-        />
-      </label>
-      <label className={`${styles.field} ${styles.formWide}`}>
-        <span>Working notes</span>
-        <textarea defaultValue={details.notes} maxLength={1_500} name="notes" rows={4} />
-      </label>
+      <fieldset className={flow.formSection}>
+        <legend>Roster strategy</legend>
+        <p>Give this version a clear thesis and decide how much risk you are willing to carry.</p>
+        <div className={flow.formFields}>
+          <label className={styles.field}>
+            <span>Scenario name</span>
+            <input defaultValue={details.name} maxLength={80} name="name" required />
+          </label>
+          <label className={`${styles.field} ${styles.formWide}`}>
+            <span>Strategy angle</span>
+            <input
+              defaultValue={details.strategyAngle}
+              maxLength={240}
+              name="strategyAngle"
+              required
+            />
+          </label>
+          <label className={styles.field}>
+            <span>Minimum outcome</span>
+            <select defaultValue={details.primaryGoal} name="primaryGoal">
+              <option value="make-playoffs">Make the playoffs</option>
+              <option value="win-championship">Win the championship</option>
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span>Risk tolerance</span>
+            <select defaultValue={details.riskTolerance} name="riskTolerance">
+              <option value="conservative">Conservative</option>
+              <option value="balanced">Balanced</option>
+              <option value="aggressive">Aggressive</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className={flow.formSection}>
+        <legend>Allocate the auction budget</legend>
+        <p>
+          Anchors buy your leading players. Core builds the middle of the roster. Endgame preserves
+          inexpensive depth.
+        </p>
+        <div className={flow.formFields}>
+          <label className={styles.field}>
+            <span>Anchor budget ($)</span>
+            <input
+              value={budgets[0]}
+              onChange={(event) =>
+                setBudgets((current) =>
+                  current.map((value, index) => (index === 0 ? Number(event.target.value) : value)),
+                )
+              }
+              min={0}
+              name="anchorBudget"
+              step="0.01"
+              type="number"
+            />
+          </label>
+          <label className={styles.field}>
+            <span>Core budget ($)</span>
+            <input
+              value={budgets[1]}
+              onChange={(event) =>
+                setBudgets((current) =>
+                  current.map((value, index) => (index === 1 ? Number(event.target.value) : value)),
+                )
+              }
+              min={0}
+              name="coreBudget"
+              step="0.01"
+              type="number"
+            />
+          </label>
+          <label className={styles.field}>
+            <span>Endgame budget ($)</span>
+            <input
+              value={budgets[2]}
+              onChange={(event) =>
+                setBudgets((current) =>
+                  current.map((value, index) => (index === 2 ? Number(event.target.value) : value)),
+                )
+              }
+              min={0}
+              name="endgameBudget"
+              step="0.01"
+              type="number"
+            />
+          </label>
+          <output
+            className={flow.budget}
+            data-over={allocated * 100 > budgetCents}
+            aria-live="polite"
+          >
+            <span>
+              {formatPrice(Math.round(allocated * 100))} allocated of {formatPrice(budgetCents)}
+            </span>
+            <strong>
+              {allocated * 100 > budgetCents
+                ? `${formatPrice(Math.round(allocated * 100 - budgetCents))} over budget`
+                : `${formatPrice(Math.round(budgetCents - allocated * 100))} unallocated`}
+            </strong>
+          </output>
+        </div>
+      </fieldset>
+      <fieldset className={flow.formSection}>
+        <legend>Flexibility & working notes</legend>
+        <p>Decide what you will leave open and record the assumptions to revisit.</p>
+        <div className={flow.formFields}>
+          <label className={styles.field}>
+            <span>Streaming slots</span>
+            <input
+              defaultValue={details.streamingSlots}
+              max={3}
+              min={0}
+              name="streamingSlots"
+              type="number"
+            />
+          </label>
+          <label className={`${styles.field} ${styles.formWide}`}>
+            <span>Working notes</span>
+            <textarea defaultValue={details.notes} maxLength={1_500} name="notes" rows={4} />
+          </label>
+        </div>
+      </fieldset>
     </>
   );
 }
@@ -182,11 +241,13 @@ const stanceCounts = (plan: PreDraftPlanSummary) => ({
 });
 
 export function ScenarioWorkspace({
+  mode = 'all',
   comparePlanIds,
   defaults,
   seasonKey,
   workspace,
 }: {
+  readonly mode?: 'all' | 'plan' | 'review';
   readonly comparePlanIds: ReadonlyArray<string>;
   readonly defaults: PreDraftScenarioDetailsInput;
   readonly seasonKey: string;
@@ -200,14 +261,8 @@ export function ScenarioWorkspace({
     idleState,
   );
   const [updateState, updateAction] = useActionState(updatePreDraftScenarioAction, idleState);
-  const [activateState, activateAction] = useActionState(
-    activatePreDraftScenarioAction,
-    idleState,
-  );
-  const [archiveState, archiveAction] = useActionState(
-    archivePreDraftScenarioAction,
-    idleState,
-  );
+  const [activateState, activateAction] = useActionState(activatePreDraftScenarioAction, idleState);
+  const [archiveState, archiveAction] = useActionState(archivePreDraftScenarioAction, idleState);
   const selectedPlan = workspace.selectedPlan;
   const activePlan = workspace.activePlan;
   const availablePlans = workspace.plans.filter((plan) => plan.status !== 'archived');
@@ -216,7 +271,10 @@ export function ScenarioWorkspace({
     .filter((plan): plan is PreDraftPlanSummary => plan !== undefined && plan.status !== 'archived')
     .slice(0, 3);
 
-  const navigateWith = (changes: { readonly compare?: ReadonlyArray<string>; readonly plan?: string }) => {
+  const navigateWith = (changes: {
+    readonly compare?: ReadonlyArray<string>;
+    readonly plan?: string;
+  }) => {
     const params = new URLSearchParams(searchParams.toString());
     if (changes.plan !== undefined) params.set('plan', changes.plan);
     if (changes.compare !== undefined) {
@@ -239,7 +297,7 @@ export function ScenarioWorkspace({
     <section className={styles.panel}>
       <header className={styles.panelHeader}>
         <div>
-          <h2>Draft scenarios</h2>
+          <h2>{mode === 'review' ? 'Review saved scenarios' : 'Your working plan'}</h2>
           <p>Select a working build without changing the plan that powers live recommendations.</p>
         </div>
         <span className={styles.badge}>{availablePlans.length} available</span>
@@ -257,7 +315,8 @@ export function ScenarioWorkspace({
               {workspace.plans.length === 0 ? <option value="">No scenarios saved</option> : null}
               {workspace.plans.map((plan) => (
                 <option disabled={plan.status === 'archived'} key={plan.id} value={plan.id}>
-                  {plan.name} · {scenarioLabel(plan, workspace.activePlanId, selectedPlan?.id ?? null)}
+                  {plan.name} ·{' '}
+                  {scenarioLabel(plan, workspace.activePlanId, selectedPlan?.id ?? null)}
                 </option>
               ))}
             </select>
@@ -303,7 +362,9 @@ export function ScenarioWorkspace({
               </details>
             )}
 
-            {selectedPlan !== null && selectedPlan.id !== workspace.activePlanId ? (
+            {mode !== 'plan' &&
+            selectedPlan !== null &&
+            selectedPlan.id !== workspace.activePlanId ? (
               <>
                 <form action={activateAction}>
                   <input name="seasonKey" type="hidden" value={seasonKey} />
@@ -365,33 +426,71 @@ export function ScenarioWorkspace({
               )}
             </div>
 
-            <form action={updateAction} className={styles.planForm} key={selectedPlan.id}>
-              <input name="seasonKey" type="hidden" value={seasonKey} />
-              <input name="planId" type="hidden" value={selectedPlan.id} />
-              <div className={styles.formGrid}>
-                <ScenarioDetailsFields details={selectedPlan} />
+            {mode !== 'review' ? (
+              <form
+                action={updateAction}
+                className={styles.planForm}
+                key={`${selectedPlan.id}:${selectedPlan.updatedAt}`}
+              >
+                <input name="seasonKey" type="hidden" value={seasonKey} />
+                <input name="planId" type="hidden" value={selectedPlan.id} />
+                <div className={styles.formGrid}>
+                  <ScenarioDetailsFields
+                    details={selectedPlan}
+                    budgetCents={workspace.league?.baseBudgetCents}
+                  />
+                </div>
+                <div className={styles.formActions}>
+                  <span>
+                    Planned budget:{' '}
+                    {formatPrice(
+                      selectedPlan.anchorBudgetCents +
+                        selectedPlan.coreBudgetCents +
+                        selectedPlan.endgameBudgetCents,
+                    )}{' '}
+                    · {selectedPlan.id === workspace.activePlanId ? 'Active' : 'Preview only'}
+                  </span>
+                  <SubmitButton className={styles.primaryButton} pendingLabel="Saving…">
+                    Save scenario
+                  </SubmitButton>
+                </div>
+                <ActionMessage state={updateState} />
+              </form>
+            ) : (
+              <div className={flow.review}>
+                <h3>{selectedPlan.strategyAngle}</h3>
+                <dl>
+                  <div>
+                    <dt>Anchors</dt>
+                    <dd>{formatPrice(selectedPlan.anchorBudgetCents)}</dd>
+                  </div>
+                  <div>
+                    <dt>Core</dt>
+                    <dd>{formatPrice(selectedPlan.coreBudgetCents)}</dd>
+                  </div>
+                  <div>
+                    <dt>Endgame</dt>
+                    <dd>{formatPrice(selectedPlan.endgameBudgetCents)}</dd>
+                  </div>
+                </dl>
+                <p>
+                  {selectedPlan.riskTolerance} risk · {selectedPlan.streamingSlots} streaming
+                  slot(s) · {selectedPlan.targets.length} player stances
+                </p>
+                <p>{selectedPlan.notes || 'No working notes saved.'}</p>
+                {selectedPlan.targets.length === 0 ? (
+                  <p>Add player stances before treating this as a complete draft plan.</p>
+                ) : null}
               </div>
-              <div className={styles.formActions}>
-                <span>
-                  Planned budget:{' '}
-                  {formatPrice(
-                    selectedPlan.anchorBudgetCents +
-                      selectedPlan.coreBudgetCents +
-                      selectedPlan.endgameBudgetCents,
-                  )}{' '}
-                  · {selectedPlan.id === workspace.activePlanId ? 'Active' : 'Preview only'}
-                </span>
-                <SubmitButton className={styles.primaryButton} pendingLabel="Saving…">
-                  Save scenario
-                </SubmitButton>
-              </div>
-              <ActionMessage state={updateState} />
-            </form>
+            )}
           </>
         )}
 
-        {availablePlans.length > 1 ? (
-          <section aria-labelledby="scenario-comparison-title" className={styles.scenarioComparison}>
+        {mode !== 'plan' && availablePlans.length > 1 ? (
+          <section
+            aria-labelledby="scenario-comparison-title"
+            className={styles.scenarioComparison}
+          >
             <div className={styles.scenarioComparisonHeader}>
               <div>
                 <h3 id="scenario-comparison-title">Compare scenarios</h3>
@@ -432,11 +531,7 @@ export function ScenarioWorkspace({
                         <th key={plan.id} scope="col">
                           {plan.name}
                           <small>
-                            {scenarioLabel(
-                              plan,
-                              workspace.activePlanId,
-                              selectedPlan?.id ?? null,
-                            )}
+                            {scenarioLabel(plan, workspace.activePlanId, selectedPlan?.id ?? null)}
                           </small>
                         </th>
                       ))}

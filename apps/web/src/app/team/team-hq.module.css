@@ -13,7 +13,7 @@
 }
 .heading h1 {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3rem);
+  font-size: 2rem;
   letter-spacing: -0.035em;
   line-height: 1.1;
 }

@@ -10,6 +10,7 @@ import { reconcileTeamIdentityAction } from '../actions';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
+import flow from '../workflow.module.css';
 
 type LeagueMember = LeagueTeamHistory['members'][number];
 type UnresolvedTeam = LeagueTeamHistory['unresolvedTeams'][number];
@@ -129,26 +130,29 @@ export function ManagersView({
         title="Manager profiles"
       />
 
-      {history ? (
-        <section aria-label="Manager history summary" className={styles.stats}>
-          <article className={styles.statCard}>
-            <span>Canonical managers</span>
-            <strong>{history.summary.canonicalMemberCount}</strong>
-          </article>
-          <article className={styles.statCard}>
-            <span>Tracked seasons</span>
-            <strong>{history.summary.seasonCount}</strong>
-          </article>
-          <article className={styles.statCard}>
-            <span>Team-seasons</span>
-            <strong>{history.summary.teamSeasonCount}</strong>
-          </article>
-          <article className={styles.statCard}>
-            <span>Unresolved identities</span>
-            <strong>{history.summary.unresolvedTeamSeasonCount}</strong>
-          </article>
-        </section>
-      ) : null}
+      <details className={flow.sourceNotes}>
+        <summary>Data coverage & manager identities</summary>
+        {history ? (
+          <section aria-label="Manager history summary" className={styles.stats}>
+            <article className={styles.statCard}>
+              <span>Canonical managers</span>
+              <strong>{history.summary.canonicalMemberCount}</strong>
+            </article>
+            <article className={styles.statCard}>
+              <span>Tracked seasons</span>
+              <strong>{history.summary.seasonCount}</strong>
+            </article>
+            <article className={styles.statCard}>
+              <span>Team-seasons</span>
+              <strong>{history.summary.teamSeasonCount}</strong>
+            </article>
+            <article className={styles.statCard}>
+              <span>Unresolved identities</span>
+              <strong>{history.summary.unresolvedTeamSeasonCount}</strong>
+            </article>
+          </section>
+        ) : null}
+      </details>
 
       <section className={styles.panel}>
         <header className={styles.panelHeader}>

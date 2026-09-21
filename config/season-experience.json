@@ -1,0 +1,23 @@
+{
+  "timeZone": "America/New_York",
+  "seasons": [
+    {
+      "seasonKey": "2025-26",
+      "preparationStartsOn": "2025-06-23",
+      "leagueStartsOn": "2025-10-21",
+      "sources": [
+        "https://www.nba.com/news/2025-nba-finals-schedule",
+        "https://www.nba.com/news/key-dates"
+      ]
+    },
+    {
+      "seasonKey": "2026-27",
+      "preparationStartsOn": "2026-06-14",
+      "leagueStartsOn": "2026-10-20",
+      "sources": [
+        "https://www.nba.com/news/2026-nba-finals-schedule",
+        "https://www.nba.com/news/2026-27-nba-regular-season-schedule"
+      ]
+    }
+  ]
+}

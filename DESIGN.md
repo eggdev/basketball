@@ -21,6 +21,8 @@ colors:
   signal-soft: "#ffb172"
   success: "#63d6a2"
   danger: "#ff8f92"
+  info: "#85caff"
+  tier-elite: "#f4d37b"
 typography:
   display:
     fontFamily: "Inter, 'SF Pro Text', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
@@ -147,7 +149,7 @@ The visual system earns confidence through stable geometry, dense but legible in
 - Continuous matte-navy frame with a narrow navigation rail, broad evidence workspace, and spatially stable Eve rail.
 - Compact neutral typography, tight tracking, and tabular numerals for scan-heavy league evidence.
 - Tonal depth and hairline borders instead of ambient shadows, glow, gradients, or a white SaaS card grid.
-- Restrained orange decision signals, with green and red reserved for outcome semantics.
+- Restrained orange decision signals, with labeled semantic colors for player evidence and projection tiers.
 - Evidence caveats remain visible wherever data is inferred, incomplete, unavailable, or degraded.
 
 ## Colors
@@ -161,8 +163,11 @@ Court Navy and its darker tonal field create the operating environment; white an
 
 ### Secondary
 
-- **Verified Green** (`success`): Confirmed ready, connected, or positive outcomes only.
-- **Exception Red** (`danger`): Errors, negative outcomes, and conditions requiring attention only.
+- **Verified Green** (`success`): Ready states, positive outcomes, modeled durability or role upside, and A-tier projection rank.
+- **Exception Red** (`danger`): Errors, negative outcomes, modeled fragility, and role downside.
+- **Evidence Blue** (`info`): Sourced team movement and B-tier projection rank; a compact evidence signal, never a competing brand surface.
+- **Elite Gold** (`tier-elite`): S-tier projection rank only. The letter and explanation remain visible.
+- **Caution Amber** (`signal-soft`): Managed durability and uncertain role evidence, reusing the existing soft signal.
 
 ### Neutral
 
@@ -176,11 +181,11 @@ Court Navy and its darker tonal field create the operating environment; white an
 
 ### Named Rules
 
-**The One Navy Family Rule.** Blue surfaces stay inside the Court Navy tonal family; do not introduce an independent blue accent.
+**The One Navy Family Rule.** Blue surfaces stay inside the Court Navy tonal family. Evidence Blue is reserved for compact labeled player signals.
 
 **The Decision Signal Rule.** Draft Orange appears at active, selected, focused, or decisive moments. It must not become ambient decoration or a general-purpose fill.
 
-**The Evidence Color Rule.** Green and red describe verified state or outcome, never decorative mood; uncertainty and missing evidence remain neutral or orange-caveated.
+**The Evidence Color Rule.** Semantic color describes a labeled state, model estimate, or projection rank band, never decorative mood. Missing evidence stays neutral; model-estimated durability is not live injury clearance.
 
 ## Typography
 
@@ -265,11 +270,13 @@ Borders are one-pixel hairlines. Geometry stays rectangular and aligned to the e
 
 ### Player Cards and Evidence Icons
 
-The shared `PlayerCard` combines player identity, a native disclosure, one headline measure, and four `PlayerRead` icons: availability, opportunity, observed auction value, and evidence/season. The standard card uses Navy Surface I, a 12px corner, a quiet hairline, 16px disclosure padding, and a neutral initials tile. Its compact variant removes the outer border, background, and initials tile for projection research and trade rosters; the identity and evidence behavior remain the same.
+The shared `PlayerCard` combines player identity, a native disclosure, one headline measure, and labeled evidence controls for projection tier, team movement, durability, opportunity, observed auction value, and evidence/season. The standard card uses Navy Surface I, a 12px corner, a quiet hairline, 16px disclosure padding, and a neutral initials tile. Its compact variant removes the outer border, background, and initials tile for projection research and trade rosters; the identity and evidence behavior remain the same.
 
 Opening the disclosure reveals available projection values, role evidence, source caveats, and the contextual “Analyze team fit” action. Historical draft ownership and price stay distinct from the latest projection season. Unknown availability or opportunity must remain explicitly unavailable or unclassified.
 
 Evidence icons are labeled buttons with 18px strokes in 30×32px targets, growing to 36×40px at 680px and below. Hover and keyboard focus add Navy Surface III and Signal Soft. Tooltip content opens on hover or focus; click/tap pins it, a second click or Escape dismisses it, and blur, scroll, or resize closes it. The tooltip is portaled to the document body, uses a fixed 200px width capped at 70vw, and clamps its position eight pixels inside the viewport. Deep Bench, a strong hairline, an 8px corner, and 12px padding distinguish the explanation without a shadow. Accessible descriptions remain present while the visual tooltip is closed.
+
+Player signals share the same evidence tooltip behavior across scouting and roster views. S/A/B/C/D tiers encode projection rank bands (1–12 / 13–36 / 37–72 / 73–120 / 121+); absent or invalid rank is neutral and unassigned. S uses Elite Gold, A Verified Green, B Evidence Blue, and C/D neutral ink. Durability maps durable/managed/fragile to green/amber/red; role direction maps up/uncertain/down to the same colors. Sourced new-team evidence uses Evidence Blue. Letters, directional glyphs, accessible labels, explanations, and the visible legend carry meaning alongside color. These are evidence summaries, not guarantees or recommended bids.
 
 The disclosure chevron rotates over 220ms with the existing ease-out curve. Global reduced-motion styling collapses this transition along with other interface motion.
 

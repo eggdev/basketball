@@ -29,6 +29,7 @@ import {
   titleEveConversation,
 } from '../lib/eve-conversation-history';
 import styles from './app-shell.module.css';
+import { SeasonModeControl, WorkspaceGuide, useSeasonExperience } from './season-experience';
 import { ChatMarkdown } from './chat-markdown';
 
 export interface AppViewer {
@@ -451,6 +452,33 @@ function AppShellRuntime({
   viewer,
 }: AppShellRuntimeProps) {
   const pathname = usePathname();
+  const experience = useSeasonExperience();
+  const activeNavigation: ReadonlyArray<NavigationGroup> =
+    experience?.mode === 'preparation'
+      ? [
+          {
+            label: 'Prepare our draft',
+            links: [
+              { href: '/team', label: 'Team HQ', icon: 'league' },
+              { href: '/draft', label: 'Draft plan', icon: 'draft' },
+              { href: '/players', label: 'Player scouting', icon: 'players' },
+            ],
+          },
+          {
+            label: 'League intelligence',
+            links: [
+              { href: '/league', label: 'League history', icon: 'league' },
+              { href: '/managers', label: 'Rival managers', icon: 'managers' },
+              { href: '/trades', label: 'Roster builds', icon: 'trades' },
+              { href: '/waivers', label: 'Value & streaming', icon: 'waivers' },
+            ],
+          },
+          {
+            label: 'Rules & data',
+            links: [{ href: '/settings', label: 'League settings', icon: 'settings' }],
+          },
+        ]
+      : navigation;
   const agent = useEveAgent({
     initialEvents: conversation.events,
     initialSession: conversation.session,
@@ -464,7 +492,7 @@ function AppShellRuntime({
     isCompactLayout,
     () => false,
   );
-  const [desktopChatOpen, setDesktopChatOpen] = useState(pathname !== '/team');
+  const [desktopChatOpen, setDesktopChatOpen] = useState(false);
   const [compactChatOpen, setCompactChatOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -569,8 +597,9 @@ function AppShellRuntime({
             </div>
           </div>
 
+          <SeasonModeControl />
           <nav aria-label="Primary navigation">
-            {navigation.map((group) => (
+            {activeNavigation.map((group) => (
               <section key={group.label}>
                 <p>{group.label}</p>
                 {group.links.map((link) => {
@@ -629,8 +658,14 @@ function AppShellRuntime({
               </svg>
             </button>
             <div>
-              <strong>{routeTitle(pathname)}</strong>
-              <small>Fantrax decision room</small>
+              <strong>
+                {activeNavigation
+                  .flatMap((group) => group.links)
+                  .find((link) => link.href === pathname)?.label ?? routeTitle(pathname)}
+              </strong>
+              <small>
+                {experience?.mode === 'preparation' ? 'Draft preparation' : 'League workspace'}
+              </small>
             </div>
             <button
               aria-expanded={chatOpen}
@@ -641,7 +676,10 @@ function AppShellRuntime({
               {chatOpen ? 'Hide Eve' : 'Ask Eve'}
             </button>
           </header>
-          <div className={styles.content}>{children}</div>
+          <div className={styles.content}>
+            <WorkspaceGuide />
+            {children}
+          </div>
         </div>
 
         <button

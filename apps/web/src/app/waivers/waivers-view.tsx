@@ -12,6 +12,8 @@ import { useMemo, useState } from 'react';
 
 import { formatFantasyPoints, formatPrice } from '../../lib/format';
 import { buildRosterActivitySignals } from '../../lib/roster-activity-signals';
+import { ViewSwitcher } from '../view-switcher';
+import { useSeasonExperience } from '../season-experience';
 import { AskEveButton } from '../app-shell';
 import { DataUnavailable, PageHeader } from '../page-header';
 import styles from '../workspace.module.css';
@@ -29,6 +31,10 @@ export function WaiversView({
   readonly rankings: HistoricalRankingSnapshot | null;
   readonly rosterSnapshot: LeagueRosterSnapshot | null;
 }) {
+  const experience = useSeasonExperience();
+  const [view, setView] = useState<'value' | 'activity' | 'patterns'>(
+    experience?.mode === 'preparation' ? 'value' : 'activity',
+  );
   const initialSeason =
     activity?.summary.latestSeason ?? rosterSnapshot?.summary.latestPopulatedSeason ?? '';
   const [seasonKey, setSeasonKey] = useState(initialSeason);
@@ -69,11 +75,14 @@ export function WaiversView({
       )
       .slice(0, 75);
   }, [query, rankingSeason, rosterSeason]);
-  const seasons = (rosterSnapshot?.seasons ?? []).filter(
-    (season) =>
-      season.draftedPlayerCount > 0 &&
-      rankings?.seasons.some((rankingSeason) => rankingSeason.seasonKey === season.seasonKey),
-  );
+  const seasons = [
+    ...new Set([
+      ...(rosterSnapshot?.seasons.map((season) => season.seasonKey) ?? []),
+      ...(activity?.seasons.map((season) => season.seasonKey) ?? []),
+    ]),
+  ]
+    .sort()
+    .reverse();
 
   return (
     <div className={styles.page}>
@@ -91,6 +100,31 @@ export function WaiversView({
         title="Waiver research"
       />
 
+      <ViewSwitcher
+        label="Value research views"
+        value={view}
+        onChange={setView}
+        options={[
+          { value: 'value', label: 'Undrafted value' },
+          { value: 'patterns', label: 'Winning habits' },
+          { value: 'activity', label: 'Roster activity' },
+        ]}
+      />
+      {seasons.length ? (
+        <label className={styles.field}>
+          <span>Research season</span>
+          <select
+            aria-label="Waiver season"
+            value={seasonKey}
+            onChange={(event) => setSeasonKey(event.target.value)}
+          >
+            {seasons.map((key) => (
+              <option key={key}>{key}</option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       <div className={styles.warning}>
         <strong>Roster changes, not confirmed transactions</strong>
         Daily Fantrax snapshots now reveal when ownership changed. Adds, drops, and direct team
@@ -98,7 +132,7 @@ export function WaiversView({
         packages, or Fantrax’s transaction label.
       </div>
 
-      <section className={styles.panel}>
+      <section hidden={view !== 'activity'} className={styles.panel}>
         <header className={styles.panelHeader}>
           <div>
             <h2>Inferred roster activity</h2>
@@ -214,7 +248,7 @@ export function WaiversView({
       </section>
 
       {activitySignals && activitySignals.sampleSize > 0 ? (
-        <section className={styles.panel}>
+        <section hidden={view !== 'patterns'} className={styles.panel}>
           <header className={styles.panelHeader}>
             <div>
               <h2>Winning behavior signals</h2>
@@ -276,9 +310,14 @@ export function WaiversView({
           </div>
           <span id="after-winning-behavior" />
         </section>
+      ) : view === 'patterns' ? (
+        <DataUnavailable
+          title="Winning patterns unavailable"
+          detail="Populated roster activity and standings are needed to compare manager habits."
+        />
       ) : null}
 
-      <section className={styles.panel}>
+      <section hidden={view !== 'value'} className={styles.panel}>
         <header className={styles.panelHeader}>
           <div>
             <h2>Undrafted production</h2>
@@ -286,20 +325,6 @@ export function WaiversView({
           </div>
           {rosterSeason && rankingSeason ? (
             <div className={styles.toolbar}>
-              <label className={styles.field}>
-                <span>Season</span>
-                <select
-                  aria-label="Waiver research season"
-                  onChange={(event) => setSeasonKey(event.target.value)}
-                  value={seasonKey}
-                >
-                  {seasons.map((season) => (
-                    <option key={season.seasonKey} value={season.seasonKey}>
-                      {season.seasonKey}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <label className={styles.field}>
                 <span>Search</span>
                 <input
@@ -333,38 +358,40 @@ export function WaiversView({
                 Skip undrafted production table
               </a>
               <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th scope="col">Season rank</th>
-                  <th scope="col">Player</th>
-                  <th scope="col">Fantasy points</th>
-                  <th scope="col">FP/G</th>
-                  <th scope="col">Games</th>
-                  <th scope="col">Expected market</th>
-                </tr>
-              </thead>
-              <tbody>
-                {availablePlayers.map((player) => {
-                  const marketPlayer = marketByPlayer.get(player.playerId);
-                  return (
-                    <tr key={player.playerId}>
-                      <td className={styles.rank}>{player.rank}</td>
-                      <th aria-label={player.playerName} scope="row">
-                        <span className={styles.tablePlayer}>
-                          <strong>{player.playerName}</strong>
-                          <small>Absent from imported draft roster</small>
-                        </span>
-                      </th>
-                      <td>{formatFantasyPoints(player.fantasyPoints)}</td>
-                      <td>{formatFantasyPoints(player.fantasyPointsPerGame)}</td>
-                      <td>{player.gamesPlayed}</td>
-                      <td>
-                        {marketPlayer ? formatPrice(marketPlayer.expectedPriceCents) : 'No history'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                <thead>
+                  <tr>
+                    <th scope="col">Season rank</th>
+                    <th scope="col">Player</th>
+                    <th scope="col">Fantasy points</th>
+                    <th scope="col">FP/G</th>
+                    <th scope="col">Games</th>
+                    <th scope="col">Expected market</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {availablePlayers.map((player) => {
+                    const marketPlayer = marketByPlayer.get(player.playerId);
+                    return (
+                      <tr key={player.playerId}>
+                        <td className={styles.rank}>{player.rank}</td>
+                        <th aria-label={player.playerName} scope="row">
+                          <span className={styles.tablePlayer}>
+                            <strong>{player.playerName}</strong>
+                            <small>Absent from imported draft roster</small>
+                          </span>
+                        </th>
+                        <td>{formatFantasyPoints(player.fantasyPoints)}</td>
+                        <td>{formatFantasyPoints(player.fantasyPointsPerGame)}</td>
+                        <td>{player.gamesPlayed}</td>
+                        <td>
+                          {marketPlayer
+                            ? formatPrice(marketPlayer.expectedPriceCents)
+                            : 'No history'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
               {availablePlayers.length === 0 ? (
                 <div className={styles.empty}>

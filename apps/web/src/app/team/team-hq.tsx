@@ -1,6 +1,7 @@
 'use client';
 import type {
   LatestProjectionSnapshot,
+  PreDraftWorkspace,
   LeaguePerformanceHistory,
   LeagueRosterSnapshot,
 } from '@fantasy-basketball/database/runtime';
@@ -10,10 +11,14 @@ import { useMemo, useState } from 'react';
 import { formatPrice } from '../../lib/format';
 import { leagueLenses, rankLeague, teamForOwner, type LeagueLens } from '../../lib/team-hq';
 import { AskEveButton } from '../app-shell';
+import { useSeasonExperience } from '../season-experience';
+import { DraftPrepHq } from './draft-prep-hq';
 import { PlayerCard, SignalIcon } from '../player-card';
 import styles from './team-hq.module.css';
 
 export interface TeamHqProps {
+  workspace?: PreDraftWorkspace | null;
+  preparationSeason?: string;
   authenticated: boolean;
   snapshot: LeagueRosterSnapshot | null;
   performance: LeaguePerformanceHistory | null;
@@ -21,7 +26,21 @@ export interface TeamHqProps {
   projections: LatestProjectionSnapshot | null;
   situations: PlayerSituationBoard | null;
 }
-export function TeamHq({
+export function TeamHq(props: TeamHqProps) {
+  const experience = useSeasonExperience();
+  if (experience?.mode === 'preparation')
+    return (
+      <DraftPrepHq
+        seasonKey={props.preparationSeason ?? experience.seasonKey}
+        authenticated={props.authenticated}
+        workspace={props.workspace ?? null}
+        projections={props.projections}
+        situations={props.situations}
+      />
+    );
+  return <SeasonTeamHq {...props} />;
+}
+function SeasonTeamHq({
   authenticated,
   snapshot,
   performance,
