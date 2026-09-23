@@ -132,7 +132,8 @@ describe('live auction evaluation lifecycle', () => {
     expect(screen.queryByText('Old Player')).toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(9000));
     expect(screen.getByText('Check Fantrax before acting.')).toBeTruthy();
-    expect(screen.queryByText('New Player')).toBeNull();
+    expect(screen.getByText('New Player')).toBeTruthy();
+    expect(screen.queryByLabelText('Jev evaluated the current bid')).toBeNull();
   });
 
   it('ignores another league and suppresses model calls while paused', async () => {
@@ -196,11 +197,32 @@ describe('live auction evaluation lifecycle', () => {
     expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/events'))).toHaveLength(1);
   });
 
-  it('freezes the Fantrax pause and hides stale, missing, and inactive clocks', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
-    const { rerender } = render(
-      <LiveAuction snapshot={snapshot} teamId="mine" paused={false} />,
+  it('keeps player facts during bid changes without showing a previous player or decision', async () => {
+    const fetcher = vi.fn<(url: string, options: RequestInit) => Promise<unknown>>(
+      async (url, options) =>
+        url.endsWith('/events') ? { ok: true } : evaluated(JSON.parse(String(options.body)).state),
     );
+    vi.stubGlobal('fetch', fetcher);
+    render(<LiveAuction snapshot={snapshot} teamId="mine" paused={false} />);
+    await message();
+    await act(() => vi.advanceTimersByTimeAsync(151));
+    expect(screen.getByText('Test Player')).toBeTruthy();
+    await message({ sequence: 2, currentBidCents: 6000 });
+    expect(screen.getByText('Test Player')).toBeTruthy();
+    expect(screen.queryByText('p1')).toBeNull();
+    expect(screen.queryByLabelText('Jev evaluated the current bid')).toBeNull();
+    await message({ sequence: 3, nominatedPlayerId: 'p2' });
+    expect(screen.queryByText('Test Player')).toBeNull();
+    expect(screen.queryByText('p2')).toBeNull();
+    expect(screen.getByText('Loading player…')).toBeTruthy();
+  });
+
+  it('freezes the Fantrax pause and hides stale, missing, and inactive clocks', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({}) })),
+    );
+    const { rerender } = render(<LiveAuction snapshot={snapshot} teamId="mine" paused={false} />);
     const clock = screen.getByRole('timer', { name: 'Pick clock' });
     await message({ status: '2', timeLeftMs: 15000 });
     await act(() => vi.advanceTimersByTimeAsync(3000));

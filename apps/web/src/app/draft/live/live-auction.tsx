@@ -10,8 +10,8 @@ import {
   type BridgeState,
 } from '../../../lib/fantrax-bridge';
 import type { LiveDraftSnapshot } from '../../../lib/fantrax-live';
-import type { DraftModelSummary } from '../../../lib/live-draft-model';
-import { formatPrice } from '../../../lib/format';
+import type { DraftModelSummary, DraftPlayerDirectory } from '../../../lib/live-draft-model';
+import { LiveAuctionPlayer } from './live-auction-player';
 import styles from '../../workspace.module.css';
 import room from './live-draft-room.module.css';
 
@@ -41,6 +41,7 @@ function readPairing() {
 }
 interface LiveAuctionProps {
   readonly modelSummary?: DraftModelSummary | null;
+  readonly playerDirectory?: DraftPlayerDirectory | null;
   readonly snapshot: LiveDraftSnapshot;
   readonly teamId: string;
   readonly paused: boolean;
@@ -56,10 +57,12 @@ function LiveAuctionConnection({
   paused,
   nonce,
   modelSummary,
+  playerDirectory,
 }: LiveAuctionProps & { readonly nonce: string }) {
   const [frame, setFrame] = useState<{ state: BridgeState; receivedAt: number } | null>(null);
   const [input, setInput] = useState<BridgeState | null>(null);
   const [evaluation, setEvaluation] = useState<BridgeEvaluation | null>(null);
+  const [evaluatedPlayer, setEvaluatedPlayer] = useState<{ id: string; name: string } | null>(null);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [evaluationError, setEvaluationError] = useState<{
     version: string;
@@ -172,6 +175,13 @@ function LiveAuctionConnection({
         if (!response.ok) throw new Error(body.error ?? 'Jev could not evaluate this update.');
         if (!controller.signal.aborted && body.version === inputVersion) {
           setEvaluation(body as BridgeEvaluation);
+          if (
+            input.nominatedPlayerId &&
+            body.playerName &&
+            body.playerName !== input.nominatedPlayerId
+          ) {
+            setEvaluatedPlayer({ id: input.nominatedPlayerId, name: body.playerName });
+          }
           setEvaluationError(null);
         }
       } catch (error) {
@@ -240,6 +250,14 @@ function LiveAuctionConnection({
                 : 'Synced with Fantrax · Counts down locally';
   const teamName = (id: string | null | undefined) =>
     snapshot.teams.find((team) => team.id === id)?.name ?? id ?? 'None';
+  const player = state?.nominatedPlayerId
+    ? playerDirectory?.players[state.nominatedPlayerId]
+    : null;
+  const playerName = state?.nominatedPlayerId
+    ? (player?.name ??
+      (evaluatedPlayer?.id === state.nominatedPlayerId ? evaluatedPlayer.name : 'Loading player…'))
+    : 'Awaiting nomination';
+  const projection = player?.projection ?? current?.reference?.candidate ?? null;
 
   return (
     <section className={`${styles.panel} ${room.bodyPanel}`} aria-label="Live auction and Jev">
@@ -266,18 +284,6 @@ function LiveAuctionConnection({
           {clockText}
         </span>
       </div>
-      {model && (
-        <div className={room.modelReference}>
-          <strong>
-            Generated rankings · {model.mappedCount} / {model.playerCount} players linked
-          </strong>
-          <p>{model.note}</p>
-          <p className={room.caption}>
-            Season {model.season} · Projection as of {model.asOf?.slice(0, 10)} ·{' '}
-            {model.valuationModel ?? 'No matching promoted price model'}
-          </p>
-        </div>
-      )}
       {!frame ? (
         <div className={room.bridgeSetup}>
           {feedError && <p className={styles.warning}>{feedError}</p>}
@@ -310,89 +316,98 @@ function LiveAuctionConnection({
         </div>
       ) : (
         <div className={room.auctionBody}>
-          <div className={room.auctionMetrics}>
-            <div>
-              <span>Current nomination</span>
-              <strong>
-                {state?.nominatedPlayerId
-                  ? (current?.playerName ?? state.nominatedPlayerId)
-                  : 'Awaiting nomination'}
-              </strong>
-            </div>
-            <div>
-              <span>Current bid · {teamName(state?.bidderTeamId)}</span>
-              <strong>
-                {state?.currentBidCents == null ? 'No bid' : formatPrice(state.currentBidCents)}
-              </strong>
-            </div>
-            <div>
-              <span>Fantrax legal cap · {teamName(teamId)}</span>
-              <strong>
-                {guardrail?.maxBidCents == null ? 'Unknown' : formatPrice(guardrail.maxBidCents)}
-              </strong>
-            </div>
+          <LiveAuctionPlayer
+            state={frame.state}
+            teamId={teamId}
+            stale={stale}
+            name={playerName}
+            position={player?.position ?? projection?.positions?.join('/') ?? ''}
+            nbaTeam={player?.team ?? projection?.team ?? ''}
+            bidder={teamName(state?.bidderTeamId)}
+            projection={projection}
+            nextBidCents={guardrail?.nextBidCents ?? snapshot.minimumBidCents}
+            season={model?.season ?? `${snapshot.season}-${String(snapshot.season + 1).slice(-2)}`}
+          />
+          <div className={room.jevStrip}>
+            <span
+              className={current?.source === 'jev' ? room.jevReady : room.jevPending}
+              title={
+                current?.source === 'jev'
+                  ? 'Jev evaluated the current bid'
+                  : 'Jev evaluation pending'
+              }
+              aria-label={
+                current?.source === 'jev'
+                  ? 'Jev evaluated the current bid'
+                  : 'Jev evaluation pending'
+              }
+            >
+              ●
+            </span>
+            <strong>Jev</strong>
+            <span>
+              {current?.source === 'jev' ? `${current.durationMs}ms` : stale ? 'Offline' : '…'}
+            </span>
+            {current?.source === 'jev' && (
+              <span
+                title={`Roster fit: ${current.rosterFit}`}
+                aria-label={`Roster fit: ${current.rosterFit}`}
+              >
+                {current.rosterFit === 'useful' ? '✓' : current.rosterFit === 'crowded' ? '!' : '·'}
+              </span>
+            )}
+            <span className={room.nominator}>↗ {teamName(state?.nominatingTeamId)}</span>
           </div>
-          <div className={room.auctionDecision} aria-live="polite">
-            <strong>{stale ? 'Check Fantrax before acting.' : guardrail?.note}</strong>
-            {!stale && (
+          {(stale || state?.rosterSyncPending) && (
+            <p className={styles.warning}>
+              {paused
+                ? 'Updates are paused in this room.'
+                : stale
+                  ? (feedError ?? 'Feed stale. Check Fantrax.')
+                  : 'Syncing rosters and budgets…'}
+            </p>
+          )}
+          {(failed || current?.error) && (
+            <p className={styles.warning}>
+              {failed ?? current?.error}{' '}
+              <button
+                className={styles.secondaryButton}
+                onClick={() => setRetry((value) => value + 1)}
+              >
+                Retry Jev
+              </button>
+            </p>
+          )}
+          <details className={room.auctionDetails}>
+            <summary>Analysis & sources</summary>
+            <p>{stale ? 'Check Fantrax before acting.' : guardrail?.note}</p>
+            {current?.source === 'jev' && (
               <p>
-                Next bid: {guardrail ? formatPrice(guardrail.nextBidCents) : 'Unknown'} ·
-                Nominating: {teamName(state?.nominatingTeamId)}
+                {focusLabels[current.focus ?? ''] ?? 'Review the current draft state.'} Roster fit:{' '}
+                {current.rosterFit}.
               </p>
             )}
-            {!stale && current?.source === 'jev' && (
+            {model && (
               <p>
-                Jev: {focusLabels[current.focus ?? ''] ?? 'Review the current draft state.'} Roster
-                fit: {current.rosterFit}. Evaluated in {current.durationMs}ms.
+                {model.note} {model.mappedCount}/{model.playerCount} linked · {model.season} ·{' '}
+                {model.asOf?.slice(0, 10)}.
               </p>
             )}
-            {!stale && !current && !failed && <p>Jev is evaluating this update…</p>}
-            {current?.reference &&
-              state?.nominatedPlayerId &&
-              (current.reference.candidate ? (
-                <p>
-                  Main league reference: rank #{current.reference.candidate.rank} ·{' '}
-                  {current.reference.candidate.fantasyPointsPerGame.toFixed(1)} points/game
-                  {current.reference.candidate.marketPriceCents !== null && (
-                    <>
-                      {' '}
-                      · market estimate {formatPrice(
-                        current.reference.candidate.marketPriceCents,
-                      )}{' '}
-                      · {current.reference.priceSignal.replaceAll('-', ' ')}
-                    </>
-                  )}
-                </p>
-              ) : (
-                <p>
-                  No generated projection matches this Fantrax player ID. Jev has limited player
-                  data.
-                </p>
-              ))}
-            {(failed || current?.error) && (
-              <p className={styles.warning}>
-                {failed ?? current?.error}{' '}
-                <button
-                  className={styles.secondaryButton}
-                  onClick={() => setRetry((value) => value + 1)}
-                >
-                  Retry Jev
-                </button>
-              </p>
+            {!projection && state?.nominatedPlayerId && (
+              <p>No matched projection for this player.</p>
             )}
-            {stale && (
-              <p>
-                {paused
-                  ? 'Updates are paused in this room.'
-                  : (feedError ?? 'Keep Fantrax open. Reconnect the bridge if updates stop.')}
-              </p>
-            )}
-          </div>
-          <p className={room.caption}>
-            Last source: {state?.source === 'socket' ? 'Fantrax socket' : 'Fantrax read request'} ·
-            Event {state?.sequence}. Jev uses available projections. Dollar limits follow this
-            league’s rules.
-          </p>
+            <p>
+              Green: below reference range or within legal budget. Amber: within reference range.
+              Red: above range or over budget.
+            </p>
+            <p>
+              Reference values use the main league. This mock league has different scoring rules.
+            </p>
+            <p>
+              Source: {state?.source === 'socket' ? 'Fantrax socket' : 'Fantrax read request'} ·
+              Event {state?.sequence}
+            </p>
+          </details>
           {(captureError || current?.recording === 'unavailable') && (
             <p className={styles.warning}>
               A live event could not be saved. Keep this room open and check the capture connection.

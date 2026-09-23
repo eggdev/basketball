@@ -14,7 +14,7 @@ import { formatPrice } from '../../../lib/format';
 import styles from '../../workspace.module.css';
 import room from './live-draft-room.module.css';
 import { LiveAuction } from './live-auction';
-import type { DraftModelSummary } from '../../../lib/live-draft-model';
+import type { DraftModelSummary, DraftPlayerDirectory } from '../../../lib/live-draft-model';
 
 const storageEvent = 'fantasy-basketball:live-room-storage';
 function subscribe(onChange: () => void) {
@@ -86,9 +86,11 @@ export function LiveDraftRoom({
   shortcuts = [],
   bridgeEnabled = false,
   modelSummary = null,
+  playerDirectory = null,
 }: {
   readonly bridgeEnabled?: boolean;
   readonly modelSummary?: DraftModelSummary | null;
+  readonly playerDirectory?: DraftPlayerDirectory | null;
   readonly shortcuts?: ReadonlyArray<SavedLiveLeague>;
   readonly leagueId: string;
   readonly initialTeamId: string;
@@ -372,6 +374,7 @@ export function LiveDraftRoom({
               teamId={teamId}
               paused={paused}
               modelSummary={modelSummary}
+              playerDirectory={playerDirectory}
             />
           )}
           <div className={room.rules}>

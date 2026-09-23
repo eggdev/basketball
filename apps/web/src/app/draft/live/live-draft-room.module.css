@@ -84,6 +84,160 @@
 .clockUrgent .clockDigits {
   color: var(--color-danger);
 }
+.playerHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0;
+}
+.playerHeading h3 {
+  margin: 0;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+.playerHeading span,
+.statHeader,
+.referenceScope {
+  color: var(--color-ink-muted);
+  font-size: 0.72rem;
+}
+.rankTile {
+  flex-shrink: 0;
+  text-align: right;
+}
+.rankTile strong {
+  display: block;
+  font-size: 1.8rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.bidTiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.bidTiles > div {
+  --tile-signal: var(--color-ink-muted);
+  border: 1px solid var(--color-line);
+  border-top: 3px solid var(--tile-signal);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--color-surface-1);
+  min-width: 0;
+}
+.bidTiles > div.signalGood {
+  --tile-signal: var(--color-success);
+}
+.bidTiles > div.signalBad {
+  --tile-signal: var(--color-danger);
+}
+.bidTiles > div.signalNeutral {
+  --tile-signal: var(--color-signal);
+}
+.bidTiles span {
+  font-size: 0.72rem;
+  color: var(--color-ink-muted);
+}
+.bidTiles strong {
+  display: block;
+  font-size: clamp(1.25rem, 2.8vw, 2rem);
+  line-height: 1.4;
+  color: var(--tile-signal);
+  font-variant-numeric: tabular-nums;
+}
+.bidTiles em {
+  font-size: 0.85rem;
+  font-style: normal;
+  color: var(--color-ink-muted);
+}
+.bidTiles small {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+.budgetTrack {
+  height: 3px;
+  margin-top: 8px;
+  background: var(--color-line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.budgetTrack i {
+  display: block;
+  height: 100%;
+  background: var(--tile-signal);
+}
+.statHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+.statGrid > div {
+  padding: 10px 2px;
+  text-align: center;
+  background: var(--color-surface-1);
+  border-radius: var(--radius-md);
+}
+.statGrid dt {
+  font-size: 0.65rem;
+  color: var(--color-ink-muted);
+}
+.statGrid dd {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin: 4px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.referenceScope {
+  margin: 6px 0 14px;
+}
+.jevStrip {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--color-line);
+  padding: 12px 0;
+  font-size: 0.75rem;
+}
+.jevReady {
+  color: var(--color-success);
+}
+.jevPending {
+  color: var(--color-ink-subtle);
+}
+.nominator {
+  margin-left: auto;
+  color: var(--color-ink-muted);
+}
+.auctionDetails {
+  border-top: 1px solid var(--color-line);
+  padding-top: 10px;
+  color: var(--color-ink-muted);
+  font-size: 0.72rem;
+}
+.auctionDetails summary {
+  cursor: pointer;
+}
+@media (max-width: 1000px) {
+  .statGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .bidTiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .auctionDecision {
   padding: 16px;
   border: 1px solid var(--color-line);

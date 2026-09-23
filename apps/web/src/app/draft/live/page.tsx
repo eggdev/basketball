@@ -1,6 +1,6 @@
 import { loadLocalLiveLeagues, loadFantraxLeague } from '../../../lib/fantrax-live-server';
 import { fantraxLeagueId } from '../../../lib/fantrax-live';
-import { loadDraftModelReference } from '../../../lib/live-draft-model';
+import { loadDraftPlayerDirectory } from '../../../lib/live-draft-model';
 import { loadViewer } from '../../../lib/viewer';
 import { LiveDraftRoom } from './live-draft-room';
 
@@ -19,11 +19,10 @@ export default async function LiveDraftPage({
   const leagueId = typeof query.league === 'string' ? query.league : '';
   const teamId = typeof query.team === 'string' ? query.team : '';
   const bridgeEnabled = process.env.NODE_ENV === 'development' || viewer !== null;
-  const modelSummary =
+  const playerDirectory =
     bridgeEnabled && fantraxLeagueId.safeParse(leagueId).success
       ? await loadFantraxLeague(leagueId)
-          .then((league) => loadDraftModelReference(league.seasonYear))
-          .then((reference) => reference.summary)
+          .then((league) => loadDraftPlayerDirectory(league.seasonYear))
           .catch(() => null)
       : null;
   return (
@@ -34,7 +33,8 @@ export default async function LiveDraftPage({
       viewerId={viewer?.id ?? 'local'}
       shortcuts={shortcuts}
       bridgeEnabled={bridgeEnabled}
-      modelSummary={modelSummary}
+      modelSummary={playerDirectory?.summary}
+      playerDirectory={playerDirectory}
     />
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   AuctionValuationRun,
   LatestProjectionSnapshot,
+  HistoricalAuctionMarket,
 } from '@fantasy-basketball/database/runtime';
 import { buildDraftModelReference } from './live-draft-model';
 import type { BridgeState } from './fantrax-bridge';
@@ -107,5 +108,41 @@ describe('generated draft reference', () => {
     expect(result.candidate?.rank).toBe(1);
     expect(result.candidate?.marketPriceCents).toBeNull();
     expect(result.summary.valuationModel).toBeNull();
+  });
+  it('shows prior cost only when the recorded season is the previous season', () => {
+    const history: HistoricalAuctionMarket = {
+      summary: {
+        latestSeason: '2025-26',
+        playerCount: 1,
+        purchaseCount: 1,
+        seasonCount: 1,
+        totalSpendCents: 4500,
+      },
+      players: [
+        {
+          playerId: 'canonical',
+          fantraxId: 'provider',
+          name: 'Test Player',
+          latestSeason: '2025-26',
+          latestPriceCents: 4500,
+          previousPriceCents: null,
+          averagePriceCents: 4500,
+          expectedPriceCents: 4500,
+          minimumPriceCents: 4500,
+          maximumPriceCents: 4500,
+          seasonsDrafted: 1,
+          trendCents: null,
+        },
+      ],
+    };
+    expect(
+      buildDraftModelReference({ projection, valuation, identities, history }, 2026, state)
+        .candidate,
+    ).toMatchObject({ previousPriceCents: 4500, previousSeason: '2025-26' });
+    const older = { ...history, players: [{ ...history.players[0], latestSeason: '2024-25' }] };
+    expect(
+      buildDraftModelReference({ projection, valuation, identities, history: older }, 2026, state)
+        .candidate,
+    ).toMatchObject({ previousPriceCents: null, previousSeason: null });
   });
 });

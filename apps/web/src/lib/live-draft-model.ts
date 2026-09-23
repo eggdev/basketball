@@ -5,9 +5,12 @@ import {
   type LatestProjectionSnapshot,
   type CanonicalPlayerIdentity,
   type AuctionValuationRun,
+  type HistoricalAuctionMarket,
 } from '@fantasy-basketball/database/runtime';
 import { Effect } from 'effect';
 import type { BridgeState } from './fantrax-bridge';
+import { displayPlayerName } from './fantrax-live';
+import { loadFantraxCatalog } from './fantrax-live-server';
 
 export interface DraftModelPlayer {
   playerId: string;
@@ -19,6 +22,21 @@ export interface DraftModelPlayer {
   marketPriceCents: number | null;
   fairLowCents: number | null;
   fairHighCents: number | null;
+  expectedGames: number | null;
+  positions: readonly string[];
+  team: string;
+  previousPriceCents: number | null;
+  previousSeason: string | null;
+}
+export interface DraftPlayerCard {
+  name: string;
+  position: string;
+  team: string;
+  projection: DraftModelPlayer | null;
+}
+export interface DraftPlayerDirectory {
+  summary: DraftModelSummary;
+  players: Record<string, DraftPlayerCard>;
 }
 export interface DraftModelSummary {
   status: 'ready' | 'unavailable';
@@ -42,6 +60,7 @@ interface ModelInputs {
   projection: LatestProjectionSnapshot | null;
   identities: ReadonlyArray<CanonicalPlayerIdentity>;
   valuation: AuctionValuationRun | null;
+  history?: HistoricalAuctionMarket | null;
 }
 
 let cached: { expires: number; task: Promise<ModelInputs> } | undefined;
@@ -52,14 +71,18 @@ async function loadModelInputs(): Promise<ModelInputs> {
     return Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* Database;
-        const [projection, identities] = yield* Effect.all(
-          [db.latestProjectionSnapshot, db.canonicalPlayerIdentities],
-          { concurrency: 2 },
+        const [projection, identities, history] = yield* Effect.all(
+          [
+            db.latestProjectionSnapshot,
+            db.canonicalPlayerIdentities,
+            db.historicalAuctionMarket.pipe(Effect.catchAll(() => Effect.succeed(null))),
+          ],
+          { concurrency: 3 },
         );
         const valuation = projection
           ? yield* db.promotedAuctionValuationRun(projection.seasonKey)
           : null;
-        return { projection, identities, valuation };
+        return { projection, identities, valuation, history };
       }).pipe(Effect.provide(databaseLayer(config))),
     );
   })();
@@ -72,12 +95,7 @@ async function loadModelInputs(): Promise<ModelInputs> {
   }
 }
 
-export function buildDraftModelReference(
-  inputs: ModelInputs,
-  season: number,
-  state?: BridgeState,
-  teamId?: string,
-): DraftModelReference {
+function buildModelPlayers(inputs: ModelInputs, season: number) {
   const { projection, identities, valuation } = inputs;
   const applicable = projection && Number(projection.seasonKey.split('-')[0]) === season;
   const matchingValuation =
@@ -93,10 +111,13 @@ export function buildDraftModelReference(
     matchingValuation?.current.players.map((player) => [player.playerId, player]) ?? [],
   );
   const byFantrax = new Map<string, DraftModelPlayer>();
+  const history = new Map(inputs.history?.players.map((player) => [player.playerId, player]) ?? []);
   for (const identity of identities) {
     const player = byCanonical.get(identity.playerId);
     if (!player) continue;
     const price = prices.get(player.playerId);
+    const previous = history.get(player.playerId);
+    const previousSeason = `${season - 1}-${String(season).slice(-2)}`;
     byFantrax.set(identity.fantraxId, {
       playerId: player.playerId,
       playerName: player.playerName,
@@ -107,15 +128,16 @@ export function buildDraftModelReference(
       marketPriceCents: price?.isModeled ? price.marketEstimateCents : null,
       fairLowCents: price?.isModeled ? price.fairLowCents : null,
       fairHighCents: price?.isModeled ? price.fairHighCents : null,
+      expectedGames: player.availability.expectedGames ?? null,
+      positions: player.positions ?? [],
+      team: player.teamAbbreviation ?? '',
+      previousPriceCents:
+        previous?.latestSeason === previousSeason ? previous.latestPriceCents : null,
+      previousSeason: previous?.latestSeason === previousSeason ? previousSeason : null,
     });
   }
-  const own = state?.rosters.filter((player) => player.teamId === teamId) ?? [];
-  const roster = own.flatMap((player) => byFantrax.get(player.playerId) ?? []);
-  const candidate = state?.nominatedPlayerId
-    ? (byFantrax.get(state.nominatedPlayerId) ?? null)
-    : null;
-  const bid = state?.currentBidCents;
   return {
+    byFantrax,
     summary: {
       status: applicable ? 'ready' : 'unavailable',
       note: applicable
@@ -130,7 +152,25 @@ export function buildDraftModelReference(
       valuationModel: matchingValuation?.selectedModelId ?? null,
       playerCount: applicable ? projection.players.length : 0,
       mappedCount: new Set([...byFantrax.values()].map((player) => player.playerId)).size,
-    },
+    } satisfies DraftModelSummary,
+  };
+}
+
+export function buildDraftModelReference(
+  inputs: ModelInputs,
+  season: number,
+  state?: BridgeState,
+  teamId?: string,
+): DraftModelReference {
+  const { summary, byFantrax } = buildModelPlayers(inputs, season);
+  const own = state?.rosters.filter((player) => player.teamId === teamId) ?? [];
+  const roster = own.flatMap((player) => byFantrax.get(player.playerId) ?? []);
+  const candidate = state?.nominatedPlayerId
+    ? (byFantrax.get(state.nominatedPlayerId) ?? null)
+    : null;
+  const bid = state?.currentBidCents;
+  return {
+    summary,
     candidate,
     roster,
     unmatchedRosterCount: own.length - roster.length,
@@ -143,6 +183,33 @@ export function buildDraftModelReference(
             ? 'above-reference'
             : 'within-reference',
   };
+}
+
+// Player facts are available before Jev returns and stay stable across bid changes.
+export async function loadDraftPlayerDirectory(season: number): Promise<DraftPlayerDirectory> {
+  const [inputs, catalog] = await Promise.all([
+    loadModelInputs().catch(() => ({ projection: null, identities: [], valuation: null })),
+    loadFantraxCatalog().catch(() => ({})),
+  ]);
+  const { summary, byFantrax } = buildModelPlayers(inputs, season);
+  const players: Record<string, DraftPlayerCard> = {};
+  for (const [id, projection] of byFantrax) {
+    players[id] = {
+      name: projection.playerName,
+      position: projection.positions.join('/'),
+      team: projection.team,
+      projection,
+    };
+  }
+  for (const [id, player] of Object.entries(catalog)) {
+    players[id] = {
+      name: displayPlayerName(player.name),
+      position: player.position ?? '',
+      team: player.team ?? '',
+      projection: byFantrax.get(id) ?? null,
+    };
+  }
+  return { summary, players };
 }
 
 export async function loadDraftModelReference(
