@@ -3,6 +3,7 @@
 import type { BridgeState } from '../../../lib/fantrax-bridge';
 import type { DraftModelPlayer } from '../../../lib/live-draft-model';
 import { formatPrice } from '../../../lib/format';
+import { durabilityTone, fantasyPointsTier } from '../../../lib/player-signals';
 import room from './live-draft-room.module.css';
 
 const number = (value: number | null | undefined, digits = 1) =>
@@ -64,6 +65,12 @@ export function LiveAuctionPlayer({
         ? 'Above main league reference range'
         : 'Within main league reference range';
   const stats = projection?.statsPerGame ?? {};
+  const pointsTier = fantasyPointsTier(projection?.fantasyPointsPerGame);
+  const availability = projection?.availabilityRate;
+  const durability =
+    availability != null && Number.isFinite(availability) && availability >= 0 && availability <= 1
+      ? Math.round(availability * 100)
+      : null;
   const percent = (made: string, attempted: string) =>
     stats[made] != null && stats[attempted] > 0
       ? `${number((100 * stats[made]) / stats[attempted])}%`
@@ -81,7 +88,7 @@ export function LiveAuctionPlayer({
     ['GP', number(projection?.expectedGames, 0)],
   ];
   return (
-    <div className={room.playerBoard}>
+    <div>
       <div className={room.playerHeading}>
         <div>
           <h3>{name}</h3>
@@ -156,15 +163,38 @@ export function LiveAuctionPlayer({
       </div>
       <div className={room.statHeader}>
         <span>{season} projected · per game</span>
-        <span>FP/G {number(projection?.fantasyPointsPerGame)}</span>
       </div>
       <dl className={room.statGrid}>
+        <div className={room.featuredStat} data-tone={pointsTier.tone} title={pointsTier.detail}>
+          <dt>
+            FP/G{' '}
+            <span className={room.statTier} aria-label={`FP/G tier ${pointsTier.label}`}>
+              {pointsTier.label}
+            </span>
+          </dt>
+          <dd>{number(projection?.fantasyPointsPerGame)}</dd>
+        </div>
         {statCells.map(([label, value]) => (
           <div key={label}>
             <dt>{label}</dt>
             <dd>{value}</dd>
           </div>
         ))}
+        <div
+          className={room.durabilityStat}
+          data-tone={durability === null ? 'neutral' : durabilityTone(projection?.availabilityTier)}
+          title={
+            durability === null
+              ? 'Projected availability unavailable'
+              : `Projected availability: ${durability}% · ${projection?.availabilityTier}. Expected share of scheduled games played.`
+          }
+        >
+          <dt>Durability</dt>
+          <dd>{durability === null ? '-' : `${durability}%`}</dd>
+          <div className={room.durabilityTrack} aria-hidden="true">
+            <i style={{ width: `${durability ?? 0}%` }} />
+          </div>
+        </div>
       </dl>
       <p className={room.referenceScope}>Rank / price / FP: main league points model</p>
     </div>

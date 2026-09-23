@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BridgeState } from '../../../lib/fantrax-bridge';
 import type { DraftModelPlayer } from '../../../lib/live-draft-model';
@@ -29,6 +29,7 @@ const projection: DraftModelPlayer = {
   fantasyPointsPerGame: 25,
   statsPerGame: { points: 30, fieldGoalsMade: 9, fieldGoalsAttempted: 18, steals: 0 },
   availabilityTier: 'durable',
+  availabilityRate: 0.9,
   marketPriceCents: 5000,
   fairLowCents: 4000,
   fairHighCents: 6000,
@@ -53,6 +54,33 @@ const props = {
 
 afterEach(cleanup);
 describe('auction player indicators', () => {
+  it('leads with highlighted FP/G and uses stored availability for durability', () => {
+    const { container, rerender } = render(<LiveAuctionPlayer {...props} />);
+    const first = container.querySelector('dl > div');
+    expect(first?.querySelector('dt')?.textContent).toContain('FP/G');
+    expect(first?.getAttribute('data-tone')).toBe('elite');
+    expect(screen.getByLabelText('FP/G tier S')).toBeTruthy();
+    expect(screen.getByText('90%')).toBeTruthy();
+    rerender(
+      <LiveAuctionPlayer
+        {...props}
+        projection={{
+          ...projection,
+          fantasyPointsPerGame: 17,
+          availabilityTier: 'managed',
+          availabilityRate: 0.85,
+        }}
+      />,
+    );
+    expect(screen.getByLabelText('FP/G tier B')).toBeTruthy();
+    expect(screen.getByText('85%').parentElement?.getAttribute('data-tone')).toBe('caution');
+    rerender(
+      <LiveAuctionPlayer {...props} projection={{ ...projection, availabilityRate: null }} />,
+    );
+    const durability = screen.getByText('Durability').parentElement!;
+    expect(within(durability).getByText('-')).toBeTruthy();
+    expect(durability.getAttribute('data-tone')).toBe('neutral');
+  });
   it('shows projected stats and separates an affordable next bid from reference value', () => {
     const { rerender } = render(<LiveAuctionPlayer {...props} />);
     expect(screen.getByText('#5')).toBeTruthy();

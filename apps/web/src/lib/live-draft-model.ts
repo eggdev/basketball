@@ -19,6 +19,7 @@ export interface DraftModelPlayer {
   fantasyPointsPerGame: number;
   statsPerGame: Readonly<Record<string, number>>;
   availabilityTier: string;
+  availabilityRate: number | null;
   marketPriceCents: number | null;
   fairLowCents: number | null;
   fairHighCents: number | null;
@@ -125,6 +126,7 @@ function buildModelPlayers(inputs: ModelInputs, season: number) {
       fantasyPointsPerGame: player.fantasyPointsPerGame,
       statsPerGame: player.statsPerGame ?? {},
       availabilityTier: player.availability.tier,
+      availabilityRate: player.availability.rate ?? null,
       marketPriceCents: price?.isModeled ? price.marketEstimateCents : null,
       fairLowCents: price?.isModeled ? price.fairLowCents : null,
       fairHighCents: price?.isModeled ? price.fairHighCents : null,

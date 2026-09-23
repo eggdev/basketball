@@ -1,4 +1,29 @@
 export type SignalTone = 'positive' | 'caution' | 'negative' | 'info' | 'neutral' | 'elite';
+export function fantasyPointsTier(points: number | null | undefined): {
+  label: string;
+  tone: SignalTone;
+  detail: string;
+} {
+  if (points == null || !Number.isFinite(points))
+    return { label: '?', tone: 'neutral', detail: 'Projected FP/G unavailable.' };
+  const label =
+    points >= 22 ? 'S' : points >= 18 ? 'A' : points >= 16 ? 'B' : points >= 13 ? 'C' : 'D';
+  return {
+    label,
+    tone:
+      label === 'S'
+        ? 'elite'
+        : label === 'A'
+          ? 'positive'
+          : label === 'B'
+            ? 'info'
+            : label === 'C'
+              ? 'caution'
+              : 'neutral',
+    detail:
+      'Main league FP/G tiers: S ≥22; A ≥18; B ≥16; C ≥13; D <13. Uses the unrounded projection.',
+  };
+}
 export function projectionTier(rank: number | null | undefined): {
   label: string;
   tone: SignalTone;

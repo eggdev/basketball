@@ -178,7 +178,7 @@
 }
 .statGrid {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 6px;
   margin: 8px 0;
 }
@@ -197,6 +197,50 @@
   font-weight: 700;
   margin: 4px 0 0;
   font-variant-numeric: tabular-nums;
+}
+.statGrid [data-tone] {
+  --stat-color: var(--color-ink-muted);
+}
+.statGrid [data-tone='elite'] {
+  --stat-color: var(--color-tier-elite);
+}
+.statGrid [data-tone='positive'] {
+  --stat-color: var(--color-success);
+}
+.statGrid [data-tone='info'] {
+  --stat-color: var(--color-info);
+}
+.statGrid [data-tone='caution'] {
+  --stat-color: var(--color-signal);
+}
+.statGrid [data-tone='negative'] {
+  --stat-color: var(--color-danger);
+}
+.statGrid .featuredStat {
+  border: 2px solid var(--stat-color);
+  background: color-mix(in srgb, var(--stat-color) 9%, var(--color-surface-1));
+}
+.featuredStat dd,
+.durabilityStat dd {
+  color: var(--stat-color);
+}
+.statTier {
+  display: inline-block;
+  color: var(--stat-color);
+  font-weight: 800;
+  margin-left: 3px;
+}
+.durabilityTrack {
+  height: 3px;
+  margin: 7px 6px 0;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--color-line);
+}
+.durabilityTrack i {
+  display: block;
+  height: 100%;
+  background: var(--stat-color);
 }
 .referenceScope {
   margin: 6px 0 14px;
@@ -230,10 +274,13 @@
 }
 @media (max-width: 1000px) {
   .statGrid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 @media (max-width: 700px) {
+  .statGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .bidTiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

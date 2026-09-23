@@ -19,7 +19,7 @@ const projection = {
       rank: 1,
       fantasyPointsPerGame: 60,
       statsPerGame: { points: 25, rebounds: 12 },
-      availability: { tier: 'durable' },
+      availability: { tier: 'durable', rate: 0.9, expectedGames: 72 },
     },
   ],
 } as LatestProjectionSnapshot;
@@ -75,6 +75,8 @@ describe('generated draft reference', () => {
       rank: 1,
       marketPriceCents: 5000,
       statsPerGame: { points: 25 },
+      availabilityRate: 0.9,
+      expectedGames: 72,
     });
     expect(result.priceSignal).toBe('above-reference');
     expect(result.roster).toHaveLength(1);

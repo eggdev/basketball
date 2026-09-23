@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveSeasonExperience } from './season-experience';
-import { durabilityTone, projectionTier, roleTone } from './player-signals';
+import { durabilityTone, fantasyPointsTier, projectionTier, roleTone } from './player-signals';
 
 describe('season experience', () => {
   it('switches after the confirmed Finals end, in the league timezone', () => {
@@ -32,6 +32,16 @@ describe('season experience', () => {
   });
 });
 describe('player signals', () => {
+  it('assigns FP/G bands from unrounded points and leaves missing values neutral', () => {
+    expect(
+      [22, 21.999, 18, 17.999, 16, 15.999, 13, 12.999, 0, -1].map(
+        (points) => fantasyPointsTier(points).label,
+      ),
+    ).toEqual(['S', 'A', 'A', 'B', 'B', 'C', 'C', 'D', 'D', 'D']);
+    for (const points of [undefined, null, NaN, Infinity]) {
+      expect(fantasyPointsTier(points)).toMatchObject({ label: '?', tone: 'neutral' });
+    }
+  });
   it('keeps rank bands stable at their boundaries and rejects unknown ranks', () => {
     expect([1, 12, 13, 36, 37, 72, 73, 120, 121].map((rank) => projectionTier(rank).label)).toEqual(
       ['S', 'S', 'A', 'A', 'B', 'B', 'C', 'C', 'D'],
