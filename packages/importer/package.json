@@ -148,6 +148,14 @@
           "cwd": ".",
           "forwardAllArgs": true
         }
+      },
+      "production-value-analyze": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "bun --env-file=.env.local packages/importer/scripts/analyze-production-value.ts",
+          "cwd": "."
+        }
       }
     }
   }

@@ -2,6 +2,7 @@ export * from './lib/auction-economy';
 export * from './lib/league-format';
 export * from './lib/live-bid';
 export * from './lib/projections';
+export * from './lib/production-value';
 export * from './lib/player-situations';
 export * from './lib/league-owner';
 export * from './lib/scoring';
