@@ -1,0 +1,283 @@
+.eyebrow {
+  color: var(--color-signal);
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+.bridgeSetup,
+.auctionBody {
+  padding: 0 20px 20px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.modelReference {
+  margin: 16px 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.modelReference p {
+  margin: 6px 0 0;
+}
+.bridgeSetup ol {
+  padding-left: 20px;
+}
+.bridgeSetup li {
+  margin-bottom: 8px;
+}
+.bridgeScript {
+  width: 100%;
+  min-height: 180px;
+  margin-top: 12px;
+  font-family: monospace;
+  font-size: 0.7rem;
+}
+.auctionMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  padding: 16px 0;
+}
+.auctionMetrics span {
+  display: block;
+  color: var(--color-ink-subtle);
+  font-size: 0.7rem;
+}
+.auctionMetrics strong {
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+}
+.auctionDecision {
+  padding: 16px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+}
+.auctionDecision p {
+  margin-bottom: 0;
+}
+@media (max-width: 700px) {
+  .auctionMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.connections {
+  display: grid;
+  grid-template-columns: 1.2fr 1.4fr 1fr;
+  gap: 18px;
+  align-items: end;
+}
+.connectForm {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+.connectForm label {
+  flex: 1;
+  min-width: 0;
+}
+.connectForm button {
+  flex: none;
+  min-height: 38px;
+}
+.caption {
+  color: var(--color-ink-subtle);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+.feedBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+.feedBar > span:not(.dot) {
+  color: var(--color-ink-subtle);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+.offline {
+  background: var(--color-signal);
+}
+.feedActions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  font-size: 0.72rem;
+  color: var(--color-ink-muted);
+}
+.rules > span:last-child {
+  flex-basis: 100%;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.metrics > div {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-1);
+  padding: 18px;
+}
+.metrics span {
+  display: block;
+  color: var(--color-ink-muted);
+  font-size: 0.7rem;
+  margin-bottom: 10px;
+}
+.metrics strong {
+  font-size: 1.7rem;
+  letter-spacing: -0.04em;
+}
+.metrics small {
+  font-size: 0.8rem;
+  color: var(--color-ink-subtle);
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.empty {
+  padding: 40px 20px;
+  background: var(--color-canvas);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-line-strong);
+}
+.empty strong {
+  font-size: 1.05rem;
+}
+.empty p {
+  max-width: 58ch;
+  color: var(--color-ink-muted);
+  font-size: 0.78rem;
+  line-height: 1.7;
+}
+.tableScroll {
+  max-height: 450px;
+  overflow: auto;
+}
+.tableScroll th {
+  white-space: nowrap;
+}
+.myPick {
+  background: rgb(var(--color-brand-orange-rgb) / 0.09);
+}
+.pickButton {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.position {
+  display: block;
+  color: var(--color-ink-subtle);
+  margin-top: 5px;
+}
+.pickDetail {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--color-canvas);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.pickDetail h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.pickDetail p {
+  color: var(--color-ink-muted);
+  margin-bottom: 0;
+}
+.nomination {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+.roster {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.roster li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-line);
+  font-size: 0.8rem;
+}
+.roster small {
+  color: var(--color-ink-subtle);
+}
+.exports {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+@media (max-width: 1100px) {
+  .connections {
+    grid-template-columns: 1fr;
+  }
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .metrics strong {
+    font-size: 1.3rem;
+  }
+  .feedActions {
+    margin-left: 0;
+  }
+  .nomination {
+    grid-template-columns: 1fr;
+  }
+}
+.connectionPanel {
+  padding: 18px;
+}
+.modelNotice {
+  display: block;
+  line-height: 1.6;
+}
+.modelNotice p {
+  margin: 6px 0 0;
+}
+.bodyPanel > label,
+.bodyPanel > .caption,
+.bodyPanel > .exports,
+.bodyPanel > .nomination,
+.bodyPanel > .roster,
+.bodyPanel > .pickDetail,
+.bodyPanel > .empty {
+  margin: 16px;
+}

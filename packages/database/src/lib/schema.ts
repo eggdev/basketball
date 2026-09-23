@@ -16,6 +16,25 @@ import {
 
 export const fantasySchema = pgSchema('fantasy');
 
+// Trial drafts remain separate from imported league seasons and historical auctions.
+export const liveDraftEvents = fantasySchema.table(
+  'live_draft_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id').notNull(),
+    leagueId: text('league_id').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('live_draft_events_user_league_created_idx').on(
+      table.userId,
+      table.leagueId,
+      table.createdAt,
+    ),
+  ],
+);
+
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

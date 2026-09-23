@@ -38,6 +38,7 @@ export class DatabaseUnavailable extends Data.TaggedError('DatabaseUnavailable')
     | 'canonical_player_identities'
     | 'canonical_players'
     | 'health'
+    | 'live_draft_events'
     | 'historical_auction_market'
     | 'historical_rankings'
     | 'latest_adp_snapshot'
@@ -1665,6 +1666,15 @@ export const planAuctionValuationPromotion = (input: {
 };
 
 export interface DatabaseService {
+  readonly saveLiveDraftEvent: (
+    userId: string,
+    leagueId: string,
+    payload: Readonly<Record<string, unknown>>,
+  ) => Effect.Effect<void, DatabaseUnavailable>;
+  readonly liveDraftEvents: (
+    userId: string,
+    leagueId: string,
+  ) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, DatabaseUnavailable>;
   readonly auctionValuationRun: (
     runId: string,
   ) => Effect.Effect<AuctionValuationRun | null, DatabaseUnavailable>;
@@ -6817,6 +6827,27 @@ const databaseServiceLayer = Layer.effect(
     };
 
     return Database.of({
+      saveLiveDraftEvent: (userId, leagueId, payload) =>
+        sql`
+        insert into fantasy.live_draft_events (user_id, league_id, payload)
+        values (${userId}, ${leagueId}, ${JSON.stringify(payload)}::jsonb)
+      `.pipe(
+          Effect.asVoid,
+          Effect.mapError((cause) =>
+            databaseUnavailable('live_draft_events', 'The draft event could not be saved', cause),
+          ),
+        ),
+      liveDraftEvents: (userId, leagueId) =>
+        sql<{ payload: Record<string, unknown> }>`
+        select payload from fantasy.live_draft_events
+        where user_id = ${userId} and league_id = ${leagueId}
+        order by created_at, id
+      `.pipe(
+          Effect.map((rows) => rows.map((row) => row.payload)),
+          Effect.mapError((cause) =>
+            databaseUnavailable('live_draft_events', 'Draft events could not be loaded', cause),
+          ),
+        ),
       auctionValuationRun,
       canonicalPlayers,
       canonicalPlayerIdentities,

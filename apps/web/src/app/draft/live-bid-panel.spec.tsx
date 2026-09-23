@@ -124,7 +124,7 @@ describe('LiveBidPanel', () => {
   });
 
   it('shows deterministic guardrails without waiting for the Jev request', () => {
-    render(<LiveBidPanel board={board} />);
+    render(<LiveBidPanel storageScope="owner:main:2026" board={board} />);
 
     fireEvent.change(screen.getByLabelText('Current bid ($)'), { target: { value: '40' } });
     fireEvent.click(screen.getByRole('button', { name: 'Evaluate live bid' }));
@@ -137,8 +137,19 @@ describe('LiveBidPanel', () => {
     expect(screen.getAllByText(/usable-lineup-v1/)).toHaveLength(2);
   });
 
+  it('keeps budgets separate for each owner and league scope', () => {
+    const first = render(<LiveBidPanel storageScope="owner:main:2026" board={board} />);
+    fireEvent.change(screen.getByLabelText('Budget left ($)'), { target: { value: '75' } });
+    first.unmount();
+    const second = render(<LiveBidPanel storageScope="owner:mock:2026" board={board} />);
+    expect((screen.getByLabelText('Budget left ($)') as HTMLInputElement).value).toBe('200');
+    second.unmount();
+    render(<LiveBidPanel storageScope="owner:main:2026" board={board} />);
+    expect((screen.getByLabelText('Budget left ($)') as HTMLInputElement).value).toBe('75');
+  });
+
   it('records an uncontested player at zero dollars without reducing the budget', () => {
-    render(<LiveBidPanel board={board} />);
+    render(<LiveBidPanel storageScope="owner:main:2026" board={board} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Evaluate live bid' }));
     fireEvent.click(screen.getByRole('button', { name: 'Record win at $0' }));

@@ -118,6 +118,33 @@ cp config/league-members.example.json config/league-members.json
 Real league IDs, manager names, auction exports, normalized output, and provider
 responses remain local and are ignored by Git.
 
+## Live draft trial
+
+Run `bun run dev:web` and open `/draft/live` to connect a public Fantrax auction.
+Select a league and your team. Completed picks update every three seconds after each response.
+The room shows team budgets and a legal bid cap under the selected league's rules.
+Click **Copy bridge script** to connect your signed-in Fantrax draft tab.
+The bridge supplies current nominations and bids. Jev reviews each new state after a short debounce.
+Jev checks roster fit using available generated projections. Budget stops remain immediate.
+The manual nomination and bid check remains available below the live panel.
+
+Local league shortcuts use ignored `config/live-leagues.json`.
+Copy `config/live-leagues.example.json` and replace its IDs to configure shortcuts.
+The browser keeps notes separate for each user, league, and team.
+During development, changed snapshots and Jev results append to `data/reports/live-drafts/<league-id>/events.jsonl`.
+Keep the room open and the computer awake to maintain capture.
+Use **Download review** and **Download capture history** after the draft.
+On production, sign in with the existing allowed owner account before connecting the bridge.
+Production saves bridge events and Jev results in `fantasy.live_draft_events`, scoped by user and league.
+Apply the database migrations with `bun nx run database:db-migrate` before deploying.
+
+Main league research, saved plans, and Eve tools retain their existing league scope.
+The live room disables Eve chat until its tools can accept the selected league.
+Generated ranks and prices use the main league points model and appear as reference values in the mock.
+The room reports how many projections have a stored Fantrax ID. Unmatched players receive no reference price.
+Category drafts require a separate price model; the legal cap only checks budget rules.
+See [the trial analysis](docs/live-draft-trial.md) for findings and the test procedure.
+
 ## Historical auction data
 
 The raw spreadsheet exports under `data/raw/auctions/` remain unchanged. The

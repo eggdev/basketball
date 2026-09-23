@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from 'react';
 
 import { formatPrice } from '../../lib/format';
 import {
@@ -28,7 +36,7 @@ interface DraftSession {
   readonly remainingRosterSpots: number;
 }
 
-const storageKey = 'fantasy-basketball:live-draft:v1';
+const storagePrefix = 'fantasy-basketball:live-draft:v2:';
 
 const actionLabel = {
   caution: 'Caution',
@@ -70,7 +78,7 @@ const parseSession = (raw: string, fallback: DraftSession): DraftSession => {
   }
 };
 
-const subscribeToSession = (onChange: () => void): (() => void) => {
+const subscribeToSession = (storageKey: string, onChange: () => void): (() => void) => {
   window.addEventListener(storageKey, onChange);
   window.addEventListener('storage', onChange);
   return () => {
@@ -79,10 +87,11 @@ const subscribeToSession = (onChange: () => void): (() => void) => {
   };
 };
 
-const readSession = (): string => window.localStorage.getItem(storageKey) ?? '';
+const readStoredSession = (storageKey: string): string =>
+  window.localStorage.getItem(storageKey) ?? '';
 const readServerSession = (): string => '';
 
-const saveSession = (session: DraftSession): void => {
+const saveStoredSession = (storageKey: string, session: DraftSession): void => {
   window.localStorage.setItem(storageKey, JSON.stringify(session));
   window.dispatchEvent(new Event(storageKey));
 };
@@ -90,10 +99,19 @@ const saveSession = (session: DraftSession): void => {
 export function LiveBidPanel({
   board,
   situations,
+  storageScope,
 }: {
+  readonly storageScope: string;
   readonly board: LiveBidBoard;
   readonly situations?: PlayerSituationBoard | null;
 }) {
+  const storageKey = storagePrefix + storageScope;
+  const readSession = useCallback(() => readStoredSession(storageKey), [storageKey]);
+  const saveSession = (session: DraftSession) => saveStoredSession(storageKey, session);
+  const subscribe = useCallback(
+    (onChange: () => void) => subscribeToSession(storageKey, onChange),
+    [storageKey],
+  );
   const { players } = board;
   const initialSession = useMemo<DraftSession>(
     () => ({
@@ -104,11 +122,7 @@ export function LiveBidPanel({
     }),
     [board.baseBudgetCents, board.rosterSize],
   );
-  const serializedSession = useSyncExternalStore(
-    subscribeToSession,
-    readSession,
-    readServerSession,
-  );
+  const serializedSession = useSyncExternalStore(subscribe, readSession, readServerSession);
   const session = useMemo(
     () => parseSession(serializedSession, initialSession),
     [initialSession, serializedSession],

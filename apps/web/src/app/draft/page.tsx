@@ -107,6 +107,9 @@ export default async function DraftPage({
       <PageHeader
         actions={
           <>
+            <Link className={styles.primaryButton} href="/draft/live">
+              Connect live league
+            </Link>
             <Link className={styles.secondaryButton} href="/draft/valuation">
               Valuation lab
             </Link>
@@ -201,7 +204,12 @@ export default async function DraftPage({
               </div>
             ) : null}
             {viewer !== null && liveBidBoard !== null ? (
-              <LiveBidPanel board={liveBidBoard} situations={situations} />
+              <LiveBidPanel
+                key={`${viewer.id}:${seasonKey}:${workspace?.owner?.memberId}`}
+                storageScope={`${viewer.id}:${seasonKey}:${workspace?.owner?.memberId ?? 'main'}`}
+                board={liveBidBoard}
+                situations={situations}
+              />
             ) : (
               <DataUnavailable
                 title="Draft board not ready"

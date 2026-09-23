@@ -166,6 +166,7 @@ const navigation: ReadonlyArray<NavigationGroup> = [
     label: 'Make a move',
     links: [
       { href: '/draft', label: 'Draft', icon: 'draft' },
+      { href: '/draft/live', label: 'Live leagues', icon: 'draft' },
       { href: '/trades', label: 'Trades', icon: 'trades' },
       { href: '/waivers', label: 'Waivers', icon: 'waivers' },
     ],
@@ -461,6 +462,7 @@ function AppShellRuntime({
             links: [
               { href: '/team', label: 'Team HQ', icon: 'league' },
               { href: '/draft', label: 'Draft plan', icon: 'draft' },
+              { href: '/draft/live', label: 'Live leagues', icon: 'draft' },
               { href: '/players', label: 'Player scouting', icon: 'players' },
             ],
           },
@@ -498,7 +500,8 @@ function AppShellRuntime({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [lastRequest, setLastRequest] = useState<EveRequest | null>(null);
-  const chatEnabled = viewer !== null || process.env.NODE_ENV !== 'production';
+  const liveLeagueRoom = pathname === '/draft/live';
+  const chatEnabled = !liveLeagueRoom && (viewer !== null || process.env.NODE_ENV !== 'production');
   const isBusy = agent.status === 'submitted' || agent.status === 'streaming';
   const isResuming = agent.status === 'resuming';
   const turnError = isBusy || isResuming ? undefined : getLatestEveTurnError(agent.events);
@@ -790,8 +793,14 @@ function AppShellRuntime({
               <div aria-live="polite" className={styles.messages}>
                 {!chatEnabled ? (
                   <div className={styles.emptyChat}>
-                    <strong>Sign in to talk to Eve.</strong>
-                    <span>The agent uses the same protected league data as these pages.</span>
+                    <strong>
+                      {liveLeagueRoom ? 'Eve uses main league context.' : 'Sign in to talk to Eve.'}
+                    </strong>
+                    <span>
+                      {liveLeagueRoom
+                        ? 'Live league chat needs league-scoped tools. Use the pick analysis and notes in this room.'
+                        : 'The agent uses the same protected league data as these pages.'}
+                    </span>
                   </div>
                 ) : agent.data.messages.length === 0 ? (
                   <div className={styles.emptyChat}>
@@ -863,7 +872,11 @@ function AppShellRuntime({
                       }
                     }}
                     placeholder={
-                      chatEnabled ? 'Ask about a player, team, or price…' : 'Sign in to chat'
+                      chatEnabled
+                        ? 'Ask about a player, team, or price…'
+                        : liveLeagueRoom
+                          ? 'Live league chat is not connected'
+                          : 'Sign in to chat'
                     }
                     rows={2}
                     value={message}
