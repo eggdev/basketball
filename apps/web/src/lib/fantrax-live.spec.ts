@@ -95,4 +95,24 @@ describe('Fantrax live draft', () => {
     ];
     expect(new Set(keys).size).toBe(4);
   });
+  it('keeps completed purchases while the active nomination has no winner or final bid', () => {
+    const draftPicks = [
+      { pick: 1, teamId: 'mine', playerId: 'p1', bid: 75 },
+      { pick: 2, playerId: 'p2', time: 1790184107194 },
+    ];
+    const current = normalizeLiveDraft('aaaaaaaaaaaaaaaa', league,
+      { ...results, nominatedPlayerId: 'p2', draftPicks }, catalog);
+    expect(current.picks).toHaveLength(1);
+    expect(draftTeamState(current, 'mine')).toMatchObject({
+      remainingBudgetCents: 12500, remainingSpots: 12, maxBidCents: 11400,
+    });
+    const completed = normalizeLiveDraft('aaaaaaaaaaaaaaaa', league,
+      { ...results, nominatedPlayerId: null, draftPicks: [draftPicks[0],
+        { pick: 2, teamId: 'mine', playerId: 'p2', bid: 20 }] }, catalog);
+    expect(completed.picks).toHaveLength(2);
+    expect(draftTeamState(completed, 'mine').remainingBudgetCents).toBe(10500);
+    expect(normalizeLiveDraft('aaaaaaaaaaaaaaaa', league,
+      { ...results, nominatedPlayerId: 'p2', draftPicks: [draftPicks[0],
+        { pick: 2, teamId: 'other', playerId: 'p2', bid: 20 }] }, catalog).picks).toHaveLength(2);
+  });
 });

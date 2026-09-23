@@ -25,11 +25,12 @@ const resultsSchema = z.object({
     .nullish(),
   draftState: z.string(),
   draftType: z.literal('auction'),
+  nominatedPlayerId: z.string().nullish(),
   draftPicks: z.array(
     z.object({
       pick: z.number().int().positive(),
       playerId: z.string().nullable().optional(),
-      teamId: z.string(),
+      teamId: z.string().nullish(),
       bid: money.nullable().optional(),
       time: z.number().nullable().optional(),
     }),
@@ -95,10 +96,13 @@ export function normalizeLiveDraft(
   const warnings: string[] = [];
   for (const pick of result.draftPicks) {
     if (!pick.playerId) continue; // Fantrax can include unfilled draft slots.
+    // The active nomination also appears in draftPicks before it has a winner or final price.
+    if (pick.playerId === result.nominatedPlayerId && (pick.teamId == null || pick.bid == null))
+      continue;
     if (pick.bid == null) throw new Error(`Pick ${pick.pick} has no auction price.`);
     if (seen.has(pick.pick) || players.has(pick.playerId))
       throw new Error('Fantrax returned duplicate picks or players.');
-    if (!league.teamInfo[pick.teamId])
+    if (!pick.teamId || !league.teamInfo[pick.teamId])
       throw new Error(`Pick ${pick.pick} belongs to an unknown team.`);
     seen.add(pick.pick);
     players.add(pick.playerId);
