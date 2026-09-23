@@ -976,6 +976,9 @@ export interface HistoricalScoringImportResult {
 
 export interface ProjectionSnapshotBatch {
   readonly asOf: string;
+  /** Actual retrieval time, which can differ from the historical forecast date. */
+  readonly sourceCapturedAt?: string;
+  readonly sourceMetadata?: Readonly<Record<string, unknown>>;
   readonly calendar: {
     readonly fingerprint: string;
     readonly snapshotId: string;
@@ -1037,7 +1040,7 @@ export interface ProjectionSnapshotBatch {
     readonly sourcePayload: Readonly<Record<string, string>>;
   }>;
   readonly seasonKey: string;
-  readonly source: 'hashtag';
+  readonly source: 'hashtag' | 'rotoworld';
 }
 
 export interface ProjectionSnapshotImportResult {
@@ -6453,6 +6456,7 @@ const databaseServiceLayer = Layer.effect(
                 fingerprint: batch.fingerprint,
                 limitations: batch.limitations,
                 modelVersion: batch.modelVersion,
+                sourceMetadata: batch.sourceMetadata ?? null,
               })}
             )
           returning id
@@ -6549,6 +6553,7 @@ const databaseServiceLayer = Layer.effect(
                 calendarSnapshotId: batch.calendar?.snapshotId ?? null,
                 limitations: batch.limitations,
                 newPlayerCount,
+                sourceMetadata: batch.sourceMetadata ?? null,
               })}
             )
           returning id
@@ -6556,7 +6561,7 @@ const databaseServiceLayer = Layer.effect(
         if (snapshot === undefined) throw new Error('Projection snapshot was not created');
 
         const sourceRecords = batch.records.map((record) => ({
-          captured_at: new Date(batch.asOf),
+          captured_at: new Date(batch.sourceCapturedAt ?? batch.asOf),
           id: randomUUID(),
           ingestion_run_id: ingestionRun.id,
           payload: record.sourcePayload,

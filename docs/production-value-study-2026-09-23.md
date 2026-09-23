@@ -173,7 +173,7 @@ For the draft card, the useful proposed comparison is `candidate value - next bi
 
 ### Historical forecast sources
 
-Source check: September 23, 2026. Historical preseason forecasts have a concrete acquisition path. None of these sources has been imported into the candidate study yet.
+Source check: September 23, 2026. Historical preseason forecasts have a concrete acquisition path. The [Rotoworld importer](rotoworld-historical-forecasts.md) now extracts and attributes its 2024-25 forecasts. The candidate study still uses the original lag-one evaluation; source timing must be verified before a strict historical draft test.
 
 | Source | Verified content | Remaining check |
 | --- | --- | --- |
