@@ -112,6 +112,7 @@ function LiveAuctionConnection({
       if (Math.abs(Date.now() - state.observedAt) > 15_000) return;
       lastSequence = state.sequence;
       setFrame({ state, receivedAt: Date.now() });
+      setNow(Date.now());
       setFeedError(null);
       const version = bridgeVersion(state, teamId);
       if (version === lastVersion) return;
@@ -137,7 +138,7 @@ function LiveAuctionConnection({
       window.opener.postMessage(ready, 'https://www.fantrax.com');
       window.opener.postMessage(ready, 'https://fantrax.com');
     }
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => setNow(Date.now()), 250);
     return () => {
       active = false;
       clearInterval(timer);
@@ -207,10 +208,36 @@ function LiveAuctionConnection({
   }
 
   const state = frame?.state;
+  const clockRunning = state?.status === '1';
+  const clockPaused = state?.status === '2' || state?.status === '4';
   const remainingSeconds =
-    state?.timeLeftMs == null
+    stale || state?.timeLeftMs == null || (!clockRunning && !clockPaused)
       ? null
-      : Math.max(0, Math.ceil((state.timeLeftMs - Math.max(0, now - state.observedAt)) / 1000));
+      : Math.max(
+          0,
+          Math.ceil(
+            (state.timeLeftMs - (clockRunning ? Math.max(0, now - state.observedAt) : 0)) / 1000,
+          ),
+        );
+  const clockText =
+    remainingSeconds === null
+      ? '--:--'
+      : `${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, '0')}`;
+  const clockNote = !frame
+    ? 'Connect the Fantrax bridge'
+    : paused
+      ? 'Dashboard updates paused'
+      : stale
+        ? 'Feed stale · Check Fantrax'
+        : clockPaused
+          ? `${statusLabels[state?.status ?? '2']} in Fantrax`
+          : !clockRunning
+            ? statusLabels[state?.status ?? '0']
+            : remainingSeconds === null
+              ? 'Waiting for the Fantrax clock'
+              : remainingSeconds === 0
+                ? 'Awaiting Fantrax update'
+                : 'Synced with Fantrax · Counts down locally';
   const teamName = (id: string | null | undefined) =>
     snapshot.teams.find((team) => team.id === id)?.name ?? id ?? 'None';
 
@@ -225,6 +252,20 @@ function LiveAuctionConnection({
           {stale ? (frame ? 'Feed stale' : 'Bridge needed') : statusLabels[state?.status ?? '0']}
         </span>
       </header>
+      <div
+        className={`${room.pickClock} ${clockRunning && remainingSeconds !== null && remainingSeconds <= 10 ? room.clockUrgent : ''}`}
+      >
+        <div>
+          <strong>Pick clock</strong>
+          <p>
+            {state?.currentPick != null ? `Pick ${state.currentPick} · ` : ''}
+            {clockNote}
+          </p>
+        </div>
+        <span role="timer" aria-label="Pick clock" aria-live="off" className={room.clockDigits}>
+          {clockText}
+        </span>
+      </div>
       {model && (
         <div className={room.modelReference}>
           <strong>
@@ -289,10 +330,6 @@ function LiveAuctionConnection({
               <strong>
                 {guardrail?.maxBidCents == null ? 'Unknown' : formatPrice(guardrail.maxBidCents)}
               </strong>
-            </div>
-            <div>
-              <span>Clock · {stale ? 'stale' : 'estimated'}</span>
-              <strong>{remainingSeconds == null ? 'Unavailable' : `${remainingSeconds}s`}</strong>
             </div>
           </div>
           <div className={room.auctionDecision} aria-live="polite">

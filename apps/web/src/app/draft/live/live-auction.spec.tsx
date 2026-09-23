@@ -172,4 +172,54 @@ describe('live auction evaluation lifecycle', () => {
     await act(() => vi.advanceTimersByTimeAsync(151));
     expect(screen.getByText('Test Player')).toBeTruthy();
   });
+
+  it('counts down, follows a clock reset, and waits at zero without more model calls', async () => {
+    const fetcher = vi.fn<(url: string, options: RequestInit) => Promise<unknown>>(
+      async (url, options) =>
+        url.endsWith('/events') ? { ok: true } : evaluated(JSON.parse(String(options.body)).state),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    render(<LiveAuction snapshot={snapshot} teamId="mine" paused={false} />);
+    const clock = screen.getByRole('timer', { name: 'Pick clock' });
+    expect(clock.textContent).toBe('--:--');
+    await message({ timeLeftMs: 65000 });
+    expect(clock.textContent).toBe('1:05');
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(clock.textContent).toBe('1:03');
+    await message({ sequence: 2, timeLeftMs: 15000 });
+    expect(clock.textContent).toBe('0:15');
+    await message({ sequence: 3, timeLeftMs: 2000 });
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(clock.textContent).toBe('0:00');
+    expect(screen.getByText(/Awaiting Fantrax update/)).toBeTruthy();
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/evaluate'))).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/events'))).toHaveLength(1);
+  });
+
+  it('freezes the Fantrax pause and hides stale, missing, and inactive clocks', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+    const { rerender } = render(
+      <LiveAuction snapshot={snapshot} teamId="mine" paused={false} />,
+    );
+    const clock = screen.getByRole('timer', { name: 'Pick clock' });
+    await message({ status: '2', timeLeftMs: 15000 });
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    expect(clock.textContent).toBe('0:15');
+    expect(screen.getByText(/Paused in Fantrax/)).toBeTruthy();
+    await message({ sequence: 2, status: '1', timeLeftMs: 15000 });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(clock.textContent).toBe('0:14');
+    await act(() => vi.advanceTimersByTimeAsync(7250));
+    expect(clock.textContent).toBe('--:--');
+    expect(screen.getByText(/Feed stale · Check Fantrax/)).toBeTruthy();
+    await message({ sequence: 3, timeLeftMs: null });
+    expect(clock.textContent).toBe('--:--');
+    expect(screen.getByText(/Waiting for the Fantrax clock/)).toBeTruthy();
+    await message({ sequence: 4, status: '3', timeLeftMs: 15000 });
+    expect(clock.textContent).toBe('--:--');
+    await message({ sequence: 5, timeLeftMs: 15000 });
+    rerender(<LiveAuction snapshot={snapshot} teamId="mine" paused />);
+    expect(clock.textContent).toBe('--:--');
+    expect(screen.getByText(/Dashboard updates paused/)).toBeTruthy();
+  });
 });
